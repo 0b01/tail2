@@ -1,0 +1,2 @@
+[workspace]
+members = ["tail2", "tail2-common", "xtask"]
