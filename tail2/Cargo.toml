@@ -15,6 +15,7 @@ libc = "0.2.102"
 log = "0.4"
 tokio = { version = "1.18", features = ["macros", "rt", "rt-multi-thread", "net", "signal"] }
 thiserror = "1.0.37"
+object = "0.29.0"
 
 [[bin]]
 name = "tail2"

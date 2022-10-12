@@ -1,2 +1,2 @@
 [workspace]
-members = ["tail2", "tail2-common", "xtask"]
+members = ["tail2", "tail2-common", "xtask", "testapp/parade"]

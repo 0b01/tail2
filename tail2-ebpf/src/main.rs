@@ -12,7 +12,7 @@ use tail2_common::ConfigKey;
 static STACK_TRACES: StackTrace = StackTrace::with_max_entries(10, 0);
 
 #[map(name="STACKS")]
-static STACKS_Q: Queue<[u64; 2]> = Queue::with_max_entries(1024, 0);
+static STACKS_Q: Queue<[u32; 3]> = Queue::with_max_entries(1024, 0);
 
 #[map(name="CONFIG")]
 static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(1024, 0);
@@ -28,21 +28,22 @@ pub fn malloc_enter(ctx: ProbeContext) -> u32 {
         pid: 1,
         tgid: 1,
     };
+
     unsafe { bpf_get_ns_current_pid_tgid(dev, ino, &mut ns as *mut bpf_pidns_info, core::mem::size_of::<bpf_pidns_info>() as u32); }
 
     let ustack = unsafe { STACK_TRACES.get_stackid(&ctx, BPF_F_USER_STACK as _) };
 
     match ustack {
         Ok(ustack) => {
-            info!(&ctx, "pushing");
-            if let Err(e) = STACKS_Q.push(&[ns.pid as u64, ustack as _], 0) {
+            // info!(&ctx, "pushing");
+            if let Err(e) = STACKS_Q.push(&[ns.pid, ustack as u32, sz as u32], 0) {
                 info!(&ctx, "Error pushing stack: {}", e);
             }
         },
         _ => {}
     }
 
-    info!(&ctx, "malloc: {}", sz);
+    // info!(&ctx, "malloc: {}", sz);
     0
 }
 

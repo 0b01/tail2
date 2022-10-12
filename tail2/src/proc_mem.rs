@@ -1,12 +1,12 @@
-use std::{path::{PathBuf, Path}, io::{BufReader, BufRead}, fs::File};
+use std::{io::{BufReader, BufRead}, fs::File};
 use thiserror::Error;
 use std::io;
 
 /// Parsed line for /proc/[pid]/maps
-struct ProcMemMapEntry {
+pub struct ProcMemMapEntry {
     address_range: (u64, u64),
     offset: u64,
-    object_path: String,
+    pub object_path: String,
 }
 
 /// Holds the memory map of a process, which can be obtained by reading `/proc/[pid]/map`.
@@ -31,35 +31,23 @@ struct ProcMemMapEntry {
 /// 7f3892fe9000-7f3892fea000 r--p 0002c000 08:20 42625                      /usr/lib/x86_64-linux-gnu/ld-2.31.so
 /// 7f3892fea000-7f3892feb000 rw-p 0002d000 08:20 42625                      /usr/lib/x86_64-linux-gnu/ld-2.31.so
 pub struct ProcMemMap {
-    entries: Vec<ProcMemMapEntry>,
+    pub entries: Vec<ProcMemMapEntry>,
 }
 
 /// Looks up information for a virtual address
 #[derive(Debug)]
 pub struct ProcMemMapLookupResult {
     /// Physical memory address
-    address: u64,
+    pub address: u64,
     /// Executable or library path. This can be empty if there is no associated object on the filesystem
-    object_path: Option<PathBuf>,
-}
-
-impl ProcMemMapLookupResult {
-    /// Physical memory address
-    pub fn address(&self) -> u64 {
-        self.address
-    }
-
-    /// Executable or library path. This can be empty if there is no associated object on the filesystem
-    pub fn object_path(&self) -> Option<&Path> {
-        self.object_path.as_deref()
-    }
+    pub object_path: String,
 }
 
 impl ProcMemMap {
     /// Loads the memory map for a given process from procfs
     pub fn from_process_id(pid: u32) -> Result<Self, ProcMemMapError> {
         let reader = BufReader::new(File::open(format!("/proc/{}/maps", pid)).map_err(|e| {
-            ProcMemMapError::OpenProcMemMapError {
+            ProcMemMapError::OpenError {
                 process_id: pid,
                 source: e,
             }
@@ -75,15 +63,9 @@ impl ProcMemMap {
             if address >= entry.address_range.0 && address < entry.address_range.1 {
                 let translated = address - entry.address_range.0 + entry.offset;
 
-                let object_path = match &entry.object_path {
-                    p if p.is_empty() => None,
-                    p if p.starts_with('[') => None,
-                    p => Some(PathBuf::from(p)),
-                };
-
                 return Some(ProcMemMapLookupResult {
                     address: translated,
-                    object_path,
+                    object_path: entry.object_path.clone(),
                 });
             }
         }
@@ -97,7 +79,7 @@ impl ProcMemMap {
 pub enum ProcMemMapError {
     /// Failed to read the context of the executable or library
     #[error("Failed to open memory map for process {process_id}")]
-    OpenProcMemMapError {
+    OpenError {
         /// Process ID
         process_id: u32,
         /// The original io::Error
@@ -183,6 +165,7 @@ fn parse_maps(reader: impl BufRead) -> Result<ProcMemMap, ProcMemMapError> {
             object_path,
         });
     }
+
     Ok(ProcMemMap { entries })
 }
 
