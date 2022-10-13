@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::{fs, collections::HashMap};
-
-use object::{Object, ObjectSection, ObjectSymbol};
+use object::*;
 
 
 #[derive(Debug)]

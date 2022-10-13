@@ -1,14 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+int blah();
+
 int main() {
     while(getchar())
     {
-        malloc(42);
+        void* a = malloc(42);
         blah();
     }
 }
 
 int blah() {
-    malloc(24);
+    void* a = malloc(24);
 }

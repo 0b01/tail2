@@ -1,4 +1,6 @@
+use std::fmt::Display;
 use std::os::unix::prelude::MetadataExt;
+use std::sync::mpsc::channel;
 
 use aya::maps::{StackTraceMap, Queue, HashMap, MapRefMut};
 use aya::maps::stack_trace::StackTrace;
@@ -56,6 +58,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
 async fn run_bpf(pid: i32) -> Result<(), anyhow::Error> {
     env_logger::init();
+    let (tx, rx) = channel();
+    
+    ctrlc::set_handler(move || tx.send(()).expect("Could not send signal on channel."))
+        .expect("Error setting Ctrl-C handler");
+    
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
     // runtime. This approach is recommended for most real-world use cases. If you would
@@ -85,14 +92,29 @@ async fn run_bpf(pid: i32) -> Result<(), anyhow::Error> {
 
     let mut caches = std::collections::HashMap::<u32, SymCache>::new();
 
+    let mut freqs: std::collections::HashMap<MyStackTrace, u32> = std::collections::HashMap::new();
+    println!("Waiting for Ctrl-C...");
+
     loop {
         if let Ok([pid, utrace_id, _sz]) = stacks.pop(0) {
-            if let Ok(trace) = stack_traces.get(&(utrace_id as u32), 0) {
+            if let Ok(stack_trace) = stack_traces.get(&(utrace_id as u32), 0) {
                 let syms = caches.entry(pid).or_insert_with(|| SymCache::build(pid));
-                print_stack(syms, &trace);
+                let st = MyStackTrace::from(stack_trace, syms);
+                let freq = freqs.entry(st).or_insert(0);
+                *freq += 1;
             }
         }
+
+        if rx.try_recv().is_ok() {
+            println!("Got it! Exiting..."); 
+            for (st, n) in freqs {
+                println!("{} - {}\n", st, n);
+            }
+            break;
+        }
     }
+
+    Ok(())
 }
 
 pub struct SymCache {
@@ -114,22 +136,37 @@ impl SymCache {
 }
 
 
-fn print_stack(syms: &SymCache, stack_trace: &StackTrace) {
-    let _ = std::io::stdout().lock();
-    for frame in stack_trace.frames() {
-        let res = syms.proc_map.lookup(frame.ip).unwrap();
+#[derive(Hash, Eq, PartialEq, Debug)]
+struct MyStackTrace {
+    frames: Vec<(String, u64, String)>,
+}
 
-        let addr = res.address;
-        let name = syms.elf_cache.map.get(&res.object_path).and_then(|c| c.find(addr));
+impl MyStackTrace {
+    fn from(trace: StackTrace, syms: &SymCache) -> Self {
+        let frames = trace.frames().iter().map(|f| {
+            if let Some(res) = syms.proc_map.lookup(f.ip) {
+                let addr = res.address;
+                let name = syms.elf_cache.map.get(&res.object_path).and_then(|c| c.find(addr)).unwrap_or("".to_owned());
+                (res.object_path, addr, name)
+            } else {
+                ("".to_owned(), 0, "".to_owned())
+            }
+        }).collect();
 
-        println!(
-            "{}+{:#x} {:?}",
-            res.object_path,
-            addr,
-            name,
-        );
+        Self {
+            frames,
+        }
     }
-    println!();
+}
+
+impl Display for MyStackTrace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (obj, offset, name) in &self.frames {
+            let _ = writeln!(f, "<{}> {}+{:#x}", name, obj, offset);
+        }
+
+        Ok(())
+    }
 }
 
 fn send_device_info(config: &mut HashMap<MapRefMut, u32, u64>) {
