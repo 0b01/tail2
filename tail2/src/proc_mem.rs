@@ -194,25 +194,25 @@ mod tests {
         let map = parse_maps(&mut BufReader::new(data)).unwrap();
 
         let result = map.lookup(0x563b01807200).unwrap();
-        assert_eq!(result.address(), 0x200 + 0x7c000);
+        assert_eq!(result.address, 0x200 + 0x7c000);
         assert_eq!(
-            result.object_path().unwrap().to_str().unwrap(),
+            result.object_path,
             "/usr/bin/something/something"
         );
 
         let result = map.lookup(0x7f3891400100).unwrap();
-        assert_eq!(result.address(), 0x100);
-        assert_eq!(result.object_path(), None);
+        assert_eq!(result.address, 0x100);
+        assert_eq!(result.object_path, "");
 
         let result = map.lookup(0x7f3892fbe111).unwrap();
-        assert_eq!(result.address(), 0x1111 + 0x1000);
+        assert_eq!(result.address, 0x1111 + 0x1000);
         assert_eq!(
-            result.object_path().unwrap().to_str().unwrap(),
+            result.object_path,
             "/usr/lib/x86_64-linux-gnu/ld-2.31.so"
         );
 
         let result = map.lookup(0x800000005000).unwrap();
-        assert_eq!(result.address(), 0x5000);
-        assert_eq!(result.object_path(), None);
+        assert_eq!(result.address, 0x5000);
+        assert_eq!(result.object_path, "[stack:100000000000]");
     }
 }

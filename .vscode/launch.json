@@ -1,0 +1,250 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'tail2'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=tail2",
+                    "--package=tail2"
+                ],
+                "filter": {
+                    "name": "tail2",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'tail2'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=tail2",
+                    "--package=tail2"
+                ],
+                "filter": {
+                    "name": "tail2",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'tail2-common'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=tail2-common"
+                ],
+                "filter": {
+                    "name": "tail2-common",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'xtask'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=xtask",
+                    "--package=xtask"
+                ],
+                "filter": {
+                    "name": "xtask",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'xtask'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=xtask",
+                    "--package=xtask"
+                ],
+                "filter": {
+                    "name": "xtask",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'parade'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=parade"
+                ],
+                "filter": {
+                    "name": "parade",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'parade'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=parade",
+                    "--package=parade"
+                ],
+                "filter": {
+                    "name": "parade",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'parade'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=parade",
+                    "--package=parade"
+                ],
+                "filter": {
+                    "name": "parade",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'vec'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=vec",
+                    "--package=vec"
+                ],
+                "filter": {
+                    "name": "vec",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'vec'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=vec",
+                    "--package=vec"
+                ],
+                "filter": {
+                    "name": "vec",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'ehframe'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=ehframe"
+                ],
+                "filter": {
+                    "name": "ehframe",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'framedump'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=framedump",
+                    "--package=framedump"
+                ],
+                "filter": {
+                    "name": "framedump",
+                    "kind": "bin"
+                }
+            },
+            "args": ["/home/g/tail2/testapp/malloc/a.out"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'framedump'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=framedump",
+                    "--package=framedump"
+                ],
+                "filter": {
+                    "name": "framedump",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

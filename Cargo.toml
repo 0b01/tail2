@@ -1,2 +1,10 @@
 [workspace]
-members = ["tail2", "tail2-common", "xtask", "testapp/parade", "testapp/vec"]
+members = [
+    "tail2",
+    "tail2-common",
+    "xtask",
+    "testapp/parade",
+    "testapp/vec",
+    "cargo-trace/ehframe",
+    "framedump",
+]
