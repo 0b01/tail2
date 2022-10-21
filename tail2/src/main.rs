@@ -1,17 +1,21 @@
 use std::fmt::Display;
+use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
-use std::sync::mpsc::channel;
 
-use aya::maps::{StackTraceMap, Queue, HashMap, MapRefMut};
+use aya::maps::perf::AsyncPerfEventArray;
+use aya::maps::{HashMap, MapRefMut};
 use aya::maps::stack_trace::StackTrace;
+use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
 use aya::programs::UProbe;
 use aya_log::BpfLogger;
+use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use elf::ElfCache;
-use log::{warn};
+use log::{warn, info};
 use proc_mem::ProcMemMap;
-use tail2_common::ConfigKey;
+use tail2_common::{ConfigKey, Stack};
+use tokio::{task, signal};
 
 mod proc_mem;
 mod elf;
@@ -58,11 +62,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
 async fn run_bpf(pid: i32) -> Result<(), anyhow::Error> {
     env_logger::init();
-    let (tx, rx) = channel();
-    
-    ctrlc::set_handler(move || tx.send(()).expect("Could not send signal on channel."))
-        .expect("Error setting Ctrl-C handler");
-    
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
     // runtime. This approach is recommended for most real-world use cases. If you would
@@ -84,35 +83,38 @@ async fn run_bpf(pid: i32) -> Result<(), anyhow::Error> {
     program.load()?;
     program.attach(Some("malloc"), 0, "libc", pid.try_into()?)?;
 
-    let mut stacks = Queue::<_, [u32; 3]>::try_from(bpf.map_mut("STACKS")?)?;
-    let stack_traces = StackTraceMap::try_from(bpf.map_mut("STACK_TRACES")?)?;
     let mut config: HashMap<MapRefMut, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG")?)?;
-
     send_device_info(&mut config);
 
-    let mut caches = std::collections::HashMap::<u32, SymCache>::new();
+    let mut stacks = AsyncPerfEventArray::try_from(bpf.map_mut("STACKS")?)?;
 
-    let mut freqs: std::collections::HashMap<MyStackTrace, u32> = std::collections::HashMap::new();
-    println!("Waiting for Ctrl-C...");
+    for cpu_id in online_cpus()? {
+        let mut buf = stacks.open(cpu_id, None).unwrap();
 
-    loop {
-        if let Ok([pid, utrace_id, _sz]) = stacks.pop(0) {
-            if let Ok(stack_trace) = stack_traces.get(&(utrace_id as u32), 0) {
-                let syms = caches.entry(pid).or_insert_with(|| SymCache::build(pid));
-                let st = MyStackTrace::from(stack_trace, syms);
-                let freq = freqs.entry(st).or_insert(0);
-                *freq += 1;
+        task::spawn(async move {
+            let mut buffers = (0..10)
+                .map(|_| BytesMut::with_capacity(1024))
+                .collect::<Vec<_>>();
+
+            loop {
+                let events = buf.read_events(&mut buffers).await.unwrap();
+                dbg!(&events);
+                for i in 0..events.read {
+                    let buf = &mut buffers[i];
+                    let ptr = buf.as_ptr() as *const Stack;
+
+                    let data = unsafe { ptr.read_unaligned() };
+                    info!("sp: {:?}", data);
+                }
             }
-        }
-
-        if rx.try_recv().is_ok() {
-            println!("Got it! Exiting..."); 
-            for (st, n) in freqs {
-                println!("{} - {}\n", st, n);
-            }
-            break;
-        }
+        });
     }
+
+
+    let mut caches = std::collections::HashMap::<u32, SymCache>::new();
+    let mut freqs: std::collections::HashMap<MyStackTrace, u32> = std::collections::HashMap::new();
+
+    signal::ctrl_c().await.expect("failed to listen for event");
 
     Ok(())
 }
