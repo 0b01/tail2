@@ -1,8 +1,9 @@
+use std::f32::consts::E;
 use std::fmt::Display;
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 
-use aya::maps::perf::AsyncPerfEventArray;
+use aya::maps::perf::{AsyncPerfEventArray};
 use aya::maps::{HashMap, MapRefMut};
 use aya::maps::stack_trace::StackTrace;
 use aya::util::online_cpus;
@@ -12,13 +13,17 @@ use aya_log::BpfLogger;
 use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use elf::ElfCache;
-use log::{warn, info};
+use framehop::aarch64::{UnwinderAarch64, UnwindRegsAarch64, CacheAarch64};
+use log::{warn};
 use proc_mem::ProcMemMap;
-use tail2_common::{ConfigKey, Stack};
+use tail2_common::{ConfigKey, Stack, MAX_STACK_SIZE};
 use tokio::{task, signal};
+
+use crate::unwind::add_module_to_unwinder;
 
 mod proc_mem;
 mod elf;
+mod unwind;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -51,16 +56,13 @@ async fn main() -> Result<(), anyhow::Error> {
             dbg!(elf_cache);
             Ok(())
         },
-        Commands::Listen { pid: Some(pid) } => {
+        Commands::Listen { pid } => {
             run_bpf(pid).await
         },
-        _ => {
-            Ok(())
-        }
     }
 }
 
-async fn run_bpf(pid: i32) -> Result<(), anyhow::Error> {
+async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
     env_logger::init();
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
@@ -81,38 +83,77 @@ async fn run_bpf(pid: i32) -> Result<(), anyhow::Error> {
     }
     let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into()?;
     program.load()?;
-    program.attach(Some("malloc"), 0, "libc", pid.try_into()?)?;
+    program.attach(Some("malloc"), 0, "libc", pid)?;
 
     let mut config: HashMap<MapRefMut, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG")?)?;
     send_device_info(&mut config);
 
     let mut stacks = AsyncPerfEventArray::try_from(bpf.map_mut("STACKS")?)?;
 
-    for cpu_id in online_cpus()? {
-        let mut buf = stacks.open(cpu_id, None).unwrap();
+
+
+    for cpu_id in online_cpus().unwrap() {
+        let mut buf = stacks.open(cpu_id, None)?;
 
         task::spawn(async move {
-            let mut buffers = (0..10)
-                .map(|_| BytesMut::with_capacity(1024))
-                .collect::<Vec<_>>();
+            let mut unwinder = UnwinderAarch64::new();
+            let mut unw_cache = CacheAarch64::<_>::new();
 
+            let mut buffers = (0..10)
+                .map(|_| BytesMut::with_capacity(size_of::<Stack>()))
+                .collect::<Vec<_>>();
+    
             loop {
+                // wait for events
                 let events = buf.read_events(&mut buffers).await.unwrap();
                 dbg!(&events);
+    
+                // events.read contains the number of events that have been read,
+                // and is always <= buffers.len()
                 for i in 0..events.read {
                     let buf = &mut buffers[i];
-                    let ptr = buf.as_ptr() as *const Stack;
+                    let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
 
-                    let data = unsafe { ptr.read_unaligned() };
-                    info!("sp: {:?}", data);
+                    let cache = SymCache::build(st.pidtgid.pid());
+                    for entry in cache.proc_map.entries {
+                        if !entry.is_exec { continue; }
+                        add_module_to_unwinder(
+                            &mut unwinder,
+                            entry.object_path.as_bytes(),
+                            entry.offset,
+                            entry.address_range.0,
+                            entry.address_range.1 - entry.address_range.0,
+                            None,
+                            None,
+                        );
+                    }
+
+                    fn to_u64_arr(s8: &[u8]) -> &[u64] {
+                        use std::slice;
+                        unsafe {
+                            slice::from_raw_parts(s8.as_ptr() as *const u64, s8.len() / 8)
+                        }
+                    }
+
+                    let mut read_stack = |addr| to_u64_arr(&st.stuff).get((addr / 8) as usize).cloned().ok_or(());
+                    use framehop::Unwinder;
+                    let mut iter = unwinder.iter_frames(
+                        st.pc,
+                        UnwindRegsAarch64::new(st.lr, st.sp, st.fp),
+                        &mut unw_cache,
+                        &mut read_stack,
+                    );
+
+                    while let Ok(f) = iter.next() {
+                        dbg!(f);
+                    }
+
+                    // dbg!(st);
+                    // process buf
                 }
             }
         });
     }
-
-
-    let mut caches = std::collections::HashMap::<u32, SymCache>::new();
-    let mut freqs: std::collections::HashMap<MyStackTrace, u32> = std::collections::HashMap::new();
 
     signal::ctrl_c().await.expect("failed to listen for event");
 

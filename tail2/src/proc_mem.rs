@@ -4,8 +4,13 @@ use std::io;
 
 /// Parsed line for /proc/[pid]/maps
 pub struct ProcMemMapEntry {
-    address_range: (u64, u64),
-    offset: u64,
+    /// avma address
+    pub address_range: (u64, u64),
+    /// is executable
+    pub is_exec: bool,
+    /// offset into the file
+    pub offset: u64,
+    /// path of the object file
     pub object_path: String,
 }
 
@@ -142,7 +147,7 @@ fn parse_maps(reader: impl BufRead) -> Result<ProcMemMap, ProcMemMapError> {
             .next()
             .and_then(|o| u64::from_str_radix(o, 16).ok())
             .ok_or_else(|| ProcMemMapError::InvalidAddress { line: line.clone() })?;
-        let _perms = parts
+        let perms = parts
             .next()
             .ok_or_else(|| ProcMemMapError::InvalidPermissions { line: line.clone() })?;
         let offset = parts
@@ -158,9 +163,11 @@ fn parse_maps(reader: impl BufRead) -> Result<ProcMemMap, ProcMemMapError> {
         // TODO: Newlines in the path are escaped via an octal escape sequence.
         // We don't unescape it yet - therefore path with newlines are not supported
         let object_path = parts.next().unwrap_or("").trim().to_string();
+        let is_exec = perms.contains('x');
 
         entries.push(ProcMemMapEntry {
             address_range: (start_address, end_address),
+            is_exec,
             offset,
             object_path,
         });

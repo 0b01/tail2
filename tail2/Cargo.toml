@@ -18,6 +18,10 @@ thiserror = "1.0.37"
 object = "0.29.0"
 ctrlc = "3.2.3"
 bytes = "*"
+framehop = "0.7.1"
+debugid = "0.8.0"
+memmap2 = "0.5.3"
+uuid = "*"
 
 [[bin]]
 name = "tail2"

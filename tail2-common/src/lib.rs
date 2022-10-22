@@ -1,28 +1,32 @@
 #![no_std]
 
+use pidtgid::PidTgid;
+
+pub mod pidtgid;
+
 pub enum ConfigKey {
     DEV = 0,
     INO = 1,
 }
 
-// TODO: Somehow the max must be 51...
-pub const MAX_STACK_SIZE: usize = 51;
+/// max copy size
+pub const MAX_STACK_SIZE: usize = 16 << 8;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "user", derive(Debug))]
 pub struct Stack {
     pub stuff: [u8; MAX_STACK_SIZE],
     pub pc: u64,
     pub sp: u64,
+    pub fp: u64,
+    pub lr: u64,
+    pub pidtgid: PidTgid,
 }
 
 impl Stack {
-    pub fn new() -> Self {
-        Self {
-            stuff: [0u8; MAX_STACK_SIZE],
-            pc: 0,
-            sp: 0,
-        }
+    pub fn empty() -> Self {
+        unsafe { core::mem::zeroed() }
     }
 }
 
