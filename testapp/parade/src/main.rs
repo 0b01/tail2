@@ -7,6 +7,7 @@ use crate::config::Config;
 use std::fs::File;
 use std::io::{prelude::*, self};
 use std::io::BufWriter;
+use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 
@@ -25,6 +26,8 @@ fn pause() {
 fn main() {
     loop {
         pause();
+        let now = Instant::now();
+
         println!("starting!");
 
         let cfg = Config::parse();
@@ -44,5 +47,8 @@ fn main() {
         }
 
         wtr.flush().unwrap();
+
+        let t = Instant::now() - now;
+        dbg!(t);
     }
 }

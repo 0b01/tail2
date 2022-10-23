@@ -1,8 +1,12 @@
-use std::{path::{Path, PathBuf}, ops::Range};
+use std::{
+    ops::Range,
+    path::{Path, PathBuf},
+};
 
 use debugid::{CodeId, DebugId};
-use framehop::{Unwinder, Module, ModuleUnwindData, TextByteData, ModuleSvmaInfo};
-use object::{ObjectSection, Object, ObjectSegment, SectionKind};
+use framehop::{Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData, Unwinder, aarch64::UnwindRegsAarch64, UnwindRegsNative};
+use object::{Object, ObjectSection, ObjectSegment, SectionKind};
+use tail2_common::Stack;
 
 fn open_file_with_fallback(
     path: &Path,
@@ -252,6 +256,8 @@ where
 use std::convert::TryInto;
 use uuid::Uuid;
 
+use crate::symbols::SymCache;
+
 pub trait DebugIdExt {
     /// Creates a DebugId from some identifier. The identifier could be
     /// an ELF build ID, or a hash derived from the text section.
@@ -350,29 +356,79 @@ pub fn debug_id_for_object<'data: 'file, 'file>(
     None
 }
 
+pub fn unwind<U>(st: Stack, unw_cache: &mut U::Cache, unwinder: &mut U) -> Vec<u64> 
+    where
+        U: Unwinder<Module = Module<Vec<u8>>, UnwindRegs = UnwindRegsNative>,
+    {
+    let pid = st.pidtgid.pid();
+    let cache = SymCache::build(pid);
+    for entry in cache.proc_map.entries {
+        if !entry.is_exec {
+            continue;
+        }
+        add_module_to_unwinder(
+            unwinder,
+            entry.object_path.as_bytes(),
+            entry.offset,
+            entry.address_range.0,
+            entry.address_range.1 - entry.address_range.0,
+            None,
+            None,
+        );
+    }
+
+    fn to_u64_arr(s8: &[u8]) -> &[u64] {
+        use std::slice;
+        unsafe { slice::from_raw_parts(s8.as_ptr() as *const u64, s8.len() / 8) }
+    }
+
+    let mut read_stack = |addr: u64| {
+        let offset = addr.checked_sub(st.sp).ok_or(())?;
+        let index = usize::try_from(offset / 8).map_err(|_| ())?;
+        to_u64_arr(&st.stuff).get(index).copied().ok_or(())
+    };
+
+    let mut iter = unwinder.iter_frames(
+        st.pc,
+        UnwindRegsAarch64::new(st.lr, st.sp, st.fp),
+        unw_cache,
+        &mut read_stack,
+    );
+
+    let mut frames = vec![];
+    while let Ok(Some(f)) = iter.next() {
+        frames.push(f.address());
+    }
+
+    frames
+}
+
 #[cfg(test)]
 mod tests {
     use object::File;
 
     use super::*;
 
-
     #[test]
     fn test_compute_img_bias() {
-
         let path = "/home/g/tail2/testapp/malloc/a.out";
         let objpath = Path::new(path);
         let file = open_file_with_fallback(&objpath, None).unwrap();
         let mmap = unsafe { memmap2::MmapOptions::new().map(&file).unwrap() };
         let file = object::File::parse(&mmap[..]).unwrap();
-        println!("{}", compute_image_bias(&file, 0, 0xaaaac6cd0000, 0x1000).unwrap());
-
+        println!(
+            "{}",
+            compute_image_bias(&file, 0, 0xaaaac6cd0000, 0x1000).unwrap()
+        );
 
         let path = "/usr/lib/aarch64-linux-gnu/libc.so.6";
         let objpath = Path::new(path);
         let file = open_file_with_fallback(&objpath, None).unwrap();
         let mmap = unsafe { memmap2::MmapOptions::new().map(&file).unwrap() };
         let file = object::File::parse(&mmap[..]).unwrap();
-        println!("{}", compute_image_bias(&file, 0, 0xffff87770000, 0xffff878f9000 - 0xffff87770000).unwrap());
+        println!(
+            "{}",
+            compute_image_bias(&file, 0, 0xffff87770000, 0xffff878f9000 - 0xffff87770000).unwrap()
+        );
     }
 }

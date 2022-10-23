@@ -1,29 +1,24 @@
-use std::f32::consts::E;
-use std::fmt::Display;
+use std::collections::HashSet;
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 
 use aya::maps::perf::{AsyncPerfEventArray};
-use aya::maps::{HashMap, MapRefMut};
-use aya::maps::stack_trace::StackTrace;
+use aya::maps::HashMap;
 use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
 use aya::programs::UProbe;
-use aya_log::BpfLogger;
 use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use elf::ElfCache;
-use framehop::aarch64::{UnwinderAarch64, UnwindRegsAarch64, CacheAarch64};
-use log::{warn};
-use proc_mem::ProcMemMap;
-use tail2_common::{ConfigKey, Stack, MAX_STACK_SIZE};
+use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
+use tail2_common::{ConfigKey, Stack};
 use tokio::{task, signal};
-
-use crate::unwind::add_module_to_unwinder;
 
 mod proc_mem;
 mod elf;
 mod unwind;
+mod stacktrace;
+mod symbols;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -44,7 +39,6 @@ enum Commands {
         #[clap(short, long)]
         pid: Option<i32>,
     }
-
 }
 
 #[tokio::main]
@@ -72,28 +66,28 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
     #[cfg(debug_assertions)]
     let mut bpf = Bpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/debug/tail2"
-    ))?;
+    )).unwrap();
     #[cfg(not(debug_assertions))]
     let mut bpf = Bpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/release/tail2"
-    ))?;
-    if let Err(e) = BpfLogger::init(&mut bpf) {
-        // This can happen if you remove all log statements from your eBPF program.
-        warn!("failed to initialize eBPF logger: {}", e);
-    }
-    let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into()?;
-    program.load()?;
-    program.attach(Some("malloc"), 0, "libc", pid)?;
+    )).unwrap();
+    let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
+    program.load().unwrap();
+    program.attach(Some("malloc"), 0, "libc", pid).unwrap();
 
-    let mut config: HashMap<MapRefMut, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG")?)?;
-    send_device_info(&mut config);
+    let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
+    // send device info
+    let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
+    let dev = stats.dev();
+    let ino = stats.ino();
+    config.insert(ConfigKey::DEV as u32, dev, 0).unwrap();
+    config.insert(ConfigKey::INO as u32, ino, 0).unwrap();
 
-    let mut stacks = AsyncPerfEventArray::try_from(bpf.map_mut("STACKS")?)?;
-
+    let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map("STACKS").unwrap()).unwrap();
 
 
     for cpu_id in online_cpus().unwrap() {
-        let mut buf = stacks.open(cpu_id, None)?;
+        let mut buf = stacks.open(cpu_id, None).unwrap();
 
         task::spawn(async move {
             let mut unwinder = UnwinderAarch64::new();
@@ -114,42 +108,12 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
                     let buf = &mut buffers[i];
                     let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
 
-                    let cache = SymCache::build(st.pidtgid.pid());
-                    for entry in cache.proc_map.entries {
-                        if !entry.is_exec { continue; }
-                        add_module_to_unwinder(
-                            &mut unwinder,
-                            entry.object_path.as_bytes(),
-                            entry.offset,
-                            entry.address_range.0,
-                            entry.address_range.1 - entry.address_range.0,
-                            None,
-                            None,
-                        );
-                    }
+                    unwind::unwind(st, &mut unw_cache, &mut unwinder);
 
-                    fn to_u64_arr(s8: &[u8]) -> &[u64] {
-                        use std::slice;
-                        unsafe {
-                            slice::from_raw_parts(s8.as_ptr() as *const u64, s8.len() / 8)
-                        }
-                    }
-
-                    let mut read_stack = |addr| to_u64_arr(&st.stuff).get((addr / 8) as usize).cloned().ok_or(());
-                    use framehop::Unwinder;
-                    let mut iter = unwinder.iter_frames(
-                        st.pc,
-                        UnwindRegsAarch64::new(st.lr, st.sp, st.fp),
-                        &mut unw_cache,
-                        &mut read_stack,
-                    );
-
-                    while let Ok(f) = iter.next() {
-                        dbg!(f);
-                    }
+                    // let stacktrace = MyStackTrace::from(&frames, &SymCache::build(pid));
+                    // dbg!(stacktrace);
 
                     // dbg!(st);
-                    // process buf
                 }
             }
         });
@@ -160,62 +124,47 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-pub struct SymCache {
-    pub proc_map: ProcMemMap,
-    pub elf_cache: ElfCache,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl SymCache {
-    pub fn build(pid: u32) -> Self {
-        let proc_map = ProcMemMap::from_process_id(pid).unwrap();
-        let paths: Vec<String> = proc_map.entries.iter().map(|i| i.object_path.to_owned()).collect();
-        let elf_cache = ElfCache::build(&paths);
+    #[test]
+    fn test_example() {
 
-        Self {
-            proc_map,
-            elf_cache,
-        }
+        let mut unwinder = UnwinderAarch64::new();
+        let mut unw_cache = CacheAarch64::<_>::new();
+
+        add_module_to_unwinder(
+            &mut unwinder,
+            "/home/g/tail2/testapp/malloc/a.out".as_bytes(),
+            0,
+            0xaaaac6cd0000,
+            0x1000,
+            None,
+            None,
+        );
+
+        add_module_to_unwinder(
+            &mut unwinder,
+            "/usr/lib/aarch64-linux-gnu/libc.so.6".as_bytes(),
+            0,
+            0xffff87770000,
+            0xffff878f9000 - 0xffff87770000,
+            None,
+            None,
+        );
+
+        let pc = 281473445385793;
+        let sp = 281474403929088;
+        let fp = 281474403929088;
+        let lr = 187650854029324;
+
+        let mut iter = unwinder.iter_frames(
+            pc,
+            UnwindRegsAarch64::new(lr, sp, fp),
+            &mut unw_cache,
+            &mut read_stack,
+        );
+
     }
-}
-
-
-#[derive(Hash, Eq, PartialEq, Debug)]
-struct MyStackTrace {
-    frames: Vec<(String, u64, String)>,
-}
-
-impl MyStackTrace {
-    fn from(trace: StackTrace, syms: &SymCache) -> Self {
-        let frames = trace.frames().iter().map(|f| {
-            if let Some(res) = syms.proc_map.lookup(f.ip) {
-                let addr = res.address;
-                let name = syms.elf_cache.map.get(&res.object_path).and_then(|c| c.find(addr)).unwrap_or("".to_owned());
-                (res.object_path, addr, name)
-            } else {
-                ("".to_owned(), 0, "".to_owned())
-            }
-        }).collect();
-
-        Self {
-            frames,
-        }
-    }
-}
-
-impl Display for MyStackTrace {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (obj, offset, name) in &self.frames {
-            let _ = writeln!(f, "<{}> {}+{:#x}", name, obj, offset);
-        }
-
-        Ok(())
-    }
-}
-
-fn send_device_info(config: &mut HashMap<MapRefMut, u32, u64>) {
-    let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-    let dev = stats.dev();
-    let ino = stats.ino();
-    config.insert(ConfigKey::DEV as u32, dev, 0).unwrap();
-    config.insert(ConfigKey::INO as u32, ino, 0).unwrap();
 }

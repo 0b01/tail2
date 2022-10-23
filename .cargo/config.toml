@@ -2,5 +2,5 @@
 xtask = "run --package xtask --"
 
 [build]
-rustflags = ["-C", "force-frame-pointers"]
-rustc-wrapper = "/home/g/.cargo/bin/sccache"
+# rustflags = ["-C", "force-frame-pointers"]
+# rustc-wrapper = "/home/g/.cargo/bin/sccache"
