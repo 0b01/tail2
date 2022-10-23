@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::symbols::SymCache;
+use crate::symbolication::SymCache;
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub struct MyStackTrace {
@@ -8,7 +8,7 @@ pub struct MyStackTrace {
 }
 
 impl MyStackTrace {
-    fn from(trace: &[u64], syms: &SymCache) -> Self {
+    pub fn from_frames(trace: &[u64], syms: &SymCache) -> Self {
         let frames = trace.iter().map(|f| {
             if let Some(res) = syms.proc_map.lookup(*f) {
                 let addr = res.address;

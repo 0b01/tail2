@@ -3,8 +3,8 @@
 #![allow(nonstandard_style, dead_code)]
 
 use aya_bpf::{
-    macros::{uprobe, map},
-    programs::ProbeContext,
+    macros::{uprobe, map, perf_event},
+    programs::{ProbeContext, PerfEventContext},
     helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user_buf},
     maps::{HashMap, PerCpuArray, PerfEventArray},
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}
@@ -20,8 +20,9 @@ static mut STACK_BUF: PerCpuArray<Stack> = PerCpuArray::with_max_entries(1, 0);
 #[map(name="CONFIG")]
 static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
-#[uprobe(name="malloc_enter")]
-pub fn malloc_enter(ctx: ProbeContext) -> u32 {
+// #[uprobe(name="malloc_enter")]
+#[perf_event(name="malloc_enter")]
+pub fn malloc_enter(ctx: PerfEventContext) -> u32 {
     // let sz = ctx.arg(0).unwrap();
 
     let dev = unsafe { CONFIG.get(&(ConfigKey::DEV as u32)) }.copied().unwrap_or(1);

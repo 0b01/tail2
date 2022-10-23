@@ -1,4 +1,7 @@
-use crate::{elf::ElfCache, proc_mem::ProcMemMap};
+pub mod elf;
+use crate::proc_mem::ProcMemMap;
+
+use self::elf::ElfCache;
 
 pub struct SymCache {
     pub proc_map: ProcMemMap,

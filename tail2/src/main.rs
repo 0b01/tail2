@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 
@@ -6,19 +5,22 @@ use aya::maps::perf::{AsyncPerfEventArray};
 use aya::maps::HashMap;
 use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
-use aya::programs::UProbe;
+use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope};
 use bytes::BytesMut;
 use clap::{Parser, Subcommand};
-use elf::ElfCache;
+use log::info;
+use unwinding::MyUnwinderAarch64;
+use crate::stacktrace::MyStackTrace;
+use crate::symbolication::SymCache;
+use crate::symbolication::elf::ElfCache;
 use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigKey, Stack};
 use tokio::{task, signal};
 
 mod proc_mem;
-mod elf;
-mod unwind;
+mod unwinding;
 mod stacktrace;
-mod symbols;
+mod symbolication;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -71,9 +73,22 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
     let mut bpf = Bpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/release/tail2"
     )).unwrap();
-    let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
-    program.load().unwrap();
-    program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+
+        // let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
+        // program.load().unwrap();
+        // program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+
+        let program: &mut PerfEvent = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
+        program.load().unwrap();
+        // program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+        for cpu in online_cpus()? {
+            program.attach(
+                PerfTypeId::Software,
+                aya::programs::perf_event::perf_sw_ids::PERF_COUNT_SW_CPU_CLOCK as u64,
+                PerfEventScope::AllProcessesOneCpu { cpu },
+                SamplePolicy::Period(10000000),
+            )?;
+        }
 
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     // send device info
@@ -85,13 +100,11 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
 
     let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map("STACKS").unwrap()).unwrap();
 
-
     for cpu_id in online_cpus().unwrap() {
         let mut buf = stacks.open(cpu_id, None).unwrap();
-
+        
         task::spawn(async move {
-            let mut unwinder = UnwinderAarch64::new();
-            let mut unw_cache = CacheAarch64::<_>::new();
+            let mut unw = MyUnwinderAarch64::new();
 
             let mut buffers = (0..10)
                 .map(|_| BytesMut::with_capacity(size_of::<Stack>()))
@@ -100,7 +113,6 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
             loop {
                 // wait for events
                 let events = buf.read_events(&mut buffers).await.unwrap();
-                dbg!(&events);
     
                 // events.read contains the number of events that have been read,
                 // and is always <= buffers.len()
@@ -108,18 +120,18 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
                     let buf = &mut buffers[i];
                     let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
 
-                    unwind::unwind(st, &mut unw_cache, &mut unwinder);
+                    let frames = unw.unwind(st);
 
-                    // let stacktrace = MyStackTrace::from(&frames, &SymCache::build(pid));
-                    // dbg!(stacktrace);
-
-                    // dbg!(st);
+                    let stacktrace = MyStackTrace::from_frames(&frames, &SymCache::build(st.pidtgid.pid()));
+                    dbg!(stacktrace);
                 }
             }
         });
     }
-
+    
     signal::ctrl_c().await.expect("failed to listen for event");
+
+    info!("exiting!");
 
     Ok(())
 }

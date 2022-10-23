@@ -10,7 +10,7 @@ pub enum ConfigKey {
 }
 
 /// max copy size
-pub const MAX_STACK_SIZE: usize = 16 << 0;
+pub const MAX_STACK_SIZE: usize = 16 << 8;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
