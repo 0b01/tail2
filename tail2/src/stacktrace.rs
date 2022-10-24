@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::symbolication::SymCache;
+use crate::{symbolication::elf::ElfCache, unwinding::proc_mem::ProcMemMap};
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub struct MyStackTrace {
@@ -8,11 +8,15 @@ pub struct MyStackTrace {
 }
 
 impl MyStackTrace {
-    pub fn from_frames(trace: &[u64], syms: &SymCache) -> Self {
+    pub fn from_frames(trace: &[u64], proc_map: &ProcMemMap) -> Self {
+        let paths = proc_map.entries.iter().map(|e|e.object_path.to_owned()).collect::<Vec<_>>();
+        let syms = ElfCache::build(&paths);
         let frames = trace.iter().map(|f| {
-            if let Some(res) = syms.proc_map.lookup(*f) {
+            if let Some(res) = proc_map.lookup(*f) {
                 let addr = res.address;
-                let name = syms.elf_cache.map.get(&res.object_path).and_then(|c| c.find(addr)).unwrap_or("".to_owned());
+                let name = syms.map.get(&res.object_path)
+                    .and_then(|c| c.find(addr))
+                    .unwrap_or("".to_owned());
                 (res.object_path, addr, name)
             } else {
                 ("".to_owned(), 0, "".to_owned())

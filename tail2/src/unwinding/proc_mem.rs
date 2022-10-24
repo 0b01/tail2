@@ -18,23 +18,6 @@ pub struct ProcMemMapEntry {
 ///
 /// This allows to translate virtual memory addresses inside a process into
 /// a physical memory address, plus the path of the executable or library.
-///
-/// Example of a `/proc/[pid]/maps` entry:
-/// 563b0178b000-563b01807000 r--p 00000000 00:40 3659174697971092           /home/myuser/code/ayatest/target/debug/ayatest
-/// 563b01807000-563b01c4b000 r-xp 0007c000 00:40 3659174697971092           /home/myuser/code/ayatest/target/debug/ayatest
-/// 563b01c4b000-563b01d85000 r--p 004c0000 00:40 3659174697971092           /home/myuser/code/ayatest/target/debug/ayatest
-/// 563b01d86000-563b01dbe000 r--p 005fa000 00:40 3659174697971092           /home/myuser/code/ayatest/target/debug/ayatest
-/// 563b01dbe000-563b01dbf000 rw-p 00632000 00:40 3659174697971092           /home/myuser/code/ayatest/target/debug/ayatest
-/// 7f38911ff000-7f38913ff000 rw-p 00000000 00:00 0
-/// 7f38913ff000-7f3891400000 ---p 00000000 00:00 0
-/// 7f3891400000-7f3891402000 rw-p 00000000 00:00 0
-/// 7f3891402000-7f3891403000 ---p 00000000 00:00 0
-/// 7f3891403000-7f3891603000 rw-p 00000000 00:00 0
-/// 7f3892fbc000-7f3892fbd000 r--p 00000000 08:20 42625                      /usr/lib/x86_64-linux-gnu/ld-2.31.so
-/// 7f3892fbd000-7f3892fe0000 r-xp 00001000 08:20 42625                      /usr/lib/x86_64-linux-gnu/ld-2.31.so
-/// 7f3892fe0000-7f3892fe8000 r--p 00024000 08:20 42625                      /usr/lib/x86_64-linux-gnu/ld-2.31.so
-/// 7f3892fe9000-7f3892fea000 r--p 0002c000 08:20 42625                      /usr/lib/x86_64-linux-gnu/ld-2.31.so
-/// 7f3892fea000-7f3892feb000 rw-p 0002d000 08:20 42625                      /usr/lib/x86_64-linux-gnu/ld-2.31.so
 pub struct ProcMemMap {
     pub entries: Vec<ProcMemMapEntry>,
 }

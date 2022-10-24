@@ -5,14 +5,15 @@ use std::{
 
 use ::debugid::{CodeId, DebugId};
 use framehop::{Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData, Unwinder, aarch64::{UnwindRegsAarch64, UnwinderAarch64, CacheAarch64}, UnwindRegsNative};
-use fxhash::FxHashSet;
+use fxhash::{FxHashSet, FxHashMap};
 use object::{Object, ObjectSection, ObjectSegment, SectionKind};
 use tail2_common::Stack;
-use crate::{proc_mem::ProcMemMap, unwinding::debugid::debug_id_for_object};
+use crate::{unwinding::{debugid::debug_id_for_object, proc_mem::ProcMemMap}};
 
 use self::debugid::DebugIdExt;
 
-mod debugid;
+pub mod debugid;
+pub mod proc_mem;
 
 fn open_file_with_fallback(
     path: &Path,
@@ -261,9 +262,10 @@ where
 
 #[derive(Default)]
 pub struct MyUnwinderAarch64 {
-    unw: UnwinderAarch64<Vec<u8>>,
-    unw_cache: CacheAarch64<Vec<u8>>,
-    addr_cache: FxHashSet<u64>,
+    pub unw: UnwinderAarch64<Vec<u8>>,
+    pub unw_cache: CacheAarch64<Vec<u8>>,
+    pub addr_cache: FxHashSet<u64>,
+    pub proc_mem_maps: FxHashMap<u32, ProcMemMap>,
 }
 
 impl MyUnwinderAarch64 {
@@ -273,8 +275,8 @@ impl MyUnwinderAarch64 {
 
     pub fn unwind(&mut self, st: Stack) -> Vec<u64> {
         let pid = st.pidtgid.pid();
-        let proc_map = ProcMemMap::from_process_id(pid).unwrap();
-        for entry in proc_map.entries {
+        let proc_map = self.proc_mem_maps.entry(pid).or_insert(ProcMemMap::from_process_id(pid).unwrap());
+        for entry in &proc_map.entries {
             if !entry.is_exec {
                 continue;
             }

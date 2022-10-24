@@ -1,26 +1,25 @@
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
+use std::process;
 
 use aya::maps::perf::{AsyncPerfEventArray};
 use aya::maps::HashMap;
 use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
-use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope};
+use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope, perf_event};
 use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use log::info;
 use unwinding::MyUnwinderAarch64;
 use crate::stacktrace::MyStackTrace;
-use crate::symbolication::SymCache;
 use crate::symbolication::elf::ElfCache;
 use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigKey, Stack};
 use tokio::{task, signal};
 
-mod proc_mem;
-mod unwinding;
-mod stacktrace;
-mod symbolication;
+pub mod unwinding;
+pub mod symbolication;
+pub mod stacktrace;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -39,7 +38,7 @@ enum Commands {
     /// Listen to a PID
     Listen {
         #[clap(short, long)]
-        pid: Option<i32>,
+        pid: Option<u32>,
     }
 }
 
@@ -53,12 +52,13 @@ async fn main() -> Result<(), anyhow::Error> {
             Ok(())
         },
         Commands::Listen { pid } => {
+            let pid = pid.map(|i| if i == !0 {process::id()} else {i});
             run_bpf(pid).await
         },
     }
 }
 
-async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
+async fn run_bpf(pid: Option<u32>) -> Result<(), anyhow::Error> {
     env_logger::init();
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
@@ -80,13 +80,15 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
 
         let program: &mut PerfEvent = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
         program.load().unwrap();
-        // program.attach(Some("malloc"), 0, "libc", pid).unwrap();
         for cpu in online_cpus()? {
+            let scope = pid
+                .map(|pid| PerfEventScope::OneProcessOneCpu { cpu, pid  })
+                .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
             program.attach(
                 PerfTypeId::Software,
-                aya::programs::perf_event::perf_sw_ids::PERF_COUNT_SW_CPU_CLOCK as u64,
-                PerfEventScope::AllProcessesOneCpu { cpu },
-                SamplePolicy::Period(10000000),
+                perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
+                scope,
+                SamplePolicy::Frequency(1_000),
             )?;
         }
 
@@ -121,8 +123,7 @@ async fn run_bpf(pid: Option<i32>) -> Result<(), anyhow::Error> {
                     let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
 
                     let frames = unw.unwind(st);
-
-                    let stacktrace = MyStackTrace::from_frames(&frames, &SymCache::build(st.pidtgid.pid()));
+                    let stacktrace = MyStackTrace::from_frames(&frames, unw.proc_mem_maps.get(&st.pidtgid.pid()).unwrap());
                     dbg!(stacktrace);
                 }
             }
