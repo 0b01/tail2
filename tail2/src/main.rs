@@ -1,6 +1,6 @@
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
-use std::process;
+use std::process::{self, exit};
 use std::sync::Arc;
 
 use aya::maps::perf::{AsyncPerfEventArray};
@@ -10,7 +10,8 @@ use aya::{include_bytes_aligned, Bpf};
 use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope, perf_event};
 use bytes::BytesMut;
 use clap::{Parser, Subcommand};
-use log::info;
+use libc::getuid;
+use log::{info, error};
 use procinfo::processes::Processes;
 use tokio::sync::RwLock;
 use unwinding::MyUnwinderAarch64;
@@ -52,6 +53,19 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // init logger
+    let env = env_logger::Env::default()
+        .filter_or("LOG_LEVEL", "trace")
+        .write_style_or("LOG_STYLE", "always");
+    env_logger::init_from_env(env);
+
+    // make sure we are running with root privileges
+    let uid = unsafe { getuid() };
+    if uid != 0 {
+        error!("tail2 be be run with root privileges!");
+        exit(-1);
+    }
+
     let opt = Opt::parse();
     let mut info = Processes::new();
     info.populate();
@@ -59,7 +73,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match opt.command {
         Commands::Info { } => {
-            dbg!(info.read().await);
+            println!("{:#?}", info.read().await);
             Ok(())
         },
         Commands::Symbols { elf_file } => {
@@ -75,8 +89,6 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 async fn run_bpf(pid: Option<i32>, proc_maps: Arc<RwLock<Processes>>) -> Result<(), anyhow::Error> {
-    env_logger::init();
-
     #[cfg(debug_assertions)]
     let mut bpf = Bpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/debug/tail2"
@@ -88,23 +100,23 @@ async fn run_bpf(pid: Option<i32>, proc_maps: Arc<RwLock<Processes>>) -> Result<
 
     BpfLogger::init(&mut bpf).unwrap();
 
-        let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
-        program.load().unwrap();
-        program.attach(Some("malloc"), 0, "libc", pid).unwrap();
-
-        // let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
+        // let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
         // program.load().unwrap();
-        // for cpu in online_cpus()? {
-        //     let scope = pid
-        //         .map(|pid| PerfEventScope::OneProcessOneCpu { cpu, pid  })
-        //         .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
-        //     program.attach(
-        //         PerfTypeId::Software,
-        //         perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
-        //         scope,
-        //         SamplePolicy::Frequency(10_000),
-        //     )?;
-        // }
+        // program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+
+        let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
+        program.load().unwrap();
+        for cpu in online_cpus()? {
+            let scope = pid
+                .map(|pid| PerfEventScope::OneProcessOneCpu { cpu, pid: pid as u32  })
+                .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
+            program.attach(
+                PerfTypeId::Software,
+                perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
+                scope,
+                SamplePolicy::Frequency(10_000),
+            )?;
+        }
 
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     // send device info
@@ -141,7 +153,7 @@ async fn run_bpf(pid: Option<i32>, proc_maps: Arc<RwLock<Processes>>) -> Result<
                     if let Ok(proc_map) = maps.entry(st.pid() as i32) {
                         let frames = unw.unwind(st, &proc_map.maps);
                         let stacktrace = MyStackTrace::from_frames(&frames, &proc_map.maps);
-                        dbg!(stacktrace);
+                        println!("{:#?}", stacktrace);
                     }
                 }
             }

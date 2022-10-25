@@ -97,7 +97,7 @@ where
 
     let file = open_file_with_fallback(objpath, extra_binary_artifact_dir).ok();
     if file.is_none() && !path.starts_with('[') {
-        // eprintln!("Could not open file {:?}", objpath);
+        // eprintln!("Could not open file {:#?}", objpath);
     }
 
     let mapping_end_avma = mapping_start_avma + mapping_size;
@@ -111,7 +111,7 @@ where
         let mmap = match unsafe { memmap2::MmapOptions::new().map(&file) } {
             Ok(mmap) => mmap,
             Err(err) => {
-                eprintln!("Could not mmap file {}: {:?}", path, err);
+                eprintln!("Could not mmap file {}: {:#?}", path, err);
                 return None;
             }
         };
@@ -123,7 +123,7 @@ where
         let file = match object::File::parse(&mmap[..]) {
             Ok(file) => file,
             Err(_) => {
-                eprintln!("File {:?} has unrecognized format", objpath);
+                eprintln!("File {:#?} has unrecognized format", objpath);
                 return None;
             }
         };
@@ -138,14 +138,14 @@ where
                     let file_build_id = CodeId::from_binary(file_build_id);
                     let expected_build_id = CodeId::from_binary(build_id);
                     eprintln!(
-                        "File {:?} has non-matching build ID {} (expected {})",
+                        "File {:#?} has non-matching build ID {} (expected {})",
                         objpath, file_build_id, expected_build_id
                     );
                     return None;
                 }
                 None => {
                     eprintln!(
-                        "File {:?} does not contain a build ID, but we expected it to have one",
+                        "File {:#?} does not contain a build ID, but we expected it to have one",
                         objpath
                     );
                     return None;

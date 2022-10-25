@@ -18,6 +18,6 @@ fn main() {
         pause();
         let mut v = vec![];
         v.push(2);
-        println!("{:?}", v);
+        println!("{:#?}", v);
     }
 }
