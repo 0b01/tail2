@@ -7,8 +7,9 @@ use aya_bpf::{
     programs::{ProbeContext, PerfEventContext},
     helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user_buf},
     maps::{HashMap, PerCpuArray, PerfEventArray},
-    bindings::{bpf_pidns_info, user_pt_regs, task_struct}
+    bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
+use aya_log_ebpf::{error, info};
 use tail2_common::{Stack, ConfigKey, pidtgid::PidTgid};
 
 #[map(name="STACKS")]
@@ -20,10 +21,19 @@ static mut STACK_BUF: PerCpuArray<Stack> = PerCpuArray::with_max_entries(1, 0);
 #[map(name="CONFIG")]
 static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
-// #[uprobe(name="malloc_enter")]
-#[perf_event(name="malloc_enter")]
-pub fn malloc_enter(ctx: PerfEventContext) -> u32 {
+#[uprobe(name="malloc_enter")]
+fn malloc_enter(ctx: ProbeContext) -> u32 {
+    capture_stack_inner(&ctx)
+}
+
+#[perf_event(name="capture_stack")]
+fn capture_stack(ctx: PerfEventContext) -> u32 {
+    capture_stack_inner(&ctx)
+}
+
+fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     // let sz = ctx.arg(0).unwrap();
+    info!(ctx, "called"); // TODO: BUG: this prints twice but the client only received one.
 
     let dev = unsafe { CONFIG.get(&(ConfigKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigKey::INO as u32)) }.copied().unwrap_or(1);
@@ -46,11 +56,13 @@ pub fn malloc_enter(ctx: PerfEventContext) -> u32 {
 
         let st = stack.sp as *const u8;
         unsafe {
-            bpf_probe_read_user_buf(st, &mut stack.stuff).unwrap();
+            if let Err(e) = bpf_probe_read_user_buf(st, &mut stack.stuff) {
+                error!(ctx, "error when bpf_probe_read_user_buf(): {}", e);
+            }
         };
 
         unsafe {
-            STACKS.output(&ctx, stack, 0);
+            STACKS.output(ctx, stack, 0);
         }
     }
 

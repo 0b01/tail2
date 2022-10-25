@@ -6,7 +6,7 @@ int blah();
 int main() {
     while(getchar())
     {
-        // void* a = malloc(42);
+        void* a = malloc(42);
         blah();
     }
 }

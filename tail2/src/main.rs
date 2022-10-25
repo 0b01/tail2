@@ -19,6 +19,7 @@ use crate::symbolication::elf::ElfCache;
 use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigKey, Stack};
 use tokio::{task, signal};
+use aya_log::BpfLogger;
 
 pub mod procinfo;
 pub mod unwinding;
@@ -42,7 +43,7 @@ enum Commands {
     /// Listen to system events
     Listen {
         #[clap(short, long)]
-        pid: Option<u32>,
+        pid: Option<i32>,
     },
     /// Print system information
     Info {
@@ -67,19 +68,15 @@ async fn main() -> Result<(), anyhow::Error> {
             Ok(())
         },
         Commands::Listen { pid } => {
-            let pid = pid.map(|i| if i == 0 {process::id()} else {i});
+            let pid = pid.map(|i| if i == 0 {process::id() as i32} else {i});
             run_bpf(pid, info).await
         },
     }
 }
 
-async fn run_bpf(pid: Option<u32>, proc_maps: Arc<RwLock<Processes>>) -> Result<(), anyhow::Error> {
+async fn run_bpf(pid: Option<i32>, proc_maps: Arc<RwLock<Processes>>) -> Result<(), anyhow::Error> {
     env_logger::init();
 
-    // This will include your eBPF object file as raw bytes at compile-time and load it at
-    // runtime. This approach is recommended for most real-world use cases. If you would
-    // like to specify the eBPF program at runtime rather than at compile-time, you can
-    // reach for `Bpf::load_file` instead.
     #[cfg(debug_assertions)]
     let mut bpf = Bpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/debug/tail2"
@@ -89,23 +86,25 @@ async fn run_bpf(pid: Option<u32>, proc_maps: Arc<RwLock<Processes>>) -> Result<
         "../../target/bpfel-unknown-none/release/tail2"
     )).unwrap();
 
-        // let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
-        // program.load().unwrap();
-        // program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+    BpfLogger::init(&mut bpf).unwrap();
 
-        let program: &mut PerfEvent = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
+        let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
         program.load().unwrap();
-        for cpu in online_cpus()? {
-            let scope = pid
-                .map(|pid| PerfEventScope::OneProcessOneCpu { cpu, pid  })
-                .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
-            program.attach(
-                PerfTypeId::Software,
-                perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
-                scope,
-                SamplePolicy::Frequency(10_000),
-            )?;
-        }
+        program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+
+        // let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
+        // program.load().unwrap();
+        // for cpu in online_cpus()? {
+        //     let scope = pid
+        //         .map(|pid| PerfEventScope::OneProcessOneCpu { cpu, pid  })
+        //         .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
+        //     program.attach(
+        //         PerfTypeId::Software,
+        //         perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
+        //         scope,
+        //         SamplePolicy::Frequency(10_000),
+        //     )?;
+        // }
 
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     // send device info
