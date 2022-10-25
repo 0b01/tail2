@@ -1,6 +1,7 @@
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 use std::process;
+use std::sync::Arc;
 
 use aya::maps::perf::{AsyncPerfEventArray};
 use aya::maps::HashMap;
@@ -10,13 +11,16 @@ use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope,
 use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use log::info;
+use tokio::sync::RwLock;
 use unwinding::MyUnwinderAarch64;
 use crate::stacktrace::MyStackTrace;
 use crate::symbolication::elf::ElfCache;
+use crate::sysinfo::Processes;
 use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigKey, Stack};
 use tokio::{task, signal};
 
+pub mod sysinfo;
 pub mod unwinding;
 pub mod symbolication;
 pub mod stacktrace;
@@ -35,30 +39,41 @@ enum Commands {
         #[clap(short, long)]
         elf_file: String,
     },
-    /// Listen to a PID
+    /// Listen to system events
     Listen {
         #[clap(short, long)]
         pid: Option<u32>,
-    }
+    },
+    /// Print system information
+    Info {
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let opt = Opt::parse();
+    let mut info = Processes::new();
+    info.populate();
+    let info = Arc::new(RwLock::new(info));
+
     match opt.command {
+        Commands::Info { } => {
+            dbg!(info.read().await);
+            Ok(())
+        },
         Commands::Symbols { elf_file } => {
             let elf_cache = ElfCache::build(&[elf_file]);
             dbg!(elf_cache);
             Ok(())
         },
         Commands::Listen { pid } => {
-            let pid = pid.map(|i| if i == !0 {process::id()} else {i});
-            run_bpf(pid).await
+            let pid = pid.map(|i| if i == 0 {process::id()} else {i});
+            run_bpf(pid, info).await
         },
     }
 }
 
-async fn run_bpf(pid: Option<u32>) -> Result<(), anyhow::Error> {
+async fn run_bpf(pid: Option<u32>, proc_maps: Arc<RwLock<Processes>>) -> Result<(), anyhow::Error> {
     env_logger::init();
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
@@ -88,7 +103,7 @@ async fn run_bpf(pid: Option<u32>) -> Result<(), anyhow::Error> {
                 PerfTypeId::Software,
                 perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
                 scope,
-                SamplePolicy::Frequency(1_000),
+                SamplePolicy::Frequency(10_000),
             )?;
         }
 
@@ -105,6 +120,7 @@ async fn run_bpf(pid: Option<u32>) -> Result<(), anyhow::Error> {
     for cpu_id in online_cpus().unwrap() {
         let mut buf = stacks.open(cpu_id, None).unwrap();
         
+        let proc_maps = proc_maps.clone();
         task::spawn(async move {
             let mut unw = MyUnwinderAarch64::new();
 
@@ -122,8 +138,10 @@ async fn run_bpf(pid: Option<u32>) -> Result<(), anyhow::Error> {
                     let buf = &mut buffers[i];
                     let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
 
-                    let frames = unw.unwind(st);
-                    let stacktrace = MyStackTrace::from_frames(&frames, unw.proc_mem_maps.get(&st.pidtgid.pid()).unwrap());
+                    let mut maps = proc_maps.write().await;
+                    let proc_map = maps.entry(st.pid() as i32).unwrap();
+                    let frames = unw.unwind(st, &proc_map.maps);
+                    let stacktrace = MyStackTrace::from_frames(&frames, &proc_map.maps);
                     dbg!(stacktrace);
                 }
             }

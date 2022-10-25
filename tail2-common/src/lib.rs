@@ -28,6 +28,10 @@ impl Stack {
     pub fn empty() -> Self {
         unsafe { core::mem::zeroed() }
     }
+    #[inline]
+    pub fn pid(&self) -> u32 {
+        self.pidtgid.pid()
+    }
 }
 
 #[cfg(feature = "user")]

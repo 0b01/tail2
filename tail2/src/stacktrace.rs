@@ -1,23 +1,28 @@
 use std::fmt::Display;
 
-use crate::{symbolication::elf::ElfCache, unwinding::proc_mem::ProcMemMap};
+use procfs::process::{MemoryMap, MMapPath};
+
+use crate::{symbolication::elf::ElfCache};
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub struct MyStackTrace {
     frames: Vec<(String, u64, String)>,
 }
 
+
 impl MyStackTrace {
-    pub fn from_frames(trace: &[u64], proc_map: &ProcMemMap) -> Self {
-        let paths = proc_map.entries.iter().map(|e|e.object_path.to_owned()).collect::<Vec<_>>();
+    pub fn from_frames(trace: &[u64], proc_map: &[MemoryMap]) -> Self {
+        let paths = proc_map
+            .iter()
+            .filter_map(|e|to_path(&e.pathname))
+            .collect::<Vec<_>>();
         let syms = ElfCache::build(&paths);
         let frames = trace.iter().map(|f| {
-            if let Some(res) = proc_map.lookup(*f) {
-                let addr = res.address;
-                let name = syms.map.get(&res.object_path)
+            if let Some((addr, res)) = lookup(proc_map, *f) {
+                let name = syms.map.get(&to_path(&res.pathname).unwrap())
                     .and_then(|c| c.find(addr))
                     .unwrap_or("".to_owned());
-                (res.object_path, addr, name)
+                (to_path(&res.pathname).unwrap_or("".to_string()), addr, name)
             } else {
                 ("".to_owned(), 0, "".to_owned())
             }
@@ -27,6 +32,25 @@ impl MyStackTrace {
             frames,
         }
     }
+}
+
+fn to_path(path: &MMapPath) -> Option<String> {
+    if let MMapPath::Path(p) = path {
+        Some(p.to_str().unwrap().to_owned())
+    } else {
+        None
+    }
+}
+
+fn lookup(proc_map: &[MemoryMap], address: u64) -> Option<(u64, &MemoryMap)> {
+    for entry in proc_map.iter() {
+        if address >= entry.address.0 && address < entry.address.1 {
+            let translated = address - entry.address.0 + entry.offset;
+            return Some((translated, &entry));
+        }
+    }
+
+    None
 }
 
 impl Display for MyStackTrace {

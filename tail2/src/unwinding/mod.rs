@@ -1,19 +1,19 @@
 use std::{
     ops::Range,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}, os::unix::prelude::OsStrExt,
 };
 
 use ::debugid::{CodeId, DebugId};
 use framehop::{Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData, Unwinder, aarch64::{UnwindRegsAarch64, UnwinderAarch64, CacheAarch64}, UnwindRegsNative};
 use fxhash::{FxHashSet, FxHashMap};
 use object::{Object, ObjectSection, ObjectSegment, SectionKind};
+use procfs::process::{MemoryMap, MMapPath};
 use tail2_common::Stack;
-use crate::{unwinding::{debugid::debug_id_for_object, proc_mem::ProcMemMap}};
+use crate::{unwinding::{debugid::debug_id_for_object}};
 
 use self::debugid::DebugIdExt;
 
 pub mod debugid;
-pub mod proc_mem;
 
 fn open_file_with_fallback(
     path: &Path,
@@ -265,7 +265,6 @@ pub struct MyUnwinderAarch64 {
     pub unw: UnwinderAarch64<Vec<u8>>,
     pub unw_cache: CacheAarch64<Vec<u8>>,
     pub addr_cache: FxHashSet<u64>,
-    pub proc_mem_maps: FxHashMap<u32, ProcMemMap>,
 }
 
 impl MyUnwinderAarch64 {
@@ -273,24 +272,24 @@ impl MyUnwinderAarch64 {
         Self::default()
     }
 
-    pub fn unwind(&mut self, st: Stack) -> Vec<u64> {
-        let pid = st.pidtgid.pid();
-        let proc_map = self.proc_mem_maps.entry(pid).or_insert(ProcMemMap::from_process_id(pid).unwrap());
-        for entry in &proc_map.entries {
-            if !entry.is_exec {
+    pub fn unwind(&mut self, st: Stack, proc_map: &[MemoryMap]) -> Vec<u64> {
+        for entry in proc_map.iter() {
+            if !entry.perms.contains('x') {
                 continue;
             }
-            if !self.addr_cache.contains(&entry.address_range.0) {
-                add_module_to_unwinder(
-                    &mut self.unw,
-                    entry.object_path.as_bytes(),
-                    entry.offset,
-                    entry.address_range.0,
-                    entry.address_range.1 - entry.address_range.0,
-                    None,
-                    None,
-                );
-                self.addr_cache.insert(entry.address_range.0);
+            if !self.addr_cache.contains(&entry.address.0) {
+                if let MMapPath::Path(path) = &entry.pathname {
+                    add_module_to_unwinder(
+                        &mut self.unw,
+                        path.as_os_str().as_bytes(),
+                        entry.offset,
+                        entry.address.0,
+                        entry.address.1 - entry.address.0,
+                        None,
+                        None,
+                    );
+                    self.addr_cache.insert(entry.address.0);
+                }
             }
         }
 
