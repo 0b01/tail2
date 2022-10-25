@@ -48,14 +48,14 @@ impl RuntimeType {
 }
 
 /// Information about the runtime of a process
-pub struct ProcessInfo {
+pub struct ProcInfo {
     /// the runtime type of the process
     pub rt: RuntimeType,
     /// memory maps
     pub maps: Vec<MemoryMap>,
 }
 
-impl std::fmt::Debug for ProcessInfo {
+impl std::fmt::Debug for ProcInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ProcessInfo")
             .field("rt", &self.rt)
@@ -63,7 +63,7 @@ impl std::fmt::Debug for ProcessInfo {
     }
 }
 
-impl ProcessInfo {
+impl ProcInfo {
     pub fn detect(process: &Process) -> Result<Self> {
         let mut rt = RuntimeType::Unknown;
         let maps = process.maps()?;
@@ -88,7 +88,7 @@ impl ProcessInfo {
 
 #[derive(Debug, Default)]
 pub struct Processes {
-    processes: HashMap<i32, ProcessInfo>,
+    processes: HashMap<i32, ProcInfo>,
 }
 
 impl Processes {
@@ -101,8 +101,8 @@ impl Processes {
             let prc = p?;
             let pid = prc.stat()?.pid;
 
-            if let Ok(rt) = ProcessInfo::detect(&prc) {
-                self.processes.insert(pid, rt);
+            if let Ok(info) = ProcInfo::detect(&prc) {
+                self.processes.insert(pid, info);
             }
         }
 
@@ -110,14 +110,14 @@ impl Processes {
     }
 
     /// insert a pid into the proc mapping
-    pub fn entry(&mut self, pid: i32) -> Result<&ProcessInfo> {
+    pub fn entry(&mut self, pid: i32) -> Result<&ProcInfo> {
         if self.processes.contains_key(&pid) {
             return Ok(&self.processes[&pid]);
         }
 
         let prc = Process::new(pid)?;
-        let rt = ProcessInfo::detect(&prc)?;
-        self.processes.insert(pid, rt);
+        let info = ProcInfo::detect(&prc)?;
+        self.processes.insert(pid, info);
         
         Ok(&self.processes[&pid])
     }

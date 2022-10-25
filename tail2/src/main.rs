@@ -15,12 +15,12 @@ use tokio::sync::RwLock;
 use unwinding::MyUnwinderAarch64;
 use crate::stacktrace::MyStackTrace;
 use crate::symbolication::elf::ElfCache;
-use crate::sysinfo::Processes;
+use crate::procinfo::Processes;
 use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigKey, Stack};
 use tokio::{task, signal};
 
-pub mod sysinfo;
+pub mod procinfo;
 pub mod unwinding;
 pub mod symbolication;
 pub mod stacktrace;
