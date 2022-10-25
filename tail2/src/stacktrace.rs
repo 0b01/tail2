@@ -19,13 +19,15 @@ impl MyStackTrace {
         let syms = ElfCache::build(&paths);
         let frames = trace.iter().map(|f| {
             if let Some((addr, res)) = lookup(proc_map, *f) {
-                let name = syms.map.get(&to_path(&res.pathname).unwrap())
-                    .and_then(|c| c.find(addr))
-                    .unwrap_or("".to_owned());
-                (to_path(&res.pathname).unwrap_or("".to_string()), addr, name)
-            } else {
-                ("".to_owned(), 0, "".to_owned())
-            }
+                if let Some(path) = to_path(&res.pathname) {
+                    let name = syms.map.get(&path)
+                        .and_then(|c| c.find(addr))
+                        .unwrap_or("".to_owned());
+                    return (to_path(&res.pathname).unwrap_or("".to_string()), addr, name);
+                }
+            } 
+
+            ("".to_owned(), 0, "".to_owned())
         }).collect();
 
         Self {

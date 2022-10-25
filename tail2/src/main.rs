@@ -11,11 +11,11 @@ use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope,
 use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use log::info;
+use procinfo::processes::Processes;
 use tokio::sync::RwLock;
 use unwinding::MyUnwinderAarch64;
 use crate::stacktrace::MyStackTrace;
 use crate::symbolication::elf::ElfCache;
-use crate::procinfo::Processes;
 use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigKey, Stack};
 use tokio::{task, signal};
@@ -139,10 +139,11 @@ async fn run_bpf(pid: Option<u32>, proc_maps: Arc<RwLock<Processes>>) -> Result<
                     let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
 
                     let mut maps = proc_maps.write().await;
-                    let proc_map = maps.entry(st.pid() as i32).unwrap();
-                    let frames = unw.unwind(st, &proc_map.maps);
-                    let stacktrace = MyStackTrace::from_frames(&frames, &proc_map.maps);
-                    dbg!(stacktrace);
+                    if let Ok(proc_map) = maps.entry(st.pid() as i32) {
+                        let frames = unw.unwind(st, &proc_map.maps);
+                        let stacktrace = MyStackTrace::from_frames(&frames, &proc_map.maps);
+                        dbg!(stacktrace);
+                    }
                 }
             }
         });

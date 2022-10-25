@@ -1,51 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use anyhow::{Result, Context};
 use procfs::process::{Process, MMapPath, MemoryMap};
 use tokio::runtime::Runtime;
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum RuntimeType {
-    Unknown,
-    Python {
-        is_lib: bool,
-        version: String,
-    },
-}
+use self::runtime_type::RuntimeType;
 
-impl Default for RuntimeType {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
-
-impl From<&str> for RuntimeType {
-    fn from(base_name: &str) -> Self {
-        if base_name.starts_with("python") || base_name.starts_with("libpython") {
-            let is_lib = base_name.starts_with("libpython");
-            if let Some(version) = base_name.split("python").last() {
-                return Self::Python {
-                    is_lib,
-                    version: version.to_string(),
-                };
-            }
-        }
-
-        Self::Unknown
-    }
-}
-
-impl RuntimeType {
-    pub fn is_unknown(&self) -> bool {
-        &Self::Unknown == self
-    }
-
-    pub fn is_python(&self) -> bool {
-        match self {
-            Self::Python { is_lib: _, version: _ } => true,
-            _ => false,
-        }
-    }
-}
+pub mod processes;
+pub mod runtime_type;
 
 /// Information about the runtime of a process
 pub struct ProcInfo {
@@ -69,10 +30,7 @@ impl ProcInfo {
         let maps = process.maps()?;
         for entry in &maps {
             if let MMapPath::Path(p) = &entry.pathname {
-                let base_name = p.file_name()
-                    .context("Unable to get entry file name")?
-                    .to_str().context("unable to convert OsStr to str")?;
-                let detected = RuntimeType::from(base_name);
+                let detected = RuntimeType::from(&p)?;
                 if !detected.is_unknown() {
                     rt = detected;
                 }
@@ -83,42 +41,5 @@ impl ProcInfo {
             rt,
             maps,
         })
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Processes {
-    processes: HashMap<i32, ProcInfo>,
-}
-
-impl Processes {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    pub fn populate(&mut self) -> Result<()> {
-        for p in procfs::process::all_processes()? {
-            let prc = p?;
-            let pid = prc.stat()?.pid;
-
-            if let Ok(info) = ProcInfo::detect(&prc) {
-                self.processes.insert(pid, info);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// insert a pid into the proc mapping
-    pub fn entry(&mut self, pid: i32) -> Result<&ProcInfo> {
-        if self.processes.contains_key(&pid) {
-            return Ok(&self.processes[&pid]);
-        }
-
-        let prc = Process::new(pid)?;
-        let info = ProcInfo::detect(&prc)?;
-        self.processes.insert(pid, info);
-        
-        Ok(&self.processes[&pid])
     }
 }

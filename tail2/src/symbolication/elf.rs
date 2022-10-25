@@ -49,7 +49,6 @@ impl ElfSymbols {
     fn build(data: &[u8]) -> Self {
         let mut map = BTreeMap::new();
         let obj_file = object::File::parse(data).unwrap();
-        // dbg!(obj_file.dynamic_symbols().collect::<Vec<_>>());
 
         for sym in obj_file.symbols().chain(obj_file.dynamic_symbols()) {
             if let Some(idx) = sym.section_index() {
