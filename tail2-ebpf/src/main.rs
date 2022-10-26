@@ -2,18 +2,24 @@
 #![no_main]
 #![allow(nonstandard_style, dead_code)]
 
+use core::mem::transmute;
+
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
     helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user_buf},
-    maps::{HashMap, PerCpuArray, PerfEventArray},
+    maps::{HashMap, PerCpuArray, PerfEventArray, Array, self},
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
 use aya_log_ebpf::{error, info};
 use tail2_common::{Stack, ConfigKey, pidtgid::PidTgid};
+use tail2_common::new_proc_event::NewProcEvent;
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
+
+#[map(name="NEW_PROCS")]
+static mut NEW_PROCS: PerfEventArray<NewProcEvent> = PerfEventArray::new(0);
 
 #[map(name="STACK_BUF")]
 static mut STACK_BUF: PerCpuArray<Stack> = PerCpuArray::with_max_entries(1, 0);
@@ -23,6 +29,7 @@ static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> u32 {
+    // let sz = ctx.arg(0).unwrap();
     capture_stack_inner(&ctx)
 }
 
@@ -32,9 +39,6 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 }
 
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
-    // let sz = ctx.arg(0).unwrap();
-    info!(ctx, "called"); // TODO: BUG: this prints twice but the client only received one.
-
     let dev = unsafe { CONFIG.get(&(ConfigKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigKey::INO as u32)) }.copied().unwrap_or(1);
 
