@@ -1,7 +1,8 @@
+use std::borrow::Borrow;
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 use std::process::{self, exit};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar};
 use std::sync::atomic::AtomicU64;
 use std::sync::mpsc::channel;
 use std::thread;
@@ -16,6 +17,7 @@ use clap::{Parser, Subcommand};
 use libc::getuid;
 use log::{info, error};
 use procinfo::processes::Processes;
+use tokio::sync::{futures, Mutex, watch};
 use std::sync::RwLock;
 use unwinding::MyUnwinderAarch64;
 use crate::stacktrace::MyStackTrace;
@@ -105,7 +107,7 @@ async fn main() -> Result<()> {
                     PerfTypeId::Software,
                     perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
                     scope,
-                    SamplePolicy::Frequency(10_000),
+                    SamplePolicy::Frequency(4_000),
                 )?;
             }
 
@@ -156,41 +158,61 @@ async fn run_bpf(bpf: &mut Bpf, pid: Option<i32>, proc_maps: Arc<RwLock<Processe
 
     // receiver thread
     let proc_maps_ = proc_maps.clone();
-    thread::spawn(move || {
+    let mut ts = vec![];
+    let t = tokio::spawn(async move {
         let mut unw = MyUnwinderAarch64::new();
+        let mut c = 0;
         for st in rx.iter() {
             let mut maps = proc_maps_.write();
             if let Ok(proc_map) = maps.unwrap().entry(st.pid() as i32) {
                 let frames = unw.unwind(st, &proc_map.maps);
+                c += 1;
             }
         }
+        info!("Processed: {c} stacks");
     });
+    ts.push(t);
 
+    let (stop_tx, mut stop_rx) = watch::channel(false);
     // listen to bpf perf buf, send stacks to tx
     for cpu_id in online_cpus().unwrap() {
         let mut buf = stacks.open(cpu_id, Some(1024)).unwrap();
         
         let proc_maps = proc_maps.clone();
         let tx = tx.clone();
-        tokio::spawn(async move {
-            let mut buffers = (0..60)
+        let mut stop_rx2 = stop_rx.clone();
+        let t = tokio::spawn(async move {
+            let mut buffers = (0..10)
                 .map(|_| BytesMut::with_capacity(size_of::<Stack>()))
                 .collect::<Vec<_>>();
-    
+
             loop {
                 // poll for events
-                let events = buf.read_events(&mut buffers).await.unwrap();
-    
-                for i in 0..events.read {
-                    let buf = &mut buffers[i];
-                    let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
-                    tx.send(st);
-                }
+                tokio::select! {
+                    evts = buf.read_events(&mut buffers) => {
+                        let events = evts.unwrap();
+                        for i in 0..events.read {
+                            let buf = &mut buffers[i];
+                            let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
+                            tx.send(st);
+                        }
+                    },
+                    _ = stop_rx2.changed() => break,
+                };
             }
         });
+        ts.push(t);
     }
+    // Drop tx from main thread, so when producers join, consumer thread will also join.
+    drop(tx);
     
+    // wait until ctrl-c
     signal::ctrl_c().await.expect("failed to listen for event");
-    info!("exiting!");
+    // complete the work in the channel
+    info!("exiting");
+    stop_tx.send(true)?;
+    for t in ts {
+        tokio::join!(t);
+    }
     Ok(())
 }

@@ -29,7 +29,6 @@ static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> u32 {
-    // let sz = ctx.arg(0).unwrap();
     capture_stack_inner(&ctx)
 }
 
@@ -39,6 +38,8 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 }
 
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
+    // let sz = ctx.arg(0).unwrap();
+
     let dev = unsafe { CONFIG.get(&(ConfigKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigKey::INO as u32)) }.copied().unwrap_or(1);
 
