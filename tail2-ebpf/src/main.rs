@@ -12,7 +12,7 @@ use aya_bpf::{
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
 use aya_log_ebpf::{error, info};
-use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType};
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, stack::{USER_STACK_PAGES, PAGE_SIZE}};
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
@@ -51,28 +51,30 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
 
     // try to copy stack
     if let Some(buf_ptr) = unsafe { STACK_BUF.get_ptr_mut(0) } {
-        let stack: &mut Stack = unsafe { &mut *buf_ptr };
-        stack.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+        let st: &mut Stack = unsafe { &mut *buf_ptr };
+        st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
         let task: *mut task_struct = unsafe { bpf_get_current_task_btf() };
         let regs: *const user_pt_regs = unsafe { bpf_task_pt_regs(task) } as *const user_pt_regs;
-        stack.sp = unsafe { (*regs).sp };
-        stack.pc = unsafe { (*regs).pc };
-        stack.lr = unsafe { (*regs).regs[30] };
-        stack.fp = unsafe { (*regs).regs[29] };
+        st.sp = unsafe { (*regs).sp };
+        st.pc = unsafe { (*regs).pc };
+        st.lr = unsafe { (*regs).regs[30] };
+        st.fp = unsafe { (*regs).regs[29] };
 
-        let st = stack.sp as *const u8;
-        unsafe {
-            if let Err(e) = bpf_probe_read_user_buf(st, &mut stack.stuff) {
+        let st_ptr = st.sp as *const u8;
+        for i in 0..USER_STACK_PAGES {
+            if let Err(e) = unsafe { bpf_probe_read_user_buf(st_ptr, &mut st.raw_user_stack[i * PAGE_SIZE..(i+1) * PAGE_SIZE]) } {
                 error!(ctx, "error when bpf_probe_read_user_buf(): {}", e);
+                break;
             }
-        };
+            st.user_stack_len = (i + 1) * PAGE_SIZE;
+        }
 
         // #[cfg(debug_assertions)]
         incr_sent_stacks();
 
         unsafe {
-            STACKS.output(ctx, stack, 0);
+            STACKS.output(ctx, st, 0);
         }
     }
 

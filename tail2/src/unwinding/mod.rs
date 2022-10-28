@@ -301,7 +301,7 @@ impl MyUnwinderAarch64 {
         let mut read_stack = |addr: u64| {
             let offset = addr.checked_sub(st.sp).ok_or(())?;
             let index = usize::try_from(offset / 8).map_err(|_| ())?;
-            to_u64_arr(&st.stuff).get(index).copied().ok_or(())
+            to_u64_arr(&st.raw_user_stack[..st.user_stack_len]).get(index).copied().ok_or(())
         };
 
         let mut iter = self.unw.iter_frames(

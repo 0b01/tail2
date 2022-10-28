@@ -14,3 +14,5 @@ Cargo.lock
 .cargo
 
 output.csv
+
+pyperf/*

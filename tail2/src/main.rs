@@ -6,8 +6,7 @@ use std::os::unix::prelude::MetadataExt;
 use std::process::{self, exit};
 use std::sync::{Arc, Condvar};
 use std::sync::atomic::AtomicU64;
-use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use aya::maps::perf::{AsyncPerfEventArray};
 use aya::maps::{HashMap, PerfEventArray, MapData};
@@ -24,7 +23,8 @@ use tokio::sync::watch::Receiver;
 use tokio::sync::{futures, Mutex, watch, RwLock, mpsc};
 use tokio::task::JoinHandle;
 use unwinding::MyUnwinderAarch64;
-use crate::stacktrace::MyStackTrace;
+#[cfg(debug_assertions)]
+use crate::debugstacktrace::DebugStackTrace;
 use crate::symbolication::elf::ElfCache;
 use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigMapKey, Stack, InfoMapKey};
@@ -35,7 +35,8 @@ use anyhow::Result;
 pub mod procinfo;
 pub mod unwinding;
 pub mod symbolication;
-pub mod stacktrace;
+#[cfg(debug_assertions)]
+pub mod debugstacktrace;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -91,16 +92,15 @@ async fn main() -> Result<()> {
     // for waiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(false);
 
+    let processes = Arc::new(RwLock::new(Processes::new()));
     // refresh pid info table
     // HAX: extend lifetime to 'static
     let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, RuntimeType>, HashMap<&'static mut MapData, u32, RuntimeType>>(pid_info) };
-    let proc_maps = Arc::new(RwLock::new(Processes::new()));
-
-    let proc_maps2 = proc_maps.clone();
+    let processes2 = processes.clone();
     let mut stop_rx2 = stop_rx.clone();
     tokio::spawn(async move {
         loop {
-            let mut p = proc_maps2.write().await;
+            let mut p = processes2.write().await;
             p.populate();
         
             // copy to map
@@ -117,13 +117,12 @@ async fn main() -> Result<()> {
                 _ = tokio::time::sleep(Duration::new(1, 0)) => (),
                 _ = stop_rx2.changed() => break,
             }
-            
         }
     });
 
     match opt.command {
         Commands::Info { } => {
-            info!("{:#?}", proc_maps.read().await);
+            info!("{:#?}", processes.read().await);
             return Ok(());
         },
         Commands::Symbols { elf_file } => {
@@ -148,7 +147,7 @@ async fn main() -> Result<()> {
                 )?;
             }
 
-            let ts = run_bpf(&mut bpf, pid, proc_maps, stop_rx)?;
+            let ts = run_bpf(&mut bpf, pid, processes, stop_rx)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
@@ -163,7 +162,7 @@ async fn main() -> Result<()> {
             program.load().unwrap();
             program.attach(Some("malloc"), 0, "libc", pid).unwrap();
 
-            let ts = run_bpf(&mut bpf, pid, proc_maps, stop_rx)?;
+            let ts = run_bpf(&mut bpf, pid, processes, stop_rx)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
@@ -194,7 +193,7 @@ fn load_bpf() -> Result<Bpf> {
     Ok(bpf)
 }
 
-fn run_bpf(bpf: &mut Bpf, pid: Option<i32>, proc_maps: Arc<RwLock<Processes>>, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>> {
+fn run_bpf(bpf: &mut Bpf, pid: Option<i32>, processes: Arc<RwLock<Processes>>, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>> {
     // send device info
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
@@ -210,20 +209,31 @@ fn run_bpf(bpf: &mut Bpf, pid: Option<i32>, proc_maps: Arc<RwLock<Processes>>, s
     let (tx, mut rx) = mpsc::channel::<Stack>(2048);
 
     // receiver thread
-    let proc_maps_ = proc_maps.clone();
+    let processes_ = processes.clone();
     let mut ts = vec![];
+    let mut total_time = Duration::new(0, 0);
     let t = tokio::spawn(async move {
         let mut unw = MyUnwinderAarch64::new();
         let mut c = 0;
         while let Some(st) = rx.recv().await {
-            if let Ok(proc_map) = proc_maps_.write().await.entry(st.pid() as i32) {
-                let frames = unw.unwind(st, &proc_map.maps);
+            let start_time = SystemTime::now();
 
+            if let Ok(proc_info) = processes_.write().await.entry(st.pid() as i32) {
+                let frames = unw.unwind(st, &proc_info.maps);
+                #[cfg(debug_assertions)]
+                {
+                    let trace = DebugStackTrace::from_frames(&frames, &proc_info.maps);
+                    // dbg!(trace);
+                }
                 c += 1;
             }
+
+            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
+            total_time += elapsed;
         }
 
-        info!("Processed: {c} stacks");
+        let avg_t = total_time / c;
+        info!("Processed: {c} stacks. {avg_t:?}/st");
     });
     ts.push(t);
 
@@ -231,7 +241,7 @@ fn run_bpf(bpf: &mut Bpf, pid: Option<i32>, proc_maps: Arc<RwLock<Processes>>, s
     for cpu_id in online_cpus().unwrap() {
         let mut buf = stacks.open(cpu_id, Some(1024)).unwrap();
         
-        let proc_maps = proc_maps.clone();
+        let processes = processes.clone();
         let tx = tx.clone();
         let mut stop_rx2 = stop_rx.clone();
         let t = tokio::spawn(async move {

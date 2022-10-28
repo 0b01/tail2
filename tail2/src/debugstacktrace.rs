@@ -1,16 +1,15 @@
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
 
 use procfs::process::{MemoryMap, MMapPath};
 
 use crate::{symbolication::elf::ElfCache};
 
-#[derive(Hash, Eq, PartialEq, Debug)]
-pub struct MyStackTrace {
+#[derive(Hash, Eq, PartialEq)]
+pub struct DebugStackTrace {
     frames: Vec<(String, u64, String)>,
 }
 
-
-impl MyStackTrace {
+impl DebugStackTrace {
     pub fn from_frames(trace: &[u64], proc_map: &[MemoryMap]) -> Self {
         let paths = proc_map
             .iter()
@@ -55,12 +54,19 @@ fn lookup(proc_map: &[MemoryMap], address: u64) -> Option<(u64, &MemoryMap)> {
     None
 }
 
-impl Display for MyStackTrace {
+impl Display for DebugStackTrace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (obj, offset, name) in &self.frames {
             let _ = writeln!(f, "<{}> {}+{:#x}", name, obj, offset);
         }
 
+        Ok(())
+    }
+}
+
+impl Debug for DebugStackTrace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self);
         Ok(())
     }
 }
