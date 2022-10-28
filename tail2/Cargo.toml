@@ -13,7 +13,7 @@ clap = { version = "3.1", features = ["derive"] }
 env_logger = "0.9"
 libc = "0.2.102"
 log = "0.4"
-tokio = { version = "1.18", features = ["macros", "rt", "rt-multi-thread", "net", "signal", "sync"] }
+tokio = { version = "1.18", features = ["macros", "rt", "rt-multi-thread", "net", "signal", "sync", "time"] }
 thiserror = "1.0.37"
 object = "0.29.0"
 ctrlc = "3.2.3"

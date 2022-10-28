@@ -7,7 +7,7 @@ use super::ProcInfo;
 
 #[derive(Debug, Default)]
 pub struct Processes {
-    processes: HashMap<i32, ProcInfo>,
+    pub processes: HashMap<i32, ProcInfo>,
 }
 
 impl Processes {

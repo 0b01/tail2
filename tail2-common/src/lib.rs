@@ -1,13 +1,16 @@
 #![no_std]
 
+pub mod runtime_type;
 pub mod pidtgid;
 
 pub mod stack;
 pub use stack::{Stack, MAX_STACK_SIZE};
 
-pub mod new_proc_event;
+pub enum InfoMapKey {
+    SentStackCount = 0,
+}
 
-pub enum ConfigKey {
+pub enum ConfigMapKey {
     DEV = 0,
     INO = 1,
 }

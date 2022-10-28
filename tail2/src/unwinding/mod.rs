@@ -4,7 +4,7 @@ use std::{
 };
 
 use ::debugid::{CodeId, DebugId};
-use framehop::{Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData, Unwinder, aarch64::{UnwindRegsAarch64, UnwinderAarch64, CacheAarch64}, UnwindRegsNative};
+use framehop::{Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData, Unwinder, aarch64::{UnwindRegsAarch64, UnwinderAarch64, CacheAarch64}};
 use fxhash::{FxHashSet, FxHashMap};
 use object::{Object, ObjectSection, ObjectSegment, SectionKind};
 use procfs::process::{MemoryMap, MMapPath};

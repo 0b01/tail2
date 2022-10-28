@@ -12,20 +12,22 @@ use aya_bpf::{
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
 use aya_log_ebpf::{error, info};
-use tail2_common::{Stack, ConfigKey, pidtgid::PidTgid};
-use tail2_common::new_proc_event::NewProcEvent;
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType};
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
-
-#[map(name="NEW_PROCS")]
-static mut NEW_PROCS: PerfEventArray<NewProcEvent> = PerfEventArray::new(0);
 
 #[map(name="STACK_BUF")]
 static mut STACK_BUF: PerCpuArray<Stack> = PerCpuArray::with_max_entries(1, 0);
 
 #[map(name="CONFIG")]
 static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
+
+#[map(name="RUN_INFO")]
+static RUN_INFO: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
+
+#[map(name="PIDS")]
+static PIDS: HashMap<u32, RuntimeType> = HashMap::with_max_entries(1024, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> u32 {
@@ -40,8 +42,8 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     // let sz = ctx.arg(0).unwrap();
 
-    let dev = unsafe { CONFIG.get(&(ConfigKey::DEV as u32)) }.copied().unwrap_or(1);
-    let ino = unsafe { CONFIG.get(&(ConfigKey::INO as u32)) }.copied().unwrap_or(1);
+    let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
+    let ino = unsafe { CONFIG.get(&(ConfigMapKey::INO as u32)) }.copied().unwrap_or(1);
 
     let mut ns: bpf_pidns_info = unsafe { core::mem::zeroed() };
 
@@ -66,6 +68,9 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
             }
         };
 
+        // #[cfg(debug_assertions)]
+        incr_sent_stacks();
+
         unsafe {
             STACKS.output(ctx, stack, 0);
         }
@@ -73,6 +78,12 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
 
     0
 }
+
+pub fn incr_sent_stacks() {
+    let cnt = unsafe { RUN_INFO.get(&(InfoMapKey::SentStackCount as u32)) }.copied().unwrap_or(0);
+    unsafe { RUN_INFO.insert(&(InfoMapKey::SentStackCount as u32), &(cnt+1), 0) };
+}
+
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
