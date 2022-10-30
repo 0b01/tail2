@@ -8,6 +8,8 @@ use super::ProcInfo;
 #[derive(Debug, Default)]
 pub struct Processes {
     pub processes: HashMap<i32, ProcInfo>,
+    pub module_map: HashMap<String, u32>,
+    pub modules: 
 }
 
 impl Processes {
