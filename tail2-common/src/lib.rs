@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(feature = "user"), no_std)]
 
 pub mod runtime_type;
 pub mod pidtgid;

@@ -2,5 +2,6 @@
   "rust-analyzer.linkedProjects": [
     "Cargo.toml",
     "./tail2-ebpf/Cargo.toml"
-  ]
+  ],
+  "cmake.configureOnOpen": false
 }

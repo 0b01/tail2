@@ -13,7 +13,7 @@ use aya_bpf::{
     maps::{HashMap, PerCpuArray, PerfEventArray, Array, self},
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
-use aya_log_ebpf::{error, info};
+use aya_log_ebpf::{error, info, debug};
 use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, stack::{USER_STACK_PAGES, PAGE_SIZE}, procinfo::ProcInfo, module::Module};
 
 #[map(name="STACKS")]
@@ -46,6 +46,7 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     // let sz = ctx.arg(0).unwrap();
+    debug!(ctx, "blah");
 
     let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigMapKey::INO as u32)) }.copied().unwrap_or(1);
@@ -75,7 +76,6 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
             st.user_stack_len = (i + 1) * PAGE_SIZE;
         }
 
-        // #[cfg(debug_assertions)]
         incr_sent_stacks();
 
         unsafe {

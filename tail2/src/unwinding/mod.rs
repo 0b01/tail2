@@ -16,6 +16,7 @@ use self::debugid::DebugIdExt;
 
 pub mod debugid;
 
+/*
 fn open_file_with_fallback(
     path: &Path,
     extra_dir: Option<&Path>,
@@ -359,3 +360,4 @@ mod tests {
         );
     }
 }
+*/
