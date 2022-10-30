@@ -14,7 +14,7 @@ use aya_bpf::{
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
 use aya_log_ebpf::{error, info, debug};
-use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, stack::{USER_STACK_PAGES, PAGE_SIZE}, procinfo::ProcInfo, module::Module};
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, stack::{USER_STACK_PAGES, PAGE_SIZE}, procinfo::{ProcInfo, MAX_MODS_PER_PROC}, module::Module};
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
@@ -25,6 +25,7 @@ static mut STACK_BUF: PerCpuArray<Stack> = PerCpuArray::with_max_entries(1, 0);
 #[map(name="CONFIG")]
 static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
+/// See InfoMapKey
 #[map(name="RUN_INFO")]
 static RUN_INFO: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
@@ -76,6 +77,8 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
             st.user_stack_len = (i + 1) * PAGE_SIZE;
         }
 
+        unwind(ctx, &st);
+
         incr_sent_stacks();
 
         unsafe {
@@ -84,6 +87,23 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     }
 
     0
+}
+
+fn unwind<C: BpfContext>(ctx: &C, s: &Stack) {
+    let mut id = None;
+    match unsafe { PIDS.get(&s.pid()) } {
+        None => error!(ctx, "no pid {} found in PIDS", s.pid()),
+        Some(p) => {
+            for i in 0..MAX_MODS_PER_PROC {
+                if p.mods[i].avma.0 <= s.pc && s.pc < p.mods[i].avma.1 {
+                    id = Some(i);
+                }
+            }
+        }
+    }
+    if let Some(id) = id {
+        info!(ctx, "{}", id);
+    }
 }
 
 pub fn incr_sent_stacks() {

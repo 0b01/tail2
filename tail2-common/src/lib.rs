@@ -6,6 +6,7 @@ pub mod procinfo;
 pub mod module;
 
 pub mod stack;
+pub mod unwinding;
 pub use stack::{Stack, MAX_STACK_SIZE};
 
 pub enum InfoMapKey {

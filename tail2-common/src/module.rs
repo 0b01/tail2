@@ -21,6 +21,7 @@ impl Default for Module {
 #[cfg(feature="user")]
 impl Module {
     pub fn from_path(p: &std::path::PathBuf) -> Result<Self, anyhow::Error> {
+        use anyhow::Context;
         use object::{Object, ObjectSection};
         let file = std::fs::File::open(&p)?;
 
@@ -43,8 +44,11 @@ impl Module {
         // let idx = DwarfCfiIndex::try_new(eh_frame, bases.clone(), 0).unwrap();
         // (eh_frame_data.to_owned(), bases, idx)
         let mut ret = Self::default();
-        ret.eh_frame_data.copy_from_slice(&eh_frame_data);
         ret.eh_frame_len = eh_frame_data.len();
+        if eh_frame_data.len() > 512 << 10 {
+            None.context("too big...")?;
+        }
+        ret.eh_frame_data[..ret.eh_frame_len].copy_from_slice(&eh_frame_data);
         Ok(ret)
     }
 }

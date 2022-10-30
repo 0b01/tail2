@@ -1,5 +1,7 @@
 use crate::runtime_type::RuntimeType;
 
+pub const MAX_MODS_PER_PROC: usize = 128;
+
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProcMod {
@@ -13,7 +15,7 @@ unsafe impl aya::Pod for ProcMod {}
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ProcInfo {
-    pub mods: [ProcMod; 128],
+    pub mods: [ProcMod; MAX_MODS_PER_PROC],
     pub mods_len: usize,
     pub runtime_type: RuntimeType,
 }

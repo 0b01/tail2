@@ -91,31 +91,31 @@ async fn main() -> Result<()> {
     // for waiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(false);
 
-    // let mut pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
-    // let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
-    // let mut mod_info: HashMap<_, u32, Module> = HashMap::try_from(bpf.map_mut("MODS").unwrap()).unwrap();
-    // let mut mod_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, Module>, HashMap<&'static mut MapData, u32, Module>>(mod_info) };
+    let mut pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
+    let mut mod_info: HashMap<_, u32, Module> = HashMap::try_from(bpf.map_mut("MODS").unwrap()).unwrap();
+    let mut mod_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, Module>, HashMap<&'static mut MapData, u32, Module>>(mod_info) };
 
-    // // refresh pid info table
-    // // HAX: extend lifetime to 'static
-    // let mut stop_rx2 = stop_rx.clone();
-    // tokio::spawn(async move {
-    //     loop {
-    //         let mut p = Processes::new();
-    //         p.populate();
+    // refresh pid info table
+    // HAX: extend lifetime to 'static
+    let mut stop_rx2 = stop_rx.clone();
+    tokio::spawn(async move {
+        loop {
+            let mut p = Processes::new();
+            p.populate();
         
-    //         // copy to maps
-    //         for (pid, nfo) in p.processes {
-    //             pid_info.insert(pid as u32, nfo, 0);
-    //         }
+            // copy to maps
+            for (pid, nfo) in p.processes {
+                pid_info.insert(pid as u32, nfo, 0);
+            }
 
-    //         // sleep for 1 sec
-    //         tokio::select! {
-    //             _ = tokio::time::sleep(Duration::new(1, 0)) => (),
-    //             _ = stop_rx2.changed() => break,
-    //         }
-    //     }
-    // });
+            // sleep for 1 sec
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::new(1, 0)) => (),
+                _ = stop_rx2.changed() => break,
+            }
+        }
+    });
 
     match opt.command {
         Commands::Info { } => {
@@ -149,11 +149,10 @@ async fn main() -> Result<()> {
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
             stop_tx.send(true)?;
-            for t in ts { tokio::join!(t); }
+            for t in ts { let _ = tokio::join!(t); }
         },
         Commands::Alloc { pid } => {
             let pid = pid.map(|i| if i == 0 {process::id() as i32} else {i});
-            let mut bpf = load_bpf()?;
 
             let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
             program.load().unwrap();
@@ -164,7 +163,7 @@ async fn main() -> Result<()> {
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
             stop_tx.send(true)?;
-            for t in ts { tokio::join!(t); }
+            for t in ts { let _ = tokio::join!(t); }
         }
     }
 

@@ -55,7 +55,7 @@ impl Processes {
         let mut ret = ProcInfo::default();
         ret.runtime_type = runtime_type;
         ret.mods_len = mods.len();
-        ret.mods.copy_from_slice(mods.as_slice());
+        ret.mods[..ret.mods_len].copy_from_slice(mods.as_slice());
         Ok(ret)
     }
 
