@@ -9,6 +9,7 @@ user = [ "aya" ]
 
 [dependencies]
 aya = { git = "https://github.com/aya-rs/aya", branch = "main", version = "0.11", optional = true}
+gimli = { version = "0.26.1", features = ["read-core"], default-features = false }
 
 [lib]
 path = "src/lib.rs"

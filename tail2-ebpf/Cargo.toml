@@ -7,6 +7,7 @@ edition = "2021"
 aya-bpf = { git = "https://github.com/aya-rs/aya", branch = "main" }
 aya-log-ebpf = { git = "https://github.com/aya-rs/aya", branch = "main" }
 tail2-common = { path = "../tail2-common" }
+gimli = { version = "0.26.1", features = ["read-core"], default-features = false }
 
 [[bin]]
 name = "tail2"

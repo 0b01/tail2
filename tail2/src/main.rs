@@ -18,6 +18,8 @@ use clap::{Parser, Subcommand};
 use libc::getuid;
 use log::{info, error};
 use procinfo::processes::Processes;
+use tail2_common::module::Module;
+use tail2_common::procinfo::ProcInfo;
 use tail2_common::runtime_type::RuntimeType;
 use tokio::sync::watch::Receiver;
 use tokio::sync::{futures, Mutex, watch, RwLock, mpsc};
@@ -87,7 +89,8 @@ async fn main() -> Result<()> {
     let mut bpf = load_bpf()?;
     BpfLogger::init(&mut bpf).unwrap();
 
-    let mut pid_info: HashMap<_, u32, RuntimeType> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    let mut pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    let mut mod_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("MODS").unwrap()).unwrap();
 
     // for waiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(false);
@@ -95,7 +98,8 @@ async fn main() -> Result<()> {
     let processes = Arc::new(RwLock::new(Processes::new()));
     // refresh pid info table
     // HAX: extend lifetime to 'static
-    let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, RuntimeType>, HashMap<&'static mut MapData, u32, RuntimeType>>(pid_info) };
+    let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
+    let mut mod_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, Module>, HashMap<&'static mut MapData, u32, Module>>(mod_info) };
     let processes2 = processes.clone();
     let mut stop_rx2 = stop_rx.clone();
     tokio::spawn(async move {
@@ -143,7 +147,7 @@ async fn main() -> Result<()> {
                     PerfTypeId::Software,
                     perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
                     scope,
-                    SamplePolicy::Frequency(4_000),
+                    SamplePolicy::Period(4_000_000),
                 )?;
             }
 
@@ -220,10 +224,12 @@ fn run_bpf(bpf: &mut Bpf, pid: Option<i32>, processes: Arc<RwLock<Processes>>, s
 
             if let Ok(proc_info) = processes_.write().await.entry(st.pid() as i32) {
                 let frames = unw.unwind(st, &proc_info.maps);
+                println!("{:?}", &st);
+                println!("{:?}", &frames);
                 #[cfg(debug_assertions)]
                 {
                     let trace = DebugStackTrace::from_frames(&frames, &proc_info.maps);
-                    // dbg!(trace);
+                    dbg!(trace);
                 }
                 c += 1;
             }

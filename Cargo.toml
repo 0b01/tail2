@@ -5,4 +5,6 @@ members = [
     "xtask",
     "testapp/parade",
     "testapp/vec",
+    "framehop",
+    "ehdump",
 ]

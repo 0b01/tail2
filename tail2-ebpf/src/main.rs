@@ -2,6 +2,8 @@
 #![no_main]
 #![allow(nonstandard_style, dead_code)]
 
+mod unwinding;
+
 use core::mem::transmute;
 
 use aya_bpf::{
@@ -12,7 +14,7 @@ use aya_bpf::{
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
 use aya_log_ebpf::{error, info};
-use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, stack::{USER_STACK_PAGES, PAGE_SIZE}};
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, stack::{USER_STACK_PAGES, PAGE_SIZE}, procinfo::ProcInfo, module::Module};
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
@@ -26,8 +28,11 @@ static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 #[map(name="RUN_INFO")]
 static RUN_INFO: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
+#[map(name="MODS")]
+static MODS: HashMap<u32, Module> = HashMap::with_max_entries(512, 0);
+
 #[map(name="PIDS")]
-static PIDS: HashMap<u32, RuntimeType> = HashMap::with_max_entries(1024, 0);
+static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(1024, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> u32 {
@@ -85,7 +90,6 @@ pub fn incr_sent_stacks() {
     let cnt = unsafe { RUN_INFO.get(&(InfoMapKey::SentStackCount as u32)) }.copied().unwrap_or(0);
     unsafe { RUN_INFO.insert(&(InfoMapKey::SentStackCount as u32), &(cnt+1), 0) };
 }
-
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {

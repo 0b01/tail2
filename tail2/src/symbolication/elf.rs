@@ -21,7 +21,7 @@ impl ElfCache {
                 let kind = match object::FileKind::parse(data.as_slice()) {
                     Ok(kind) => kind,
                     Err(err) => {
-                        println!("Failed to parse file: {}", err);
+                        println!("Failed to parse {path}: {err}");
                         continue;
                     }
                 };

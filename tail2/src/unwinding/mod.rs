@@ -6,6 +6,7 @@ use std::{
 use ::debugid::{CodeId, DebugId};
 use framehop::{Module, ModuleSvmaInfo, ModuleUnwindData, TextByteData, Unwinder, aarch64::{UnwindRegsAarch64, UnwinderAarch64, CacheAarch64}};
 use fxhash::{FxHashSet, FxHashMap};
+use log::error;
 use object::{Object, ObjectSection, ObjectSegment, SectionKind};
 use procfs::process::{MemoryMap, MMapPath};
 use tail2_common::Stack;
@@ -312,9 +313,18 @@ impl MyUnwinderAarch64 {
         );
 
         let mut frames = vec![];
-        while let Ok(Some(f)) = iter.next() {
-            frames.push(f.address());
-        }
+        loop {
+            match iter.next() {
+                // found a frame
+                Ok(Some(f)) => frames.push(f.address()),
+                // unwinded to root
+                Ok(None) => break,
+                Err(e) => {
+                    error!("Unwinding error: {}", e);
+                    break;
+                }
+            }
+        } 
 
         frames
     }

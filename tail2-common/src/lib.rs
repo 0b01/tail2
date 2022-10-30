@@ -2,6 +2,8 @@
 
 pub mod runtime_type;
 pub mod pidtgid;
+pub mod procinfo;
+pub mod module;
 
 pub mod stack;
 pub use stack::{Stack, MAX_STACK_SIZE};

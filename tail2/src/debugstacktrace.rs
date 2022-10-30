@@ -56,8 +56,10 @@ fn lookup(proc_map: &[MemoryMap], address: u64) -> Option<(u64, &MemoryMap)> {
 
 impl Display for DebugStackTrace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _ = writeln!(f, "");
         for (obj, offset, name) in &self.frames {
-            let _ = writeln!(f, "<{}> {}+{:#x}", name, obj, offset);
+            let obj = obj.split("/").last().unwrap_or("");
+            let _ = writeln!(f, "<{name}>+{offset:#x} [{obj}]");
         }
 
         Ok(())
