@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use std::collections::HashSet;
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 use std::process::{self, exit};
@@ -19,6 +18,7 @@ use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
 use tokio::sync::{watch, mpsc};
 use tokio::task::JoinHandle;
+use crate::debugstacktrace::DebugStackTrace;
 use crate::processes::Processes;
 use crate::symbolication::elf::ElfCache;
 use tail2_common::{ConfigMapKey, Stack, InfoMapKey};
@@ -28,7 +28,6 @@ use anyhow::Result;
 
 pub mod processes;
 pub mod symbolication;
-#[cfg(debug_assertions)]
 pub mod debugstacktrace;
 
 #[derive(Debug, Parser)]
@@ -91,7 +90,6 @@ async fn main() -> Result<()> {
     let mut p = Processes::new();
     let _ = p.populate();
     dbg!(p.processes.keys().len());
-    dbg!(p.processes.keys().collect::<HashSet<_>>().contains(&302977));
 
     // refresh pid info table
     let mut stop_rx2 = stop_rx.clone();
@@ -102,9 +100,9 @@ async fn main() -> Result<()> {
                 let _ = pid_info.insert_boxed(*pid as u32, nfo, 0);
             }
 
-            // sleep for 1 sec
+            // sleep for 10 sec
             tokio::select! {
-                _ = tokio::time::sleep(Duration::new(1, 0)) => (),
+                _ = tokio::time::sleep(Duration::new(10, 0)) => (),
                 _ = stop_rx2.changed() => break,
             }
         }
@@ -203,6 +201,10 @@ fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>
         let mut c = 0;
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
+
+            let proc_map = procfs::process::Process::new(st.pid() as i32).unwrap().maps().unwrap();
+            let dst = DebugStackTrace::from_frames(&st.user_stack, &proc_map);
+            dbg!(dst);
 
             let elapsed = SystemTime::now().duration_since(start_time).unwrap();
             total_time += elapsed;

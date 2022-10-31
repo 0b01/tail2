@@ -4,17 +4,15 @@
 
 mod unwinding;
 
-use core::mem::transmute;
-
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
-    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user_buf},
-    maps::{HashMap, PerCpuArray, PerfEventArray, Array, self},
+    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user},
+    maps::{HashMap, PerCpuArray, PerfEventArray},
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
-use aya_log_ebpf::{error, info, debug};
-use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::aarch64::unwind_rule::UnwindRuleAarch64};
+use aya_log_ebpf::{info, error};
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, MAX_USER_STACK};
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
@@ -58,12 +56,13 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
 
         let task: *mut task_struct = unsafe { bpf_get_current_task_btf() };
         let regs: *const user_pt_regs = unsafe { bpf_task_pt_regs(task) } as *const user_pt_regs;
-        st.sp = unsafe { (*regs).sp };
-        st.pc = unsafe { (*regs).pc };
-        st.lr = unsafe { (*regs).regs[30] };
-        st.fp = unsafe { (*regs).regs[29] };
+        let pc = unsafe { (*regs).pc };
+        let mut regs = UnwindRegsAarch64::new(
+            unsafe { (*regs).regs[30] },
+            unsafe { (*regs).sp },
+            unsafe { (*regs).regs[29] });
 
-        unwind(ctx, &st);
+        unwind(ctx, st, pc, &mut regs);
 
         incr_sent_stacks();
 
@@ -75,22 +74,43 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     0
 }
 
-fn unwind<C: BpfContext>(ctx: &C, s: &Stack) {
-    match unsafe { PIDS.get(&s.pid()) } {
-        None => error!(ctx, "no pid {} found in PIDS", s.pid()),
-        Some(p) => {
-            info!(ctx, "found");
-            let record = binary_search(&p.rows, s.pc, 0, p.rows_len);
-            match record {
-                Some(r) => info!(ctx, "{}", r),
-                None => info!(ctx, "unwind row not found"),
+fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegsAarch64) -> Option<()> {
+    let proc_info = unsafe { PIDS.get(&st.pid())? };
+
+    let mut read_stack = |addr: u64| {
+        unsafe { bpf_probe_read_user(addr as *const u64).map_err(|_|()) }
+    };
+
+    let mut frame = pc;
+    let mut is_first_frame = true;
+    st.user_stack[0] = pc;
+    for i in 1..MAX_USER_STACK {
+        let idx = binary_search(&proc_info.rows, frame, proc_info.rows_len)?;
+        let rule = proc_info.rows[idx].1;
+
+        match rule.exec(is_first_frame, regs, &mut read_stack) {
+            Some(Some(f)) => {
+                st.user_stack[i] = f;
+                frame = f;
             }
-            
+            Some(None) => {
+                st.unwind_success = Some(i);
+                break;
+            },
+            None => {
+                error!(ctx, "error unwinding");
+                st.unwind_success = None;
+                break;
+            }
         }
+        is_first_frame = false;
     }
+
+    Some(())
 }
 
-fn binary_search(rows: &[(u64, UnwindRuleAarch64)], pc: u64, left: usize, right: usize) -> Option<usize> {
+/// binary search routine that passes the bpf verifier
+fn binary_search(rows: &[(u64, UnwindRuleAarch64)], pc: u64, right: usize) -> Option<usize> {
     let mut left = 0;
     let mut right = right;
     let mut found = 0;
@@ -101,9 +121,11 @@ fn binary_search(rows: &[(u64, UnwindRuleAarch64)], pc: u64, left: usize, right:
       
         let mid = (left + right) / 2;
 
+        // appease the verifier
         if mid >= MAX_ROWS_PER_PROC {
           return None;
         }
+
         if rows[mid].0 <= pc {
           found = mid;
           left = mid + 1;
@@ -117,7 +139,7 @@ fn binary_search(rows: &[(u64, UnwindRuleAarch64)], pc: u64, left: usize, right:
 
 pub fn incr_sent_stacks() {
     let cnt = unsafe { RUN_INFO.get(&(InfoMapKey::SentStackCount as u32)) }.copied().unwrap_or(0);
-    unsafe { RUN_INFO.insert(&(InfoMapKey::SentStackCount as u32), &(cnt+1), 0) };
+    let _ = RUN_INFO.insert(&(InfoMapKey::SentStackCount as u32), &(cnt+1), 0);
 }
 
 #[panic_handler]

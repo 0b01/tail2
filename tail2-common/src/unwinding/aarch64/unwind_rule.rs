@@ -54,7 +54,7 @@ impl Default for UnwindRuleAarch64 {
 }
 
 impl UnwindRuleAarch64 {
-    fn exec<F>(
+    pub fn exec<F>(
         self,
         is_first_frame: bool,
         regs: &mut UnwindRegsAarch64,
@@ -229,6 +229,19 @@ impl UnwindRuleAarch64 {
         regs.set_fp(new_fp);
 
         Some(Some(return_address))
+    }
+
+    pub fn as_num(&self) -> u32 {
+        match &self {
+            UnwindRuleAarch64::NoOp => 0,
+            UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp => 1,
+            UnwindRuleAarch64::OffsetSp { sp_offset_by_16 } => 2,
+            UnwindRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere { sp_offset_by_16 } => 3,
+            UnwindRuleAarch64::OffsetSpAndRestoreLr { sp_offset_by_16, lr_storage_offset_from_sp_by_8 } => 4,
+            UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr { sp_offset_by_16, fp_storage_offset_from_sp_by_8, lr_storage_offset_from_sp_by_8 } => 5,
+            UnwindRuleAarch64::UseFramePointer => 6,
+            UnwindRuleAarch64::UseFramepointerWithOffsets { sp_offset_from_fp_by_8, fp_storage_offset_from_fp_by_8, lr_storage_offset_from_fp_by_8 } => 7,
+        }
     }
 }
 

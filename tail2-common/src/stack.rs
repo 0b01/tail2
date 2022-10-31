@@ -1,20 +1,22 @@
-use crate::pidtgid::PidTgid;
+use crate::{pidtgid::PidTgid, unwinding::aarch64::unwindregs::UnwindRegsAarch64, MAX_USER_STACK};
 
 #[repr(C)]
-#[derive(Clone, Copy)]
-#[cfg_attr(feature = "user", derive(Debug))]
+#[derive(Clone, Copy, Debug)]
 pub struct Stack {
-    pub pc: u64,
-    pub sp: u64,
-    pub fp: u64,
-    pub lr: u64,
     pub pidtgid: PidTgid,
+    pub user_stack: [u64; MAX_USER_STACK],
+    pub unwind_success: Option<usize>,
 }
 
 impl Stack {
     pub fn empty() -> Self {
-        unsafe { core::mem::zeroed() }
+        Self {
+            pidtgid: unsafe { core::mem::zeroed() },
+            user_stack: [0; MAX_USER_STACK],
+            unwind_success: None,
+        }
     }
+
     #[inline]
     pub fn pid(&self) -> u32 {
         self.pidtgid.pid()

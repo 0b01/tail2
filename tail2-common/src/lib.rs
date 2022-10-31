@@ -9,6 +9,9 @@ pub mod stack;
 pub mod unwinding;
 pub use stack::Stack;
 
+/// Maximum number of frames to unwind 
+pub const MAX_USER_STACK: usize = 40;
+
 pub enum InfoMapKey {
     SentStackCount = 0,
 }

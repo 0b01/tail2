@@ -1,7 +1,7 @@
 use std::{collections::HashMap};
 
 use anyhow::{Result};
-use procfs::process::Process;
+use procfs::process::{Process};
 use tail2_common::procinfo::ProcInfo;
 
 #[derive(Debug, Default)]
@@ -19,9 +19,8 @@ impl Processes {
     pub fn populate(&mut self) -> Result<()> {
         for p in procfs::process::all_processes()? {
             if let Ok(prc) = p {
-                let pid = prc.stat()?.pid;
-                if let Ok(info) = self.detect(&prc) {
-                    self.processes.insert(pid, info);
+                if let (Ok(info), Ok(maps)) = (self.detect(&prc), prc.maps()) {
+                    self.processes.insert(prc.pid, info);
                 }
             }
         }

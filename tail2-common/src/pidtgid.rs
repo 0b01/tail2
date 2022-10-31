@@ -16,7 +16,6 @@ impl PidTgid {
     }
 }
 
-#[cfg(feature = "user")]
 impl core::fmt::Debug for PidTgid {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("PidTgid")

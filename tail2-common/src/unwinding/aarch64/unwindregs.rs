@@ -5,7 +5,7 @@
 /// hash bits from the return address when unwinding through libraries which use pointer
 /// authentication, e.g. in system libraries on macOS.
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct UnwindRegsAarch64 {
     lr_mask: PtrAuthMask,
     lr: u64,

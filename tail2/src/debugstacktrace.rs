@@ -16,7 +16,7 @@ impl DebugStackTrace {
             .filter_map(|e|to_path(&e.pathname))
             .collect::<Vec<_>>();
         let syms = ElfCache::build(&paths);
-        let frames = trace.iter().map(|f| {
+        let frames = trace.iter().filter(|&f| *f!=0).map(|f| {
             if let Some((addr, res)) = lookup(proc_map, *f) {
                 if let Some(path) = to_path(&res.pathname) {
                     let name = syms.map.get(&path)
