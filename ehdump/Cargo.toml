@@ -9,6 +9,6 @@ edition = "2021"
 gimli = { version = "0.26.1", features = ["read-core"], default-features = false }
 object = "0.29.0"
 memmap2 = "0.5.3"
-tail2-common = { version = "0.1.0", path = "../tail2-common"}
-anyhow = "*"
-# framehop = { version = "0.7.1", path = "../framehop"}
+tail2-common = { version = "0.1.0", path = "../tail2-common", features = [ "user" ] }
+anyhow = "1.0.42"
+procfs = "0.14.1"

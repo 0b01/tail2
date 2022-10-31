@@ -1,15 +1,13 @@
 #![allow(dead_code)]
 
-use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 use std::process::{self, exit};
-use std::sync::{Arc, Condvar};
-use std::sync::atomic::AtomicU64;
 use std::time::{Duration, SystemTime};
 
 use aya::maps::perf::{AsyncPerfEventArray};
-use aya::maps::{HashMap, PerfEventArray, MapData};
+use aya::maps::{HashMap, MapData};
 use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
 use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope, perf_event};
@@ -17,24 +15,18 @@ use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use libc::getuid;
 use log::{info, error};
-use tail2_common::module::Module;
 use tail2_common::procinfo::ProcInfo;
-use tail2_common::runtime_type::RuntimeType;
 use tokio::sync::watch::Receiver;
-use tokio::sync::{futures, Mutex, watch, RwLock, mpsc};
+use tokio::sync::{watch, mpsc};
 use tokio::task::JoinHandle;
-#[cfg(debug_assertions)]
-use crate::debugstacktrace::DebugStackTrace;
 use crate::processes::Processes;
 use crate::symbolication::elf::ElfCache;
-use framehop::aarch64::{UnwinderAarch64, CacheAarch64};
 use tail2_common::{ConfigMapKey, Stack, InfoMapKey};
-use tokio::{task, signal};
+use tokio::signal;
 use aya_log::BpfLogger;
 use anyhow::Result;
 
 pub mod processes;
-pub mod unwinding;
 pub mod symbolication;
 #[cfg(debug_assertions)]
 pub mod debugstacktrace;
@@ -91,22 +83,23 @@ async fn main() -> Result<()> {
     // for waiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(false);
 
-    let mut pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    // HACK: extend lifetime to 'static
     let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
-    let mut mod_info: HashMap<_, u32, Module> = HashMap::try_from(bpf.map_mut("MODS").unwrap()).unwrap();
-    let mut mod_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, Module>, HashMap<&'static mut MapData, u32, Module>>(mod_info) };
+
+    // TODO: proper caching
+    let mut p = Processes::new();
+    let _ = p.populate();
+    dbg!(p.processes.keys().len());
+    dbg!(p.processes.keys().collect::<HashSet<_>>().contains(&302977));
 
     // refresh pid info table
-    // HAX: extend lifetime to 'static
     let mut stop_rx2 = stop_rx.clone();
     tokio::spawn(async move {
         loop {
-            let mut p = Processes::new();
-            p.populate();
-        
             // copy to maps
-            for (pid, nfo) in p.processes {
-                pid_info.insert(pid as u32, nfo, 0);
+            for (pid, nfo) in &p.processes {
+                let _ = pid_info.insert_boxed(*pid as u32, nfo, 0);
             }
 
             // sleep for 1 sec
@@ -144,7 +137,7 @@ async fn main() -> Result<()> {
                 )?;
             }
 
-            let ts = run_bpf(&mut bpf, pid, stop_rx)?;
+            let ts = run_bpf(&mut bpf, stop_rx)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
@@ -158,7 +151,7 @@ async fn main() -> Result<()> {
             program.load().unwrap();
             program.attach(Some("malloc"), 0, "libc", pid).unwrap();
 
-            let ts = run_bpf(&mut bpf, pid, stop_rx)?;
+            let ts = run_bpf(&mut bpf, stop_rx)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
@@ -189,7 +182,7 @@ fn load_bpf() -> Result<Bpf> {
     Ok(bpf)
 }
 
-fn run_bpf(bpf: &mut Bpf, pid: Option<i32>, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>> {
+fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>> {
     // send device info
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();

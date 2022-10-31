@@ -14,7 +14,7 @@ use aya_bpf::{
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
 use aya_log_ebpf::{error, info, debug};
-use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, stack::{USER_STACK_PAGES, PAGE_SIZE}, procinfo::{ProcInfo, MAX_MODS_PER_PROC}, module::Module};
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, runtime_type::RuntimeType, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::aarch64::unwind_rule::UnwindRuleAarch64};
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
@@ -28,9 +28,6 @@ static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 /// See InfoMapKey
 #[map(name="RUN_INFO")]
 static RUN_INFO: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
-
-#[map(name="MODS")]
-static MODS: HashMap<u32, Module> = HashMap::with_max_entries(512, 0);
 
 #[map(name="PIDS")]
 static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(1024, 0);
@@ -47,8 +44,6 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     // let sz = ctx.arg(0).unwrap();
-    debug!(ctx, "blah");
-
     let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigMapKey::INO as u32)) }.copied().unwrap_or(1);
 
@@ -68,15 +63,6 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
         st.lr = unsafe { (*regs).regs[30] };
         st.fp = unsafe { (*regs).regs[29] };
 
-        let st_ptr = st.sp as *const u8;
-        for i in 0..USER_STACK_PAGES {
-            if let Err(e) = unsafe { bpf_probe_read_user_buf(st_ptr, &mut st.raw_user_stack[i * PAGE_SIZE..(i+1) * PAGE_SIZE]) } {
-                error!(ctx, "error when bpf_probe_read_user_buf(): {}", e);
-                break;
-            }
-            st.user_stack_len = (i + 1) * PAGE_SIZE;
-        }
-
         unwind(ctx, &st);
 
         incr_sent_stacks();
@@ -90,20 +76,43 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
 }
 
 fn unwind<C: BpfContext>(ctx: &C, s: &Stack) {
-    let mut id = None;
     match unsafe { PIDS.get(&s.pid()) } {
         None => error!(ctx, "no pid {} found in PIDS", s.pid()),
         Some(p) => {
-            for i in 0..MAX_MODS_PER_PROC {
-                if p.mods[i].avma.0 <= s.pc && s.pc < p.mods[i].avma.1 {
-                    id = Some(i);
-                }
+            info!(ctx, "found");
+            let record = binary_search(&p.rows, s.pc, 0, p.rows_len);
+            match record {
+                Some(r) => info!(ctx, "{}", r),
+                None => info!(ctx, "unwind row not found"),
             }
+            
         }
     }
-    if let Some(id) = id {
-        info!(ctx, "{}", id);
+}
+
+fn binary_search(rows: &[(u64, UnwindRuleAarch64)], pc: u64, left: usize, right: usize) -> Option<usize> {
+    let mut left = 0;
+    let mut right = right;
+    let mut found = 0;
+    for _ in 0..20 {
+        if left >= right {
+          return Some(found);
+        }
+      
+        let mid = (left + right) / 2;
+
+        if mid >= MAX_ROWS_PER_PROC {
+          return None;
+        }
+        if rows[mid].0 <= pc {
+          found = mid;
+          left = mid + 1;
+        } else {
+          right = mid;
+        }
     }
+
+    None
 }
 
 pub fn incr_sent_stacks() {

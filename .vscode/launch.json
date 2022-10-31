@@ -212,15 +212,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'framedump'",
+            "name": "Debug executable 'ehdump'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=framedump",
-                    "--package=framedump"
+                    "--bin=ehdump",
+                    "--package=ehdump"
                 ],
                 "filter": {
-                    "name": "framedump",
+                    "name": "ehdump",
                     "kind": "bin"
                 }
             },
@@ -230,16 +230,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'framedump'",
+            "name": "Debug unit tests in executable 'ehdump'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=framedump",
-                    "--package=framedump"
+                    "--bin=ehdump",
+                    "--package=ehdump"
                 ],
                 "filter": {
-                    "name": "framedump",
+                    "name": "ehdump",
                     "kind": "bin"
                 }
             },

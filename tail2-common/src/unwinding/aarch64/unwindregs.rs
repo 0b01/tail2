@@ -1,11 +1,10 @@
-use std::fmt::Debug;
-
 /// The registers used for unwinding on Aarch64. We only need lr (x30), sp (x31),
 /// and fp (x29).
 ///
 /// We also have a [`PtrAuthMask`] which allows stripping off the pointer authentication
 /// hash bits from the return address when unwinding through libraries which use pointer
 /// authentication, e.g. in system libraries on macOS.
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct UnwindRegsAarch64 {
     lr_mask: PtrAuthMask,
@@ -134,12 +133,5 @@ impl UnwindRegsAarch64 {
     }
 }
 
-impl Debug for UnwindRegsAarch64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UnwindRegsAarch64")
-            .field("lr", &self.lr)
-            .field("sp", &self.sp)
-            .field("fp", &self.fp)
-            .finish()
-    }
-}
+#[cfg(feature = "user")]
+unsafe impl aya::Pod for UnwindRegsAarch64 {}

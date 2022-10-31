@@ -1,57 +1,57 @@
-use crate::runtime_type::RuntimeType;
+use crate::{runtime_type::RuntimeType, unwinding::aarch64::unwind_rule::UnwindRuleAarch64};
 
-pub const MAX_MODS_PER_PROC: usize = 128;
+/// 2 ^ 20
+pub const MAX_ROWS_PER_PROC: usize = 130_000;
 
-#[repr(C)]
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ProcMod {
-    pub id: u32,
-    pub avma: (u64, u64),
-}
-
-#[cfg(feature = "user")]
-unsafe impl aya::Pod for ProcMod {}
-
-#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ProcInfo {
-    pub mods: [ProcMod; MAX_MODS_PER_PROC],
-    pub mods_len: usize,
+    pub rows: [(u64, UnwindRuleAarch64); MAX_ROWS_PER_PROC],
+    pub rows_len: usize,
     pub runtime_type: RuntimeType,
 }
 
-impl Default for ProcInfo {
-    fn default() -> Self {
-        Self {
-            mods: [Default::default(); 128],
-            mods_len: Default::default(),
-            runtime_type: Default::default()
-        }
+#[cfg(feature = "user")]
+unsafe impl aya::Pod for ProcInfo {}
+
+#[cfg(feature = "user")]
+unsafe fn unsafe_allocate<T>() -> Box<T> {
+    let mut grid_box: Box<T>;
+    use std::alloc::{alloc, dealloc, Layout};
+    let layout = Layout::new::<T>();
+    let ptr = unsafe { alloc(layout) as *mut T };
+    grid_box = unsafe { Box::from_raw(ptr) };
+    return grid_box;
+}
+
+#[cfg(feature = "user")]
+impl ProcInfo {
+    pub fn boxed() -> Box<Self> {
+        unsafe { unsafe_allocate() }
     }
 }
 
-impl ProcInfo {
-    /// find mod id where ip is in range
-    pub fn find_mod_with_ip(&self, ip: u64) -> Option<u32> {
-        self.mods
-            .iter()
-            .filter(|m|m.avma.0 <= ip && ip < m.avma.1)
-            .map(|m| m.id)
-            .next()
-    }
-}
+// impl Default for ProcInfo {
+//     fn default() -> Self {
+//         let rows = [Default::default(); MAX_ROWS_PER_PROC];
+//         ProcInfo {
+//             rows,
+//             rows_len: Default::default(),
+//             runtime_type: Default::default()
+//         }
+//     }
+// }
 
 #[cfg(feature = "user")]
 pub mod user {
     use core::str::from_utf8_unchecked;
-    use std::{path::PathBuf, io::{BufReader, Read}, fs::File};
+    use std::{path::{PathBuf, Path}, io::{BufReader, Read}, fs::File};
 
-    use crate::runtime_type::PythonVersion;
+    use crate::{runtime_type::PythonVersion, unwinding::aarch64::unwind_table::{UnwindTable, UnwindTableRow}};
     const BUFSIZ: usize = 4096;
 
     use super::*;
     use anyhow::{Result, Context};
-    pub fn to_python_version(file_path: &PathBuf, ver_str: &str) -> Result<PythonVersion> {
+    pub fn to_python_version<P: AsRef<Path>>(file_path: P, ver_str: &str) -> Result<PythonVersion> {
         let mut rdr = BufReader::new(File::open(file_path)?);
         let mut buf = [0u8; BUFSIZ  * 2];
 
@@ -96,10 +96,10 @@ pub mod user {
         None.context("unable to find python version from file")
     }
 
-    pub fn detect_runtime_type(path: &PathBuf) -> Result<RuntimeType> {
-        let base_name = path.file_name()
+    pub fn detect_runtime_type<P: AsRef<Path>>(path: P) -> Result<RuntimeType> {
+        let base_name = path.as_ref().file_name()
             .context("Unable to get entry file name")?
-            .to_str().context("unable to convert OsStr to str")?;
+            .to_str().context("unable to convert OsStr to str")?.to_owned();
         if base_name.starts_with("python") || base_name.starts_with("libpython") {
             let is_lib = base_name.starts_with("libpython");
             if let Some(version) = base_name.split("python").last() {
@@ -115,7 +115,34 @@ pub mod user {
         Ok(RuntimeType::Unknown)
     }
 
-}
+    impl ProcInfo {
+        /// Build a ProcInfo with a list of paths and their offsets
+        /// It must be allocated on the heap or it will segfault(!)
+        pub fn build<P: AsRef<Path>>(mut paths: &[(u64, P)]) -> Result<Box<ProcInfo>> {
+            let mut ret = ProcInfo::boxed();
+            // detect rt
+            for (_, path) in paths {
+                let detected = detect_runtime_type(&path)?;
+                if !detected.is_unknown() {
+                    ret.runtime_type = detected;
+                    break;
+                }
+            }
 
-#[cfg(feature = "user")]
-unsafe impl aya::Pod for ProcInfo {}
+            // build rows
+            let mut rows = Vec::new();
+            for (avma, path) in paths {
+                if let Ok(table) = UnwindTable::from_path(path) {
+                    for UnwindTableRow { start_address, rule } in table.rows {
+                        rows.push((start_address + avma, rule));
+                    }
+                }
+            }
+
+            let len = rows.len().min(MAX_ROWS_PER_PROC);
+            ret.rows_len = len;
+            ret.rows[..len].copy_from_slice(&rows.as_slice()[..len]);
+            Ok(ret)
+        }
+    }
+}

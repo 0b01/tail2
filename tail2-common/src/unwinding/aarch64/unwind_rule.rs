@@ -1,9 +1,11 @@
 use gimli::{CfaRule, RegisterRule};
 
-use crate::unwinding::error::{Error, ConversionError};
+#[cfg(feature="user")]
+use crate::unwinding::error::ConversionError;
 
 use super::unwindregs::UnwindRegsAarch64;
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnwindRuleAarch64 {
     /// (sp, fp, lr) = (sp, fp, lr)
@@ -45,23 +47,19 @@ pub enum UnwindRuleAarch64 {
     },
 }
 
-impl UnwindRuleAarch64 {
-    fn rule_for_stub_functions() -> Self {
-        UnwindRuleAarch64::NoOp
+impl Default for UnwindRuleAarch64 {
+    fn default() -> Self {
+        Self::NoOp
     }
-    fn rule_for_function_start() -> Self {
-        UnwindRuleAarch64::NoOp
-    }
-    fn fallback_rule() -> Self {
-        UnwindRuleAarch64::UseFramePointer
-    }
+}
 
+impl UnwindRuleAarch64 {
     fn exec<F>(
         self,
         is_first_frame: bool,
         regs: &mut UnwindRegsAarch64,
         read_stack: &mut F,
-    ) -> Result<Option<u64>, Error>
+    ) -> Option<Option<u64>>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
@@ -72,7 +70,7 @@ impl UnwindRuleAarch64 {
         let (new_lr, new_sp, new_fp) = match self {
             UnwindRuleAarch64::NoOp => {
                 if !is_first_frame {
-                    return Err(Error::DidNotAdvance);
+                    return None;
                 }
                 (lr, sp, fp)
             }
@@ -81,30 +79,30 @@ impl UnwindRuleAarch64 {
                     (lr, sp, fp)
                 } else {
                     let fp = regs.fp();
-                    let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
+                    let new_sp = fp.checked_add(16)?;
                     let new_lr =
-                        read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
-                    let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
+                        read_stack(fp + 8).ok()?;
+                    let new_fp = read_stack(fp).ok()?;
                     if new_sp <= sp {
-                        return Err(Error::FramepointerUnwindingMovedBackwards);
+                        return None;
                     }
                     (new_lr, new_sp, new_fp)
                 }
             }
             UnwindRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere { sp_offset_by_16 } => {
                 if !is_first_frame {
-                    return Ok(None);
+                    return Some(None);
                 }
                 let sp_offset = u64::from(sp_offset_by_16) * 16;
-                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                let new_sp = sp.checked_add(sp_offset)?;
                 (lr, new_sp, fp)
             }
             UnwindRuleAarch64::OffsetSp { sp_offset_by_16 } => {
                 if !is_first_frame {
-                    return Err(Error::DidNotAdvance);
+                    return None;
                 }
                 let sp_offset = u64::from(sp_offset_by_16) * 16;
-                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                let new_sp = sp.checked_add(sp_offset)?;
                 (lr, new_sp, fp)
             }
             UnwindRuleAarch64::OffsetSpAndRestoreLr {
@@ -112,12 +110,12 @@ impl UnwindRuleAarch64 {
                 lr_storage_offset_from_sp_by_8,
             } => {
                 let sp_offset = u64::from(sp_offset_by_16) * 16;
-                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                let new_sp = sp.checked_add(sp_offset)?;
                 let lr_storage_offset = i64::from(lr_storage_offset_from_sp_by_8) * 8;
                 let lr_location =
-                    sp.checked_add_signed(lr_storage_offset).ok_or(Error::IntegerOverflow)?;
+                    sp.checked_add_signed(lr_storage_offset)?;
                 let new_lr =
-                    read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
+                    read_stack(lr_location).ok()?;
                 (new_lr, new_sp, fp)
             }
             UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
@@ -126,17 +124,17 @@ impl UnwindRuleAarch64 {
                 lr_storage_offset_from_sp_by_8,
             } => {
                 let sp_offset = u64::from(sp_offset_by_16) * 16;
-                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
+                let new_sp = sp.checked_add(sp_offset)?;
                 let lr_storage_offset = i64::from(lr_storage_offset_from_sp_by_8) * 8;
                 let lr_location =
-                    sp.checked_add_signed(lr_storage_offset).ok_or(Error::IntegerOverflow)?;
+                    sp.checked_add_signed(lr_storage_offset)?;
                 let new_lr =
-                    read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
+                    read_stack(lr_location).ok()?;
                 let fp_storage_offset = i64::from(fp_storage_offset_from_sp_by_8) * 8;
                 let fp_location =
-                    sp.checked_add_signed(fp_storage_offset).ok_or(Error::IntegerOverflow)?;
+                    sp.checked_add_signed(fp_storage_offset)?;
                 let new_fp =
-                    read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
+                    read_stack(fp_location).ok()?;
                 (new_lr, new_sp, new_fp)
             }
             UnwindRuleAarch64::UseFramePointer => {
@@ -179,14 +177,14 @@ impl UnwindRuleAarch64 {
                 //
                 // So: *fp is the caller's frame pointer, and *(fp + 8) is the return address.
                 let fp = regs.fp();
-                let new_sp = fp.checked_add(16).ok_or(Error::IntegerOverflow)?;
-                let new_lr = read_stack(fp + 8).map_err(|_| Error::CouldNotReadStack(fp + 8))?;
-                let new_fp = read_stack(fp).map_err(|_| Error::CouldNotReadStack(fp))?;
+                let new_sp = fp.checked_add(16)?;
+                let new_lr = read_stack(fp + 8).ok()?;
+                let new_fp = read_stack(fp).ok()?;
                 if new_fp == 0 {
-                    return Ok(None);
+                    return Some(None);
                 }
                 if new_fp <= fp || new_sp <= sp {
-                    return Err(Error::FramepointerUnwindingMovedBackwards);
+                    return None;
                 }
                 (new_lr, new_sp, new_fp)
             }
@@ -198,42 +196,43 @@ impl UnwindRuleAarch64 {
                 let sp_offset_from_fp = u64::from(sp_offset_from_fp_by_8) * 8;
                 let new_sp = fp
                     .checked_add(sp_offset_from_fp)
-                    .ok_or(Error::IntegerOverflow)?;
+                    ?;
                 let lr_storage_offset = i64::from(lr_storage_offset_from_fp_by_8) * 8;
                 let lr_location =
-                    fp.checked_add_signed(lr_storage_offset).ok_or(Error::IntegerOverflow)?;
+                    fp.checked_add_signed(lr_storage_offset)?;
                 let new_lr =
-                    read_stack(lr_location).map_err(|_| Error::CouldNotReadStack(lr_location))?;
+                    read_stack(lr_location).ok()?;
                 let fp_storage_offset = i64::from(fp_storage_offset_from_fp_by_8) * 8;
                 let fp_location =
-                    fp.checked_add_signed(fp_storage_offset).ok_or(Error::IntegerOverflow)?;
+                    fp.checked_add_signed(fp_storage_offset)?;
                 let new_fp =
-                    read_stack(fp_location).map_err(|_| Error::CouldNotReadStack(fp_location))?;
+                    read_stack(fp_location).ok()?;
 
                 if new_fp == 0 {
-                    return Ok(None);
+                    return Some(None);
                 }
                 if new_fp <= fp || new_sp <= sp {
-                    return Err(Error::FramepointerUnwindingMovedBackwards);
+                    return None;
                 }
                 (new_lr, new_sp, new_fp)
             }
         };
         let return_address = regs.lr_mask().strip_ptr_auth(new_lr);
         if return_address == 0 {
-            return Ok(None);
+            return Some(None);
         }
         if !is_first_frame && new_sp == sp {
-            return Err(Error::DidNotAdvance);
+            return None;
         }
         regs.set_lr(new_lr);
         regs.set_sp(new_sp);
         regs.set_fp(new_fp);
 
-        Ok(Some(return_address))
+        Some(Some(return_address))
     }
 }
 
+#[cfg(feature="user")]
 pub(crate) fn translate_into_unwind_rule<R: gimli::Reader>(
     cfa_rule: &CfaRule<R>,
     fp_rule: &RegisterRule<R>,
@@ -321,6 +320,7 @@ pub(crate) fn translate_into_unwind_rule<R: gimli::Reader>(
     }
 }
 
+#[cfg(feature="user")]
 fn register_rule_to_cfa_offset<R: gimli::Reader>(
     rule: &RegisterRule<R>,
 ) -> Result<Option<i64>, ConversionError> {

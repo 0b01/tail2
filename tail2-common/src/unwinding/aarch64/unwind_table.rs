@@ -4,12 +4,12 @@ use object::{Object, ObjectSection};
 use super::unwind_rule::{UnwindRuleAarch64, translate_into_unwind_rule};
 
 /// Row of a FDE.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub struct UnwindTableRow {
     /// Instruction pointer start range (inclusive).
     pub start_address: u64,
-    /// Instruction pointer end range (exclusive).
-    pub end_address: u64,
+    // /// Instruction pointer end range (exclusive).
+    // pub end_address: u64,
     /// unwind rule
     pub rule: UnwindRuleAarch64,
 }
@@ -25,7 +25,7 @@ impl UnwindTableRow {
         let rule = translate_into_unwind_rule(&cfa_rule, &fp_rule, &lr_rule)?;
         Ok(Self {
             start_address: row.start_address(),
-            end_address: row.end_address(),
+            // end_address: row.end_address(),
             rule,
         })
     }
@@ -38,6 +38,13 @@ pub struct UnwindTable {
 }
 
 impl UnwindTable {
+    pub fn from_path<P: AsRef<std::path::Path>>(p: P) -> anyhow::Result<Self> {
+        let file = std::fs::File::open::<P>(p)?;
+        let mmap = unsafe { memmap2::MmapOptions::new().map(&file).unwrap() };
+        let file = object::File::parse(&mmap[..]).unwrap();
+        UnwindTable::parse(&file)
+    }
+
     pub fn parse<'a, O: Object<'a, 'a>>(file: &'a O) -> Result<Self> {
         let section = file.section_by_name(".eh_frame").unwrap();
         let data = section.uncompressed_data()?;

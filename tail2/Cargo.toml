@@ -5,8 +5,11 @@ edition = "2021"
 publish = false
 
 [dependencies]
-aya = { git = "https://github.com/aya-rs/aya", branch = "main", version = "0.11", features=["async_tokio"] }
-aya-log = { git = "https://github.com/aya-rs/aya", branch = "main" }
+# aya = { git = "https://github.com/aya-rs/aya", branch = "main", version = "0.11", features=["async_tokio"] }
+# aya-log = { git = "https://github.com/aya-rs/aya", branch = "main" }
+aya = { path = "../../aya/aya", version = "0.11", features=["async_tokio"] }
+aya-log = { path = "../../aya/aya-log" }
+
 tail2-common = { path = "../tail2-common", features=["user"] }
 anyhow = "1.0.42"
 clap = { version = "3.1", features = ["derive"] }

@@ -9,7 +9,6 @@ pub struct PythonVersion {
 #[cfg(feature = "user")]
 unsafe impl aya::Pod for PythonVersion {}
 
-#[repr(C)]
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum RuntimeType {
     Unknown,
@@ -37,6 +36,3 @@ impl RuntimeType {
         }
     }
 }
-
-#[cfg(feature = "user")]
-unsafe impl aya::Pod for RuntimeType {}
