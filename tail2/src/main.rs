@@ -40,9 +40,7 @@ struct Opt {
 enum Commands {
     /// Print symbols
     Symbols {
-        /// path to elf file
-        #[clap(short, long)]
-        elf_file: String,
+        paths: Vec<String>,
     },
     /// Sample
     Sample {
@@ -63,7 +61,7 @@ enum Commands {
 async fn main() -> Result<()> {
     // init logger
     let env = env_logger::Env::default()
-        .filter_or("LOG_LEVEL", "debug")
+        .filter_or("LOG_LEVEL", "info")
         .write_style_or("LOG_STYLE", "always");
     env_logger::init_from_env(env);
 
@@ -114,8 +112,10 @@ async fn main() -> Result<()> {
             info!("{:#?}", Processes::new());
             return Ok(());
         },
-        Commands::Symbols { elf_file } => {
-            dump_elf(&elf_file)?;
+        Commands::Symbols { paths } => {
+            for p in &paths {
+                dump_elf(&p)?;
+            }
             return Ok(());
         },
         Commands::Sample { pid } => {
