@@ -38,8 +38,8 @@ pub struct UnwindTable {
 }
 
 impl UnwindTable {
-    pub fn from_path<P: AsRef<std::path::Path>>(p: P) -> anyhow::Result<Self> {
-        let file = std::fs::File::open::<P>(p)?;
+    pub fn from_path(p: &str) -> anyhow::Result<Self> {
+        let file = std::fs::File::open(p)?;
         let mmap = unsafe { memmap2::MmapOptions::new().map(&file).unwrap() };
         let file = object::File::parse(&mmap[..]).unwrap();
         UnwindTable::parse(&file)

@@ -17,3 +17,5 @@ output.csv
 
 pyperf/*
 *.log
+temp/*
+tmp/*

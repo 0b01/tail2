@@ -6,4 +6,5 @@ members = [
     "xtask",
     "testapp/parade",
     "testapp/vec",
+    "symdump",
 ]

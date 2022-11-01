@@ -43,13 +43,18 @@ impl ProcInfo {
 
 #[cfg(feature = "user")]
 pub mod user {
-    use core::str::from_utf8_unchecked;
+    use lru::LruCache;
+
+    pub type UnwindTableCache = RefCell<LruCache<String, Rc<UnwindTable>>>;
+
+    use core::{str::from_utf8_unchecked, cell::RefCell};
     use std::{path::{PathBuf, Path}, io::{BufReader, Read}, fs::File};
 
     use crate::{runtime_type::PythonVersion, unwinding::aarch64::unwind_table::{UnwindTable, UnwindTableRow}};
     const BUFSIZ: usize = 4096;
 
     use super::*;
+    use std::rc::Rc;
     use anyhow::{Result, Context};
     pub fn to_python_version<P: AsRef<Path>>(file_path: P, ver_str: &str) -> Result<PythonVersion> {
         let mut rdr = BufReader::new(File::open(file_path)?);
@@ -118,7 +123,7 @@ pub mod user {
     impl ProcInfo {
         /// Build a ProcInfo with a list of paths and their offsets
         /// It must be allocated on the heap or it will segfault(!)
-        pub fn build<P: AsRef<Path>>(mut paths: &[(u64, P)]) -> Result<Box<ProcInfo>> {
+        pub fn build(mut paths: &[(u64, String)], cache: &UnwindTableCache) -> Result<Box<ProcInfo>> {
             let mut ret = ProcInfo::boxed();
             // detect rt
             for (_, path) in paths {
@@ -132,9 +137,25 @@ pub mod user {
             // build rows
             let mut rows = Vec::new();
             for (avma, path) in paths {
-                if let Ok(table) = UnwindTable::from_path(path) {
-                    for UnwindTableRow { start_address, rule } in table.rows {
-                        rows.push((start_address + avma, rule));
+                let table = 
+                {
+                    let mut cache = cache.borrow_mut();
+                    if let Some(s) = cache.get(path) {
+                        Some(Rc::clone(&s))
+                    } else {
+                        if let Ok(ret) = UnwindTable::from_path(path) {
+                            let ret = Rc::new(ret);
+                            cache.put(path.to_string(), Rc::clone(&ret));
+                            Some(ret)
+                        } else {
+                            None
+                        }
+                    }
+                }
+                ;
+                if let Some(table) = table {
+                    for UnwindTableRow { start_address, rule } in &table.rows {
+                        rows.push((start_address + avma, *rule));
                     }
                 }
             }

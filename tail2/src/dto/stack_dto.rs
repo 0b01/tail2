@@ -1,24 +1,21 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Stack {
-    pub frames: Vec<u64>,
-    pub success: bool,
+pub struct ModuleDto {
+    debug_id: Option<String>,
+    file_name: String,
 }
 
-impl From<tail2_common::Stack> for Stack {
-    fn from(s: tail2_common::Stack) -> Self {
-        let frames = if let Some(len) = s.unwind_success {
-            s.user_stack[..len].to_vec()
-        } else {
-            vec![]
-        };
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FrameDto {
+    pub module: ModuleDto,
+    pub offset: u64,
+}
 
-        Self {
-            frames,
-            success: s.unwind_success.is_some(),
-        }
-    }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StackDto {
+    pub frames: Vec<FrameDto>,
+    pub success: bool,
 }
 
 #[cfg(feature = "server")]
@@ -27,7 +24,7 @@ mod server {
     use rocket::{data::{FromData, self, ToByteUnit}, Request, Data, http::Status};
 
     #[rocket::async_trait]
-    impl<'r> FromData<'r> for Stack {
+    impl<'r> FromData<'r> for StackDto {
         type Error = ();
 
         async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> data::Outcome<'r, Self> {

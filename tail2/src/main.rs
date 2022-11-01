@@ -14,6 +14,8 @@ use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use libc::getuid;
 use log::{info, error};
+use symbolication::canonical_stack;
+use tail2::dto::StackDto;
 use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
 use tokio::sync::{watch, mpsc};
@@ -29,6 +31,7 @@ use anyhow::Result;
 pub mod processes;
 pub mod symbolication;
 pub mod debugstacktrace;
+pub mod utils;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -207,9 +210,9 @@ fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>
             // let dst = DebugStackTrace::from_frames(&st.user_stack, &proc_map);
             // dbg!(dst);
 
-            if let Err(e) = post_stack(st).await {
-                error!("sending stack failed: {}", e.to_string());
-            }
+            // if let Err(e) = post_stack(st).await {
+            //     error!("sending stack failed: {}", e.to_string());
+            // }
 
             let elapsed = SystemTime::now().duration_since(start_time).unwrap();
             total_time += elapsed;
@@ -256,14 +259,15 @@ fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>
     Ok(ts)
 }
 
-async fn post_stack(st: Stack) -> Result<reqwest::StatusCode> {
-    let st_dto: tail2::dto::Stack = st.into();
-    let body = bincode::serialize(&st_dto).unwrap();
+// async fn post_stack(st: Stack) -> Result<reqwest::StatusCode> {
+//     let proc_map = procfs::process::Process::new(st.pid() as i32).unwrap().maps().unwrap();
+//     // let st_dto: StackDto = canonical_stack::convert(st, &proc_map);
+//     let body = bincode::serialize(&st_dto).unwrap();
 
-    let client = reqwest::Client::new();
-    let res = client.post("http://127.0.0.1:8000/stack")
-        .body(body)
-        .send()
-        .await?;
-    Ok(res.status())
-}
+//     let client = reqwest::Client::new();
+//     let res = client.post("http://127.0.0.1:8000/stack")
+//         .body(body)
+//         .send()
+//         .await?;
+//     Ok(res.status())
+// }
