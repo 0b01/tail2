@@ -1,4 +1,4 @@
-use std::{os::unix::process::CommandExt, process::Command};
+use std::{process::Command, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread, time::Duration};
 
 use anyhow::Context as _;
 use clap::Parser;
@@ -48,6 +48,7 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     // profile we are building (release or debug)
     let profile = if opts.release { "release" } else { "debug" };
     let bin_path = format!("target/{}/tail2", profile);
+    let server_path = format!("target/{}/tail2-server", profile);
 
     // arguments to pass to the application
     let mut run_args: Vec<_> = opts.run_args.iter().map(String::as_str).collect();
@@ -57,11 +58,26 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     args.push(bin_path.as_str());
     args.append(&mut run_args);
 
-    // spawn the command
-    let err = Command::new(args.first().expect("No first argument"))
-        .args(args.iter().skip(1))
-        .exec();
+    let mut a = Command::new(server_path)
+        .spawn()?;
 
-    // we shouldn't get here unless the command failed to spawn
-    Err(anyhow::Error::from(err).context(format!("Failed to run `{}`", args.join(" "))))
+    let mut b = Command::new(args.first().expect("No first argument"))
+        .args(args.iter().skip(1))
+        .spawn()?;
+
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+
+    let _ = ctrlc::set_handler(move || {
+        let _ = r.store(false, Ordering::SeqCst);
+    });
+
+    while running.load(Ordering::SeqCst) {
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    let _ = a.kill();
+    let _ = b.kill();
+
+    Ok(())
 }

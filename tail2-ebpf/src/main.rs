@@ -28,7 +28,7 @@ static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 static RUN_INFO: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
 #[map(name="PIDS")]
-static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(1024, 0);
+static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(256, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> u32 {

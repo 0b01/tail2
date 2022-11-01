@@ -19,7 +19,7 @@ impl Processes {
     pub fn populate(&mut self) -> Result<()> {
         for p in procfs::process::all_processes()? {
             if let Ok(prc) = p {
-                if let (Ok(info), Ok(maps)) = (self.detect(&prc), prc.maps()) {
+                if let Ok(info) = Self::detect(&prc) {
                     self.processes.insert(prc.pid, info);
                 }
             }
@@ -28,7 +28,12 @@ impl Processes {
         Ok(())
     }
 
-    pub fn detect(&mut self, process: &Process) -> Result<Box<ProcInfo>> {
+    pub fn detect_pid(pid: i32) -> Result<Box<ProcInfo>> {
+        let process = Process::new(pid)?;
+        Processes::detect(&process)
+    }
+
+    fn detect(process: &Process) -> Result<Box<ProcInfo>> {
         let paths = process
             .maps()?
             .into_iter()

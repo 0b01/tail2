@@ -1,8 +1,9 @@
 [default]
-limits = { form = "64 kB", json = "32 MiB", string = "32 MiB" }
+limits = { form = "64 kB", json = "32 MiB", string = "32 MiB", data-form = "32 MiB" }
 
 [debug]
 log_level = "normal"
+cli_colors = false
 logged_in = true
 
 [release]

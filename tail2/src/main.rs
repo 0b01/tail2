@@ -90,16 +90,17 @@ async fn main() -> Result<()> {
     let mut p = Processes::new();
     let _ = p.populate();
     dbg!(p.processes.keys().len());
+    // copy to maps
+    for (pid, nfo) in &p.processes {
+        let _ = pid_info.insert_boxed(*pid as u32, nfo, 0);
+    }
+    drop(p);
+
 
     // refresh pid info table
     let mut stop_rx2 = stop_rx.clone();
     tokio::spawn(async move {
         loop {
-            // copy to maps
-            for (pid, nfo) in &p.processes {
-                let _ = pid_info.insert_boxed(*pid as u32, nfo, 0);
-            }
-
             // sleep for 10 sec
             tokio::select! {
                 _ = tokio::time::sleep(Duration::new(10, 0)) => (),
@@ -131,7 +132,7 @@ async fn main() -> Result<()> {
                     PerfTypeId::Software,
                     perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
                     scope,
-                    SamplePolicy::Period(4_000_000),
+                    SamplePolicy::Frequency(4_000),
                 )?;
             }
 
@@ -202,9 +203,13 @@ fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            let proc_map = procfs::process::Process::new(st.pid() as i32).unwrap().maps().unwrap();
-            let dst = DebugStackTrace::from_frames(&st.user_stack, &proc_map);
-            dbg!(dst);
+            // let proc_map = procfs::process::Process::new(st.pid() as i32).unwrap().maps().unwrap();
+            // let dst = DebugStackTrace::from_frames(&st.user_stack, &proc_map);
+            // dbg!(dst);
+
+            if let Err(e) = post_stack(st).await {
+                error!("sending stack failed: {}", e.to_string());
+            }
 
             let elapsed = SystemTime::now().duration_since(start_time).unwrap();
             total_time += elapsed;
@@ -249,4 +254,16 @@ fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>
     // Drop tx from main thread, so when producers join, consumer thread will also join.
     drop(tx);
     Ok(ts)
+}
+
+async fn post_stack(st: Stack) -> Result<reqwest::StatusCode> {
+    let st_dto: tail2::dto::Stack = st.into();
+    let body = bincode::serialize(&st_dto).unwrap();
+
+    let client = reqwest::Client::new();
+    let res = client.post("http://127.0.0.1:8000/stack")
+        .body(body)
+        .send()
+        .await?;
+    Ok(res.status())
 }

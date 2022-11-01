@@ -5,7 +5,7 @@ use crate::unwinding::error::ConversionError;
 
 use super::unwindregs::UnwindRegsAarch64;
 
-#[repr(C)]
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnwindRuleAarch64 {
     /// (sp, fp, lr) = (sp, fp, lr)
