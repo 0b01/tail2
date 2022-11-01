@@ -3,11 +3,6 @@ name = "parade"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-name = "parade"
-path = "src/lib.rs"
-crate-type = ["cdylib", "rlib"]
-
 [[bin]]
 name = "parade"
 path = "src/main.rs"

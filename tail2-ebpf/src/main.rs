@@ -11,7 +11,7 @@ use aya_bpf::{
     maps::{HashMap, PerCpuArray, PerfEventArray},
     bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
 };
-use aya_log_ebpf::{info, error};
+use aya_log_ebpf::error;
 use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, MAX_USER_STACK};
 
 #[map(name="STACKS")]

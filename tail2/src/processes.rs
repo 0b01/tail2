@@ -4,7 +4,7 @@ use anyhow::Result;
 use procfs::process::Process;
 use tail2_common::procinfo::ProcInfo;
 
-use crate::symbolication::{module::Module, module_cache::ModuleCache};
+use crate::symbolication::module_cache::ModuleCache;
 
 #[derive(Debug)]
 pub struct Processes {
