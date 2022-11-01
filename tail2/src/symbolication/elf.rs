@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::{fs, collections::HashMap};
 use object::*;
 
-
 #[derive(Debug)]
 pub struct ElfCache {
     pub map: HashMap<String, ElfSymbols>,

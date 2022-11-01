@@ -1,0 +1,211 @@
+[2022-10-31][23:59:05][rocket::launch][INFO] 🔧 Configured for debug.
+[2022-10-31][23:59:05][rocket::launch_][INFO] address: [1;49;39m127.0.0.1[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] port: [1;49;39m8000[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] workers: [1;49;39m6[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] ident: [1;49;39mRocket[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] limits: [1;49;39mbytes = 8KiB, data-form = 2MiB, file = 1MiB, form = 32KiB, json = 1MiB, msgpack = 1MiB, string = 8KiB[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] temp dir: [1;49;39m/tmp[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] http/2: [1;49;39mtrue[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] keep-alive: [1;49;39m5[0m[1;49;39ms[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] tls: [1;49;39mdisabled[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] shutdown: [1;49;39mctrlc = true, force = true, signals = [SIGTERM], grace = 2s, mercy = 3s[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] log level: [1;49;39mnormal[0m
+[2022-10-31][23:59:05][rocket::launch_][INFO] cli colors: [1;49;39mtrue[0m
+[2022-10-31][23:59:05][rocket::launch][INFO] 📬 [35mRoutes[0m:
+[2022-10-31][23:59:05][rocket::launch_][INFO] [36m([0m[37mstack[0m[36m)[0m [32mPOST[0m [34m/stack[0m
+[2022-10-31][23:59:05][rocket::launch][INFO] 📡 [35mFairings[0m:
+[2022-10-31][23:59:05][rocket::launch_][INFO] [1;49;39mShield[0m ([1;34mliftoff, response, singleton[0m)
+[2022-10-31][23:59:05][rocket::shield::shield][INFO] 🛡️ [35mShield[0m:
+[2022-10-31][23:59:05][_][INFO] Permissions-Policy: [49;39minterest-cohort=()[0m
+[2022-10-31][23:59:05][_][INFO] X-Frame-Options: [49;39mSAMEORIGIN[0m
+[2022-10-31][23:59:05][_][INFO] X-Content-Type-Options: [49;39mnosniff[0m
+[2022-10-31][23:59:05][rocket::launch][INFO] 🚀 [1;49;39mRocket has launched from[0m [1;4;49;39mhttp://127.0.0.1:8000[0m
+[2022-11-01][00:00:15][rocket::server][WARN] Received SIGINT. Requesting shutdown.
+[2022-11-01][00:00:15][rocket::server][INFO] Shutdown requested. Waiting for pending I/O...
+[2022-11-01][00:00:15][rocket::server][INFO] Graceful shutdown completed successfully.
+[2022-11-01][00:00:20][rocket::launch][INFO] 🔧 Configured for debug.
+[2022-11-01][00:00:20][rocket::launch_][INFO] address: [1;49;39m127.0.0.1[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] port: [1;49;39m8000[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] workers: [1;49;39m6[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] ident: [1;49;39mRocket[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] limits: [1;49;39mbytes = 8KiB, data-form = 2MiB, file = 1MiB, form = 32KiB, json = 1MiB, msgpack = 1MiB, string = 8KiB[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] temp dir: [1;49;39m/tmp[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] http/2: [1;49;39mtrue[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] keep-alive: [1;49;39m5[0m[1;49;39ms[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] tls: [1;49;39mdisabled[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] shutdown: [1;49;39mctrlc = true, force = true, signals = [SIGTERM], grace = 2s, mercy = 3s[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] log level: [1;49;39mnormal[0m
+[2022-11-01][00:00:20][rocket::launch_][INFO] cli colors: [1;49;39mtrue[0m
+[2022-11-01][00:00:20][rocket::launch][INFO] 📬 [35mRoutes[0m:
+[2022-11-01][00:00:20][rocket::launch_][INFO] [36m([0m[37mstack[0m[36m)[0m [32mPOST[0m [34m/stack[0m
+[2022-11-01][00:00:20][rocket::launch][INFO] 📡 [35mFairings[0m:
+[2022-11-01][00:00:20][rocket::launch_][INFO] [1;49;39mShield[0m ([1;34mliftoff, response, singleton[0m)
+[2022-11-01][00:00:20][rocket::shield::shield][INFO] 🛡️ [35mShield[0m:
+[2022-11-01][00:00:20][_][INFO] X-Frame-Options: [49;39mSAMEORIGIN[0m
+[2022-11-01][00:00:20][_][INFO] X-Content-Type-Options: [49;39mnosniff[0m
+[2022-11-01][00:00:20][_][INFO] Permissions-Policy: [49;39minterest-cohort=()[0m
+[2022-11-01][00:00:20][rocket::launch][INFO] 🚀 [1;49;39mRocket has launched from[0m [1;4;49;39mhttp://127.0.0.1:8000[0m
+[2022-11-01][00:00:22][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:00:22][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:00:22][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:00:22][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:00:23][rocket::server][INFO] [32mGET[0m [34m/favicon.ico[0m [33mimage[0m[33m/[0m[33mavif[0m:
+[2022-11-01][00:00:23][_][ERROR] No matching routes for [32mGET[0m [34m/favicon.ico[0m [33mimage[0m[33m/[0m[33mavif[0m.
+[2022-11-01][00:00:23][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:00:23][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:00:24][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:00:24][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:00:24][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:00:24][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:00:26][rocket::server][INFO] [32mGET[0m [34m/s[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:00:26][_][ERROR] No matching routes for [32mGET[0m [34m/s[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:00:26][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:00:26][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:01:03][rocket::server][WARN] Received SIGINT. Requesting shutdown.
+[2022-11-01][00:01:03][rocket::server][INFO] Shutdown requested. Waiting for pending I/O...
+[2022-11-01][00:01:03][rocket::server][INFO] Graceful shutdown completed successfully.
+[2022-11-01][00:01:36][rocket::launch][INFO] 🔧 Configured for debug.
+[2022-11-01][00:01:36][rocket::launch_][INFO] address: [1;49;39m127.0.0.1[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] port: [1;49;39m8000[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] workers: [1;49;39m6[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] ident: [1;49;39mRocket[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] limits: [1;49;39mbytes = 8KiB, data-form = 2MiB, file = 1MiB, form = 32KiB, json = 1MiB, msgpack = 1MiB, string = 8KiB[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] temp dir: [1;49;39m/tmp[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] http/2: [1;49;39mtrue[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] keep-alive: [1;49;39m5[0m[1;49;39ms[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] tls: [1;49;39mdisabled[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] shutdown: [1;49;39mctrlc = true, force = true, signals = [SIGTERM], grace = 2s, mercy = 3s[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] log level: [1;49;39mnormal[0m
+[2022-11-01][00:01:36][rocket::launch_][INFO] cli colors: [1;49;39mtrue[0m
+[2022-11-01][00:01:36][rocket::launch][INFO] 📬 [35mRoutes[0m:
+[2022-11-01][00:01:36][rocket::launch_][INFO] [36m([0m[37mstack[0m[36m)[0m [32mPOST[0m [34m/stack[0m
+[2022-11-01][00:01:36][rocket::launch][INFO] 📡 [35mFairings[0m:
+[2022-11-01][00:01:36][rocket::launch_][INFO] [1;49;39mShield[0m ([1;34mliftoff, response, singleton[0m)
+[2022-11-01][00:01:36][rocket::shield::shield][INFO] 🛡️ [35mShield[0m:
+[2022-11-01][00:01:36][_][INFO] X-Frame-Options: [49;39mSAMEORIGIN[0m
+[2022-11-01][00:01:36][_][INFO] Permissions-Policy: [49;39minterest-cohort=()[0m
+[2022-11-01][00:01:36][_][INFO] X-Content-Type-Options: [49;39mnosniff[0m
+[2022-11-01][00:01:36][rocket::launch][INFO] 🚀 [1;49;39mRocket has launched from[0m [1;4;49;39mhttp://127.0.0.1:8000[0m
+[2022-11-01][00:01:37][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:01:37][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:01:37][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:01:37][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:01:39][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:01:39][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:01:39][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:01:39][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:01:40][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:01:40][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:01:40][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:01:40][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:02:28][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:02:28][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:02:28][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:02:28][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:02:49][rocket::server][WARN] Received SIGINT. Requesting shutdown.
+[2022-11-01][00:02:49][rocket::server][INFO] Shutdown requested. Waiting for pending I/O...
+[2022-11-01][00:02:49][rocket::server][INFO] Graceful shutdown completed successfully.
+[2022-11-01][00:06:01][rocket_dyn_templates::context][ERROR] Invalid template directory 'templates': No such file or directory (os error 2).
+[2022-11-01][00:06:01][_][ERROR] Template initialization failed. Aborting launch.
+[2022-11-01][00:07:39][rocket_dyn_templates::context][ERROR] Invalid template directory 'templates': No such file or directory (os error 2).
+[2022-11-01][00:07:39][_][ERROR] Template initialization failed. Aborting launch.
+[2022-11-01][00:08:08][rocket_dyn_templates::context][ERROR] Invalid template directory 'templates': No such file or directory (os error 2).
+[2022-11-01][00:08:08][_][ERROR] Template initialization failed. Aborting launch.
+[2022-11-01][00:08:54][rocket_dyn_templates::context][ERROR] Invalid template directory 'templates': No such file or directory (os error 2).
+[2022-11-01][00:08:55][_][ERROR] Template initialization failed. Aborting launch.
+[2022-11-01][00:09:45][rocket::launch][INFO] 🔧 Configured for debug.
+[2022-11-01][00:09:45][rocket::launch_][INFO] address: [1;49;39m127.0.0.1[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] port: [1;49;39m8000[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] workers: [1;49;39m6[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] ident: [1;49;39mRocket[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] limits: [1;49;39mbytes = 8KiB, data-form = 2MiB, file = 1MiB, form = 64kB, json = 32MiB, msgpack = 1MiB, string = 32MiB[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] temp dir: [1;49;39m/tmp[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] http/2: [1;49;39mtrue[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] keep-alive: [1;49;39m5[0m[1;49;39ms[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] tls: [1;49;39mdisabled[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] shutdown: [1;49;39mctrlc = true, force = true, signals = [SIGTERM], grace = 2s, mercy = 3s[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] log level: [1;49;39mnormal[0m
+[2022-11-01][00:09:45][rocket::launch_][INFO] cli colors: [1;49;39mtrue[0m
+[2022-11-01][00:09:45][rocket::launch][INFO] 📬 [35mRoutes[0m:
+[2022-11-01][00:09:45][rocket::launch_][INFO] [36m([0m[37mstack[0m[36m)[0m [32mPOST[0m [34m/stack[0m
+[2022-11-01][00:09:45][rocket::launch][INFO] 📡 [35mFairings[0m:
+[2022-11-01][00:09:45][rocket::launch_][INFO] [1;49;39mShield[0m ([1;34mliftoff, response, singleton[0m)
+[2022-11-01][00:09:45][rocket::launch_][INFO] [1;49;39mTemplating[0m ([1;34mignite, liftoff, request[0m)
+[2022-11-01][00:09:45][rocket::shield::shield][INFO] 🛡️ [35mShield[0m:
+[2022-11-01][00:09:45][_][INFO] X-Frame-Options: [49;39mSAMEORIGIN[0m
+[2022-11-01][00:09:45][_][INFO] Permissions-Policy: [49;39minterest-cohort=()[0m
+[2022-11-01][00:09:45][_][INFO] X-Content-Type-Options: [49;39mnosniff[0m
+[2022-11-01][00:09:45][rocket_dyn_templates::fairing][INFO] 📐 [35mTemplating[0m:
+[2022-11-01][00:09:45][_][INFO] directory: [37mtemplates[0m
+[2022-11-01][00:09:45][_][INFO] engines: [37m["hbs"][0m
+[2022-11-01][00:09:45][rocket::launch][INFO] 🚀 [1;49;39mRocket has launched from[0m [1;4;49;39mhttp://127.0.0.1:8000[0m
+[2022-11-01][00:09:48][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:09:48][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:09:48][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:09:48][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:09:49][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:09:49][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:09:49][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:09:49][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:09:50][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:09:50][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:09:50][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:09:50][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:09:59][_][INFO] Change detected: reloading templates.
+[2022-11-01][00:09:59][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:09:59][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:09:59][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:09:59][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:10:01][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:10:01][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:10:01][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:10:01][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:10:01][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:10:01][_][ERROR] No matching routes for [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m.
+[2022-11-01][00:10:01][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:10:01][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:10:02][rocket::server][INFO] [32mGET[0m [34m/favicon.ico[0m [33mimage[0m[33m/[0m[33mavif[0m:
+[2022-11-01][00:10:02][_][ERROR] No matching routes for [32mGET[0m [34m/favicon.ico[0m [33mimage[0m[33m/[0m[33mavif[0m.
+[2022-11-01][00:10:02][_][WARN] No [1;34m404[0m catcher registered. Using Rocket default.
+[2022-11-01][00:10:02][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:12:07][rocket::server][WARN] Received SIGINT. Requesting shutdown.
+[2022-11-01][00:12:07][rocket::server][INFO] Shutdown requested. Waiting for pending I/O...
+[2022-11-01][00:12:07][rocket::server][INFO] Graceful shutdown completed successfully.
+[2022-11-01][00:12:13][rocket::launch][INFO] 🔧 Configured for debug.
+[2022-11-01][00:12:13][rocket::launch_][INFO] address: [1;49;39m127.0.0.1[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] port: [1;49;39m8000[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] workers: [1;49;39m6[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] ident: [1;49;39mRocket[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] limits: [1;49;39mbytes = 8KiB, data-form = 2MiB, file = 1MiB, form = 64kB, json = 32MiB, msgpack = 1MiB, string = 32MiB[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] temp dir: [1;49;39m/tmp[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] http/2: [1;49;39mtrue[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] keep-alive: [1;49;39m5[0m[1;49;39ms[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] tls: [1;49;39mdisabled[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] shutdown: [1;49;39mctrlc = true, force = true, signals = [SIGTERM], grace = 2s, mercy = 3s[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] log level: [1;49;39mnormal[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] cli colors: [1;49;39mtrue[0m
+[2022-11-01][00:12:13][rocket::launch][INFO] 📬 [35mRoutes[0m:
+[2022-11-01][00:12:13][rocket::launch_][INFO] [36m([0m[37mindex[0m[36m)[0m [32mGET[0m [34m/[0m
+[2022-11-01][00:12:13][rocket::launch_][INFO] [36m([0m[37mstack[0m[36m)[0m [32mPOST[0m [34m/stack[0m
+[2022-11-01][00:12:13][rocket::launch][INFO] 📡 [35mFairings[0m:
+[2022-11-01][00:12:13][rocket::launch_][INFO] [1;49;39mTemplating[0m ([1;34mignite, liftoff, request[0m)
+[2022-11-01][00:12:13][rocket::launch_][INFO] [1;49;39mShield[0m ([1;34mliftoff, response, singleton[0m)
+[2022-11-01][00:12:13][rocket::shield::shield][INFO] 🛡️ [35mShield[0m:
+[2022-11-01][00:12:13][_][INFO] X-Content-Type-Options: [49;39mnosniff[0m
+[2022-11-01][00:12:13][_][INFO] Permissions-Policy: [49;39minterest-cohort=()[0m
+[2022-11-01][00:12:13][_][INFO] X-Frame-Options: [49;39mSAMEORIGIN[0m
+[2022-11-01][00:12:13][rocket_dyn_templates::fairing][INFO] 📐 [35mTemplating[0m:
+[2022-11-01][00:12:13][_][INFO] directory: [37mtemplates[0m
+[2022-11-01][00:12:13][_][INFO] engines: [37m["hbs"][0m
+[2022-11-01][00:12:13][rocket::launch][INFO] 🚀 [1;49;39mRocket has launched from[0m [1;4;49;39mhttp://127.0.0.1:8000[0m
+[2022-11-01][00:12:15][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:12:15][_][INFO] Matched: [36m([0m[37mindex[0m[36m)[0m [32mGET[0m [34m/[0m
+[2022-11-01][00:12:15][_][INFO] [1;49;39mOutcome:[0m [49;32mSuccess[0m
+[2022-11-01][00:12:15][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:12:16][rocket::server][INFO] [32mGET[0m [34m/[0m [33mtext[0m[33m/[0m[33mhtml[0m:
+[2022-11-01][00:12:16][_][INFO] Matched: [36m([0m[37mindex[0m[36m)[0m [32mGET[0m [34m/[0m
+[2022-11-01][00:12:16][_][INFO] [1;49;39mOutcome:[0m [49;32mSuccess[0m
+[2022-11-01][00:12:16][_][INFO] [32mResponse succeeded.[0m
+[2022-11-01][00:12:21][rocket::server][WARN] Received SIGINT. Requesting shutdown.
+[2022-11-01][00:12:21][rocket::server][INFO] Shutdown requested. Waiting for pending I/O...
+[2022-11-01][00:12:21][rocket::server][INFO] Graceful shutdown completed successfully.

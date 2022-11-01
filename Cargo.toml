@@ -2,9 +2,8 @@
 members = [
     "tail2",
     "tail2-common",
+    "tail2-server",
     "xtask",
     "testapp/parade",
     "testapp/vec",
-    "framehop",
-    "ehdump",
 ]
