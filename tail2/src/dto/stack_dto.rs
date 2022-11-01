@@ -1,20 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ModuleDto {
-    debug_id: Option<String>,
-    file_name: String,
-}
+use crate::symbolication::module::Module;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FrameDto {
-    pub module: ModuleDto,
+    pub module_idx: usize,
     pub offset: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StackDto {
     pub frames: Vec<FrameDto>,
+    pub modules: Vec<Module>,
     pub success: bool,
 }
 

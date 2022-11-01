@@ -1,13 +1,8 @@
 use std::{path::Path, borrow::Cow};
-
 use anyhow::Result;
 use symbolic::{common::ByteView, debuginfo::elf::ElfObject, demangle::demangle};
 
-fn main() -> Result<()> {
-    dump_elf(std::env::args().skip(1).next().unwrap())
-}
-
-fn dump_elf<P: AsRef<Path>>(path: P) -> Result<()> {
+pub fn dump_elf<P: AsRef<Path>>(path: P) -> Result<()> {
     let path = path.as_ref();
     let buffer = ByteView::open(&path)?;
     let obj = ElfObject::parse(&buffer)?;

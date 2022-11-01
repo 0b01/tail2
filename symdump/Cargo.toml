@@ -1,8 +1,0 @@
-[package]
-name = "symdump"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-symbolic = { version = "10.1.1", features = ["demangle"] }
-anyhow = "*"

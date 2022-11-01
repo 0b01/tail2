@@ -43,10 +43,6 @@ impl ProcInfo {
 
 #[cfg(feature = "user")]
 pub mod user {
-    use lru::LruCache;
-
-    pub type UnwindTableCache = RefCell<LruCache<String, Rc<UnwindTable>>>;
-
     use core::{str::from_utf8_unchecked, cell::RefCell};
     use std::{path::{PathBuf, Path}, io::{BufReader, Read}, fs::File};
 
@@ -123,10 +119,10 @@ pub mod user {
     impl ProcInfo {
         /// Build a ProcInfo with a list of paths and their offsets
         /// It must be allocated on the heap or it will segfault(!)
-        pub fn build(mut paths: &[(u64, String)], cache: &UnwindTableCache) -> Result<Box<ProcInfo>> {
+        pub fn build(mut paths: &[(u64, String, Rc<UnwindTable>)]) -> Result<Box<ProcInfo>> {
             let mut ret = ProcInfo::boxed();
             // detect rt
-            for (_, path) in paths {
+            for (_, path, _) in paths {
                 let detected = detect_runtime_type(&path)?;
                 if !detected.is_unknown() {
                     ret.runtime_type = detected;
@@ -136,27 +132,9 @@ pub mod user {
 
             // build rows
             let mut rows = Vec::new();
-            for (avma, path) in paths {
-                let table = 
-                {
-                    let mut cache = cache.borrow_mut();
-                    if let Some(s) = cache.get(path) {
-                        Some(Rc::clone(&s))
-                    } else {
-                        if let Ok(ret) = UnwindTable::from_path(path) {
-                            let ret = Rc::new(ret);
-                            cache.put(path.to_string(), Rc::clone(&ret));
-                            Some(ret)
-                        } else {
-                            None
-                        }
-                    }
-                }
-                ;
-                if let Some(table) = table {
-                    for UnwindTableRow { start_address, rule } in &table.rows {
-                        rows.push((start_address + avma, *rule));
-                    }
+            for (avma, _, table) in paths {
+                for UnwindTableRow { start_address, rule } in &table.rows {
+                    rows.push((start_address + avma, *rule));
                 }
             }
 

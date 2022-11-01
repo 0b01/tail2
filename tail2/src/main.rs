@@ -14,23 +14,20 @@ use bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use libc::getuid;
 use log::{info, error};
-use symbolication::canonical_stack;
-use tail2::dto::StackDto;
+use tail2::symbolication::dump_elf::dump_elf;
 use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
 use tokio::sync::{watch, mpsc};
 use tokio::task::JoinHandle;
-use crate::debugstacktrace::DebugStackTrace;
-use crate::processes::Processes;
-use crate::symbolication::elf::ElfCache;
 use tail2_common::{ConfigMapKey, Stack, InfoMapKey};
 use tokio::signal;
 use aya_log::BpfLogger;
 use anyhow::Result;
 
+use crate::processes::Processes;
+
 pub mod processes;
 pub mod symbolication;
-pub mod debugstacktrace;
 pub mod utils;
 
 #[derive(Debug, Parser)]
@@ -58,7 +55,7 @@ enum Commands {
         pid: Option<i32>,
     },
     /// Print system information
-    Info {
+    Processes {
     },
 }
 
@@ -113,13 +110,12 @@ async fn main() -> Result<()> {
     });
 
     match opt.command {
-        Commands::Info { } => {
+        Commands::Processes { } => {
             info!("{:#?}", Processes::new());
             return Ok(());
         },
         Commands::Symbols { elf_file } => {
-            let elf_cache = ElfCache::build(&[elf_file]);
-            info!("{:#?}", elf_cache);
+            dump_elf(&elf_file)?;
             return Ok(());
         },
         Commands::Sample { pid } => {

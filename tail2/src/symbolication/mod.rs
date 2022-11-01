@@ -1,2 +1,4 @@
-pub mod elf;
 pub mod canonical_stack;
+pub mod module;
+pub mod module_cache;
+pub mod dump_elf;
