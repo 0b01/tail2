@@ -50,7 +50,7 @@ pub mod user {
     const BUFSIZ: usize = 4096;
 
     use super::*;
-    use std::rc::Rc;
+    use std::sync::Arc;
     use anyhow::{Result, Context};
     pub fn to_python_version<P: AsRef<Path>>(file_path: P, ver_str: &str) -> Result<PythonVersion> {
         let mut rdr = BufReader::new(File::open(file_path)?);
@@ -119,7 +119,7 @@ pub mod user {
     impl ProcInfo {
         /// Build a ProcInfo with a list of paths and their offsets
         /// It must be allocated on the heap or it will segfault(!)
-        pub fn build(mut paths: &[(u64, String, Rc<UnwindTable>)]) -> Result<Box<ProcInfo>> {
+        pub fn build(mut paths: &[(u64, String, Arc<UnwindTable>)]) -> Result<Box<ProcInfo>> {
             let mut ret = ProcInfo::boxed();
             // detect rt
             for (_, path, _) in paths {

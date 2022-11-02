@@ -3,6 +3,7 @@
 use std::mem::size_of;
 use std::os::unix::prelude::MetadataExt;
 use std::process::{self, exit};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use aya::maps::perf::{AsyncPerfEventArray};
@@ -11,102 +12,86 @@ use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
 use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope, perf_event};
 use bytes::BytesMut;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use libc::getuid;
 use log::{info, error};
 use tail2::symbolication::dump_elf::dump_elf;
+use tail2::symbolication::module_cache::{ModuleCache};
 use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
-use tokio::sync::{watch, mpsc};
+use tokio::sync::{watch, mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tail2_common::{ConfigMapKey, Stack, InfoMapKey};
 use tokio::signal;
 use aya_log::BpfLogger;
 use anyhow::Result;
 
+use crate::args::Commands;
 use crate::processes::Processes;
 
+pub mod args;
 pub mod processes;
-pub mod symbolication;
 pub mod utils;
 
-#[derive(Debug, Parser)]
-struct Opt {
-    #[clap(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand, Debug)]
-enum Commands {
-    /// Print symbols
-    Symbols {
-        paths: Vec<String>,
-    },
-    /// Sample
-    Sample {
-        #[clap(short, long)]
-        pid: Option<i32>,
-    },
-    /// Listen to alloc events
-    Alloc {
-        #[clap(short, long)]
-        pid: Option<i32>,
-    },
-    /// Print system information
-    Processes {
-    },
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
+fn init() {
     // init logger
     let env = env_logger::Env::default()
         .filter_or("LOG_LEVEL", "info")
         .write_style_or("LOG_STYLE", "always");
     env_logger::init_from_env(env);
+}
 
-    // make sure we are running with root privileges
+/// make sure we are running with root privileges
+fn ensure_root() {
     let uid = unsafe { getuid() };
     if uid != 0 {
         error!("tail2 be be run with root privileges!");
         exit(-1);
     }
+}
 
-    let opt = Opt::parse();
-
-    let mut bpf = load_bpf()?;
-    BpfLogger::init(&mut bpf).unwrap();
-
-    // for waiting Ctrl-C signal
-    let (stop_tx, stop_rx) = watch::channel(false);
-
+async fn spawn_proc_refresh(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<RwLock<ModuleCache>>) {
     let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
     let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
 
-    // TODO: proper caching
     let mut p = Processes::new();
-    let _ = p.populate();
-    dbg!(p.processes.keys().len());
-    // copy to maps
-    for (pid, nfo) in &p.processes {
-        let _ = pid_info.insert_boxed(*pid as u32, nfo, 0);
-    }
-    drop(p);
-
+    let _ = p.populate(&mut *module_cache.write().await);
 
     // refresh pid info table
     let mut stop_rx2 = stop_rx.clone();
     tokio::spawn(async move {
         loop {
+
+            dbg!(p.processes.keys().len());
+            // copy to maps
+            for (pid, nfo) in &p.processes {
+                let nfo = nfo.as_ref();
+                let _ = pid_info.insert(*pid as u32, nfo, 0);
+            }
+
             // sleep for 10 sec
             tokio::select! {
-                _ = tokio::time::sleep(Duration::new(10, 0)) => (),
+                _ = tokio::time::sleep(Duration::from_secs(1)) => (),
                 _ = stop_rx2.changed() => break,
             }
         }
     });
+}
 
+#[tokio::main]
+async fn main() -> Result<()> {
+    init();
+
+    let mut bpf = load_bpf()?;
+    BpfLogger::init(&mut bpf).unwrap();
+
+    // for awaiting Ctrl-C signal
+    let (stop_tx, stop_rx) = watch::channel(());
+
+    let module_cache = Arc::new(RwLock::new(ModuleCache::new()));
+
+    let opt = args::Opt::parse();
     match opt.command {
         Commands::Processes { } => {
             info!("{:#?}", Processes::new());
@@ -119,6 +104,7 @@ async fn main() -> Result<()> {
             return Ok(());
         },
         Commands::Sample { pid } => {
+            ensure_root();
             let pid = pid.map(|i| if i == 0 {process::id() as i32} else {i});
 
             let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
@@ -135,25 +121,28 @@ async fn main() -> Result<()> {
                 )?;
             }
 
-            let ts = run_bpf(&mut bpf, stop_rx)?;
+            spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
+            let ts = run_bpf(&mut bpf, stop_rx, module_cache)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
-            stop_tx.send(true)?;
+            stop_tx.send(())?;
             for t in ts { let _ = tokio::join!(t); }
         },
         Commands::Alloc { pid } => {
+            ensure_root();
             let pid = pid.map(|i| if i == 0 {process::id() as i32} else {i});
 
             let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
             program.load().unwrap();
             program.attach(Some("malloc"), 0, "libc", pid).unwrap();
 
-            let ts = run_bpf(&mut bpf, stop_rx)?;
+            spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
+            let ts = run_bpf(&mut bpf, stop_rx, module_cache)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
-            stop_tx.send(true)?;
+            stop_tx.send(())?;
             for t in ts { let _ = tokio::join!(t); }
         }
     }
@@ -180,14 +169,12 @@ fn load_bpf() -> Result<Bpf> {
     Ok(bpf)
 }
 
-fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>> {
+fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<RwLock<ModuleCache>>) -> Result<Vec<JoinHandle<()>>> {
     // send device info
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-    let dev = stats.dev();
-    let ino = stats.ino();
-    config.insert(ConfigMapKey::DEV as u32, dev, 0).unwrap();
-    config.insert(ConfigMapKey::INO as u32, ino, 0).unwrap();
+    config.insert(ConfigMapKey::DEV as u32, stats.dev(), 0).unwrap();
+    config.insert(ConfigMapKey::INO as u32, stats.ino(), 0).unwrap();
 
     // open bpf maps
     let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map("STACKS").unwrap()).unwrap();
@@ -202,13 +189,9 @@ fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            // let proc_map = procfs::process::Process::new(st.pid() as i32).unwrap().maps().unwrap();
-            // let dst = DebugStackTrace::from_frames(&st.user_stack, &proc_map);
-            // dbg!(dst);
-
-            // if let Err(e) = post_stack(st).await {
-            //     error!("sending stack failed: {}", e.to_string());
-            // }
+            if let Err(e) = post_stack(st, Arc::clone(&module_cache)).await {
+                error!("sending stack failed: {}", e.to_string());
+            }
 
             let elapsed = SystemTime::now().duration_since(start_time).unwrap();
             total_time += elapsed;
@@ -255,15 +238,14 @@ fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<bool>) -> Result<Vec<JoinHandle<()>>
     Ok(ts)
 }
 
-// async fn post_stack(st: Stack) -> Result<reqwest::StatusCode> {
-//     let proc_map = procfs::process::Process::new(st.pid() as i32).unwrap().maps().unwrap();
-//     // let st_dto: StackDto = canonical_stack::convert(st, &proc_map);
-//     let body = bincode::serialize(&st_dto).unwrap();
+async fn post_stack(st: Stack, module_cache: Arc<RwLock<ModuleCache>>) -> Result<reqwest::StatusCode> {
+    let st_dto = tail2::dto::StackDto::from_stack(st, &mut *module_cache.write().await)?;
+    let body = bincode::serialize(&st_dto).unwrap();
 
-//     let client = reqwest::Client::new();
-//     let res = client.post("http://127.0.0.1:8000/stack")
-//         .body(body)
-//         .send()
-//         .await?;
-//     Ok(res.status())
-// }
+    let client = reqwest::Client::new();
+    let res = client.post("http://127.0.0.1:8000/stack")
+        .body(body)
+        .send()
+        .await?;
+    Ok(res.status())
+}
