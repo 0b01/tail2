@@ -55,7 +55,7 @@ fn lookup(proc_map: &[MemoryMap], address: u64) -> Option<(u64, &MemoryMap)> {
     for entry in proc_map.iter() {
         if address >= entry.address.0 && address < entry.address.1 {
             let translated = address - entry.address.0 + entry.offset;
-            return Some((translated, &entry));
+            return Some((translated, entry));
         }
     }
     None
@@ -85,7 +85,7 @@ mod server {
             use rocket::outcome::Outcome::*;
 
             // Use a configured limit with name 'stack' or fallback to default.
-            let limit = req.limits().get("stack").unwrap_or(2.megabytes());
+            let limit = req.limits().get("stack").unwrap_or_else(||2.megabytes());
 
             // Read the data into a string.
             let buf = match data.open(limit).into_bytes().await {

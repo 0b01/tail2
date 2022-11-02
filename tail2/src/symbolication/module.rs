@@ -28,8 +28,7 @@ impl Debug for Module {
 
 impl Module {
     pub fn from_path(path: &str) -> Result<Self> {
-        let path = path.as_ref();
-        let buffer = ByteView::open(&path)?;
+        let buffer = ByteView::open(path)?;
         let obj = ElfObject::parse(&buffer)?;
         let unwind_table = Arc::new(UnwindTable::from_path(path)?);
         Ok(Self {

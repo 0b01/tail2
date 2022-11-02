@@ -4,7 +4,7 @@ pub struct PidTgid(u64);
 
 impl PidTgid {
     pub fn current(pid: u32, tgid: u32) -> Self {
-        Self(((pid as u64) << 32 | tgid as u64) as u64)
+        Self((pid as u64) << 32 | tgid as u64)
     }
 
     pub fn pid(&self) -> u32 {

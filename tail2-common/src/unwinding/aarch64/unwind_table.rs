@@ -22,7 +22,7 @@ impl UnwindTableRow {
         let cfa_rule = row.cfa();
         let fp_rule = row.register(gimli::AArch64::X29);
         let lr_rule = row.register(gimli::AArch64::X30);
-        let rule = translate_into_unwind_rule(&cfa_rule, &fp_rule, &lr_rule)?;
+        let rule = translate_into_unwind_rule(cfa_rule, &fp_rule, &lr_rule)?;
         Ok(Self {
             start_address: row.start_address(),
             // end_address: row.end_address(),

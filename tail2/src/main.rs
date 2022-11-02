@@ -46,12 +46,12 @@ async fn main() -> Result<()> {
     let opt = args::Opt::parse();
     match opt.command {
         Commands::Processes { } => {
-            info!("{:#?}", Processes::new());
+            info!("{:#?}", Processes::populate(&mut *module_cache.write().await));
             return Ok(());
         },
         Commands::Symbols { paths } => {
             for p in &paths {
-                dump_elf(&p)?;
+                dump_elf(p)?;
             }
             return Ok(());
         },

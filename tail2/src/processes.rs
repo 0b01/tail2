@@ -11,22 +11,15 @@ pub struct Processes {
 }
 
 impl Processes {
-    pub fn new() -> Self {
-        Self {
-            processes: HashMap::new(),
-        }
-    }
-
-    pub fn populate(&mut self, module_cache: &mut ModuleCache) -> Result<()> {
-        for p in procfs::process::all_processes()? {
-            if let Ok(prc) = p {
-                if let Ok(info) = Self::detect(&prc, module_cache) {
-                    self.processes.insert(prc.pid, info);
-                }
+    pub fn populate(module_cache: &mut ModuleCache) -> Result<Self> {
+        let mut processes = HashMap::new();
+        for prc in procfs::process::all_processes()?.flatten() {
+            if let Ok(info) = Self::detect(&prc, module_cache) {
+                processes.insert(prc.pid, info);
             }
         }
 
-        Ok(())
+        Ok(Self { processes })
     }
 
     pub fn detect_pid(pid: i32, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
@@ -47,7 +40,7 @@ impl Processes {
                         let table = 
                         {
                             if let Some(ret) = cache.resolve(&path) {
-                                Arc::clone(&ret.unwind_table.as_ref().unwrap())
+                                Arc::clone(ret.unwind_table.as_ref().unwrap())
                             } else {
                                 return None;
                             }

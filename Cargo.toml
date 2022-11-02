@@ -5,5 +5,4 @@ members = [
     "tail2-server",
     "xtask",
     "testapp/parade",
-    "testapp/vec",
 ]

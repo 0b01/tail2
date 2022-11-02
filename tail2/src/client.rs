@@ -81,10 +81,9 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Rw
                 tokio::select! {
                     evts = buf.read_events(&mut buffers) => {
                         let events = evts.unwrap();
-                        for i in 0..events.read {
-                            let buf = &mut buffers[i];
+                        for buf in buffers.iter_mut().take(events.read) {
                             let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
-                            if let Err(_) = tx.try_send(st) {
+                            if tx.try_send(st).is_err() {
                                 error!("slow");
                             }
                         }
@@ -120,20 +119,20 @@ pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>,
     // refresh pid info table
     tokio::spawn(async move {
         loop {
-            let mut p = Processes::new();
-            let _ = p.populate(&mut *module_cache.write().await);
+            if let Ok(p) = Processes::populate(&mut *module_cache.write().await) {
 
-            dbg!(p.processes.keys().len());
-            // copy to maps
-            for (pid, nfo) in &p.processes {
-                let nfo = nfo.as_ref();
-                let _ = pid_info.insert(*pid as u32, nfo, 0);
-            }
+                dbg!(p.processes.keys().len());
+                // copy to maps
+                for (pid, nfo) in &p.processes {
+                    let nfo = nfo.as_ref();
+                    let _ = pid_info.insert(*pid as u32, nfo, 0);
+                }
 
-            // sleep for 10 sec
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(10)) => (),
-                _ = stop_rx.changed() => break,
+                // sleep for 10 sec
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(10)) => (),
+                    _ = stop_rx.changed() => break,
+                }
             }
         }
     });

@@ -30,9 +30,6 @@ impl RuntimeType {
     }
 
     pub fn is_python(&self) -> bool {
-        match self {
-            Self::Python { is_lib: _, version: _ } => true,
-            _ => false,
-        }
+        matches!(self, Self::Python { .. })
     }
 }

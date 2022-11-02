@@ -69,7 +69,7 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     let r = running.clone();
 
     let _ = ctrlc::set_handler(move || {
-        let _ = r.store(false, Ordering::SeqCst);
+        r.store(false, Ordering::SeqCst);
     });
 
     while running.load(Ordering::SeqCst) {

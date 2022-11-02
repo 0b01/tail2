@@ -20,7 +20,7 @@ unsafe fn unsafe_allocate<T>() -> Box<T> {
     let layout = Layout::new::<T>();
     let ptr = unsafe { alloc(layout) as *mut T };
     grid_box = unsafe { Box::from_raw(ptr) };
-    return grid_box;
+    grid_box
 }
 
 #[cfg(feature = "user")]
@@ -70,8 +70,8 @@ pub mod user {
             for start in 0..to_search.len()-target.len() {
                 if &to_search[start..start+target.len()] == target {
                     let mut null = None;
-                    for end in start+target.len()..to_search.len() {
-                        if to_search[end] == 0 {
+                    for (end, ch) in to_search.iter().enumerate() {
+                        if *ch == 0 {
                             null = Some(end);
                             break;
                         }
@@ -123,7 +123,7 @@ pub mod user {
             let mut ret = ProcInfo::boxed();
             // detect rt
             for (_, path, _) in paths {
-                let detected = detect_runtime_type(&path)?;
+                let detected = detect_runtime_type(path)?;
                 if !detected.is_unknown() {
                     ret.runtime_type = detected;
                     break;
