@@ -11,7 +11,7 @@ use libc::getuid;
 use log::{info, error};
 use tail2::symbolication::dump_elf::dump_elf;
 use tail2::symbolication::module_cache::{ModuleCache};
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{watch, Mutex};
 use tokio::signal;
 use anyhow::Result;
 
@@ -41,12 +41,14 @@ async fn main() -> Result<()> {
     // for awaiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(());
 
-    let module_cache = Arc::new(RwLock::new(ModuleCache::new()));
+    let module_cache = Arc::new(Mutex::new(ModuleCache::new()));
 
     let opt = args::Opt::parse();
     match opt.command {
         Commands::Processes { } => {
-            info!("{:#?}", Processes::populate(&mut *module_cache.write().await));
+            let mut p = Processes::new(module_cache);
+            p.refresh().await.unwrap();
+            info!("{:#?}", p);
             return Ok(());
         },
         Commands::Symbols { paths } => {

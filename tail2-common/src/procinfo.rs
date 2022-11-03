@@ -70,7 +70,7 @@ pub mod user {
             for start in 0..to_search.len()-target.len() {
                 if &to_search[start..start+target.len()] == target {
                     let mut null = None;
-                    for (end, ch) in to_search.iter().enumerate() {
+                    for (end, ch) in to_search[start..].iter().take(target.len()).enumerate() {
                         if *ch == 0 {
                             null = Some(end);
                             break;

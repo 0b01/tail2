@@ -1,2 +1,2 @@
 pub mod stack_dto;
-pub use stack_dto::StackDto;
+pub use stack_dto::*;

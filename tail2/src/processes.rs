@@ -4,22 +4,32 @@ use anyhow::Result;
 use procfs::process::Process;
 use tail2_common::procinfo::ProcInfo;
 use tail2::symbolication::module_cache::ModuleCache;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Processes {
+    // TODO: use pid + starttime
     pub processes: HashMap<i32, Box<ProcInfo>>,
+    // TODO: more caching
+    // pub runtime_cache: 
+    module_cache: Arc<Mutex<ModuleCache>>,
 }
 
 impl Processes {
-    pub fn populate(module_cache: &mut ModuleCache) -> Result<Self> {
-        let mut processes = HashMap::new();
+    pub async fn refresh(&mut self) -> Result<()> {
         for prc in procfs::process::all_processes()?.flatten() {
+            let module_cache = &mut *self.module_cache.lock().await;
             if let Ok(info) = Self::detect(&prc, module_cache) {
-                processes.insert(prc.pid, info);
+                self.processes.insert(prc.pid, info);
             }
         }
 
-        Ok(Self { processes })
+        Ok(())
+    }
+
+    pub fn new(module_cache: Arc<Mutex<ModuleCache>>) -> Self {
+        let processes = HashMap::new();
+        Self { processes, module_cache }
     }
 
     pub fn detect_pid(pid: i32, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
@@ -28,7 +38,6 @@ impl Processes {
     }
 
     fn detect(process: &Process, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
-
         let paths = process
             .maps()?
             .into_iter()

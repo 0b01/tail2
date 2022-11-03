@@ -3,8 +3,8 @@ use rocket::{post, http::Status, Route};
 use crate::error::Result;
 
 #[post("/stack", data = "<var>")]
-fn stack(var: tail2::dto::StackDto) -> Result<Status> {
-    info!("{:?}", var);
+fn stack(var: tail2::dto::StackBatchDto) -> Result<Status> {
+    info!("{:#?}", var);
     Ok(Status::Ok)
 }
 

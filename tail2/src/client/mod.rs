@@ -10,15 +10,19 @@ use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
 use bytes::BytesMut;
 use log::{info, error};
-use tail2::symbolication::module_cache::{ModuleCache};
+use tail2::symbolication::module_cache::ModuleCache;
 use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tail2_common::{ConfigMapKey, Stack, InfoMapKey};
 use anyhow::{Result, Context};
 
 use crate::processes::Processes;
+
+use self::api_client::ApiStackEndpointClient;
+
+pub mod api_client;
 
 pub(crate) async fn init_logger(bpf: &mut Bpf) -> Result<()> {
     // init logger
@@ -31,7 +35,7 @@ pub(crate) async fn init_logger(bpf: &mut Bpf) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<RwLock<ModuleCache>>) -> Result<Vec<JoinHandle<()>>> {
+pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) -> Result<Vec<JoinHandle<()>>> {
     // send device info
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
@@ -43,6 +47,12 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Rw
 
     let (tx, mut rx) = mpsc::channel::<Stack>(2048);
 
+    let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
+        "http://127.0.0.1:8000/stack",
+        Arc::clone(&module_cache),
+        2,
+    )));
+
     // receiver thread
     let mut ts = vec![];
     let mut total_time = Duration::new(0, 0);
@@ -51,14 +61,21 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Rw
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            if let Err(e) = post_stack(st, Arc::clone(&module_cache)).await {
-                error!("sending stack failed: {}", e.to_string());
-            }
+            let cli2 = Arc::clone(&cli);
+            tokio::spawn(async move {
+                info!("posting");
+                if let Err(e) = cli2.lock().await.post_stack(st).await {
+                    error!("sending stack failed: {}", e.to_string());
+                }
+                info!("done");
+            });
 
             let elapsed = SystemTime::now().duration_since(start_time).unwrap();
             total_time += elapsed;
             c += 1;
         }
+
+        cli.lock().await.flush().await.unwrap();
 
         let avg_t = total_time / c;
         info!("Processed: {c} stacks. {avg_t:?}/st");
@@ -88,7 +105,9 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Rw
                             }
                         }
                     },
-                    _ = stop_rx2.changed() => break,
+                    _ = stop_rx2.changed() => {
+                        break;
+                    },
                 };
             }
         });
@@ -99,19 +118,8 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Rw
     Ok(ts)
 }
 
-pub(crate) async fn post_stack(st: Stack, module_cache: Arc<RwLock<ModuleCache>>) -> Result<reqwest::StatusCode> {
-    let st_dto = tail2::dto::StackDto::from_stack(st, &mut *module_cache.write().await)?;
-    let body = bincode::serialize(&st_dto).unwrap();
-
-    let client = reqwest::Client::new();
-    let res = client.post("http://127.0.0.1:8000/stack")
-        .body(body)
-        .send()
-        .await?;
-    Ok(res.status())
-}
-
-pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>, module_cache: Arc<RwLock<ModuleCache>>) {
+// TODO: don't refresh, listen to mmap and execve calls
+pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) {
     let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
     let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
@@ -119,11 +127,12 @@ pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>,
     // refresh pid info table
     tokio::spawn(async move {
         loop {
-            if let Ok(p) = Processes::populate(&mut *module_cache.write().await) {
-
-                dbg!(p.processes.keys().len());
+            let module_cache = Arc::clone(&module_cache);
+            let mut processes = Processes::new(module_cache);
+            if let Ok(()) = processes.refresh().await {
+                dbg!(processes.processes.keys().len());
                 // copy to maps
-                for (pid, nfo) in &p.processes {
+                for (pid, nfo) in &processes.processes {
                     let nfo = nfo.as_ref();
                     let _ = pid_info.insert(*pid as u32, nfo, 0);
                 }
@@ -141,12 +150,12 @@ pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>,
 pub(crate) fn load_bpf() -> Result<Bpf> {
     #[cfg(debug_assertions)]
     let bpf = Bpf::load(include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/debug/tail2"
+        "../../../target/bpfel-unknown-none/debug/tail2"
     ))?;
 
     #[cfg(not(debug_assertions))]
     let bpf = Bpf::load(include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/release/tail2"
+        "../../../target/bpfel-unknown-none/release/tail2"
     ))?;
     Ok(bpf)
 }

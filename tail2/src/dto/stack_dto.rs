@@ -16,40 +16,59 @@ pub struct FrameDto {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct StackDto {
     pub frames: Vec<FrameDto>,
-    pub modules: Vec<Arc<Module>>,
     pub success: bool,
 }
 
-impl StackDto {
-    pub fn from_stack(stack: Stack, module_cache: &mut ModuleCache) -> Result<StackDto> {
-        let mut dto = StackDto::default();
-        let len = stack.unwind_success.unwrap_or(0);
-        let proc_map = Process::new(stack.pid() as i32)?.maps()?;
-        for address in &stack.user_stack[..len] {
-            let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
-            let path = entry.pathname
-                .path()
-                .context("not a path we can resolve")?
-                .to_str().context("unable to convert to str")?;
-            let module = module_cache.resolve(path).context("module not found")?;
-            let module_idx = match dto.modules.iter().position(|m| Arc::ptr_eq(m, &module)) {
-                Some(idx) => idx,
-                None => {
-                    dto.modules.push(module);
-                    dto.modules.len() - 1
-                }
-            };
-
-            dto.frames.push(FrameDto {
-                module_idx,
-                offset,
-            });
-        }
-        dbg!(&dto);
-        Ok(dto)
-    }
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct StackBatchDto {
+    pub stacks: Vec<StackDto>,
+    pub modules: Vec<Arc<Module>>,
 }
 
+pub fn proc_map(pid: i32) -> Result<Vec<MemoryMap>> {
+    Process::new(pid)?.maps().context("unable to get maps")
+}
+
+impl StackBatchDto {
+    pub fn from_stacks(stacks: Vec<Stack>, module_cache: &mut ModuleCache) -> Result<StackBatchDto> {
+        let mut ret = StackBatchDto::default();
+        let mut from_stack = |stack: Stack| {
+            let mut dto = StackDto::default();
+            let len = stack.unwind_success.unwrap_or(0);
+            let proc_map = proc_map(stack.pid() as i32)?;
+            for address in &stack.user_stack[..len] {
+                let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
+                let path = entry.pathname
+                    .path()
+                    .context("not a path we can resolve")?
+                    .to_str().context("unable to convert to str")?;
+                let module = module_cache.resolve(path).context("module not found")?;
+                let module_idx = match ret.modules.iter().position(|m| Arc::ptr_eq(m, &module)) {
+                    Some(idx) => idx,
+                    None => {
+                        ret.modules.push(module);
+                        ret.modules.len() - 1
+                    }
+                };
+
+                dto.frames.push(FrameDto {
+                    module_idx,
+                    offset,
+                });
+            }
+
+            Result::<StackDto>::Ok(dto)
+        };
+
+        for stack in stacks {
+            if let Ok(dto) = from_stack(stack) {
+                ret.stacks.push(dto);
+            }
+        }
+
+        Ok(ret)
+    }
+}
 
 fn lookup(proc_map: &[MemoryMap], address: u64) -> Option<(u64, &MemoryMap)> {
     for entry in proc_map.iter() {
@@ -78,14 +97,14 @@ mod server {
     }
 
     #[rocket::async_trait]
-    impl<'r> FromData<'r> for StackDto {
+    impl<'r> FromData<'r> for StackBatchDto {
         type Error = FromDataError;
 
         async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> data::Outcome<'r, Self> {
             use rocket::outcome::Outcome::*;
 
             // Use a configured limit with name 'stack' or fallback to default.
-            let limit = req.limits().get("stack").unwrap_or_else(||2.megabytes());
+            let limit = req.limits().get("stack").unwrap_or_else(||20.megabytes());
 
             // Read the data into a string.
             let buf = match data.open(limit).into_bytes().await {
