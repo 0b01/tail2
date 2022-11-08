@@ -19,3 +19,9 @@ pyperf/*
 *.log
 temp/*
 tmp/*
+*.db*
+.DS_Store
+Packages
+Packages.gz
+*.gz
+*.deb
