@@ -12,7 +12,16 @@ fn stack(var: StackBatchDto, st: &State<CurrentCallTree>) -> Result<Status> {
     tokio::spawn(async move {
         let mut ct = CallTree::new();
         for stack in var.stacks {
-            ct.merge(&CallTree::from_stack(&stack.frames));
+            let stack = {
+                let mut ret = vec![];
+                for f in &stack.frames {
+                    let module = &var.modules[f.module_idx];
+                    let name = tail2::symbolication::dump_elf::lookup(&module.path, f.offset).unwrap_or("(not found)".to_string());
+                    ret.push(name);
+                }
+                ret
+            };
+            ct.merge(&CallTree::from_stack(&stack));
         }
         info!("{:#?}", ct.root.debug_pretty_print(&ct.arena));
         ct_.lock().unwrap().merge(&ct);

@@ -1,5 +1,5 @@
 import {Atom} from '../lib/atom'
-import {clamp, Rect, Vec2} from '../lib/math'
+import {Rect, Vec2} from '../lib/math'
 import {CallTreeNode, Frame, Profile, ProfileGroup} from '../lib/profile'
 import {objectsHaveShallowEquality} from '../lib/utils'
 
@@ -33,10 +33,7 @@ export interface ProfileState {
 export type ProfileGroupState = {
   name: string
 
-  // The index within the list of profiles currently being viewed
-  indexToView: number
-
-  profiles: ProfileState[]
+  profile: ProfileState
 } | null
 
 export enum FlamechartID {
@@ -64,42 +61,27 @@ export class ProfileGroupAtom extends Atom<ProfileGroupState> {
 
   getActiveProfile(): ProfileState | null {
     if (this.state == null) return null
-    return this.state.profiles[this.state?.indexToView] || null
+    return this.state.profile;
   }
 
   setProfileGroup = (group: ProfileGroup) => {
+    const p = group.profile;
     this.set({
       name: group.name,
-      indexToView: group.indexToView,
-      profiles: group.profiles.map(p => ({
+      profile: {
         profile: p,
-        chronoViewState: initialFlameChartViewState,
-        leftHeavyViewState: initialFlameChartViewState,
+        chronoViewState: this.state?.profile.chronoViewState || initialFlameChartViewState,
+        leftHeavyViewState: this.state?.profile.leftHeavyViewState || initialFlameChartViewState,
         sandwichViewState: {callerCallee: null},
-      })),
-    })
-  }
-
-  setProfileIndexToView = (indexToView: number) => {
-    if (this.state == null) return
-
-    indexToView = clamp(indexToView, 0, this.state.profiles.length - 1)
-
-    this.set({
-      ...this.state,
-      indexToView,
+      },
     })
   }
 
   private updateActiveProfileState(fn: (profileState: ProfileState) => ProfileState) {
     if (this.state == null) return
-    const {indexToView, profiles} = this.state
     this.set({
       ...this.state,
-      profiles: profiles.map((p, i) => {
-        if (i != indexToView) return p
-        return fn(p)
-      }),
+      profile: fn(this.state.profile),
     })
   }
 

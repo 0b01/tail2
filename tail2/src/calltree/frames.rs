@@ -1,19 +1,19 @@
 use indextree::{Arena, NodeId};
 use serde::Serialize;
 
-#[derive(Serialize, Debug, Copy, Default, Eq, Clone, PartialEq)]
-pub struct CallTreeFrame<T> where T: Copy + Default + Eq + Serialize {
+#[derive(Serialize, Debug, Clone, Default, Eq, PartialEq)]
+pub struct CallTreeFrame<T> where T: Clone + Default + Eq + Serialize {
     pub item: T,
     pub total_samples: usize,
     pub self_samples: usize,
 }
 
-pub struct CallTree<T: Copy + Default + Eq + Serialize> {
+pub struct CallTree<T: Clone + Default + Eq + Serialize> {
     pub arena: Arena<CallTreeFrame<T>>,
     pub root: NodeId,
 }
 
-impl<T: Copy + Default + Eq + Serialize> CallTree<T> {
+impl<T: Clone + Default + Eq + Serialize> CallTree<T> {
     pub fn new() -> Self {
         let mut arena = Arena::new();
         let root = arena.new_node(Default::default());
@@ -27,7 +27,7 @@ impl<T: Copy + Default + Eq + Serialize> CallTree<T> {
         for (i, f) in stack.iter().enumerate() {
             let is_last = i == (stack.len() - 1);
             let self_samples = if is_last { 1 } else { 0 };
-            let new_node = tree.arena.new_node(CallTreeFrame{ item: *f, total_samples: 1, self_samples });
+            let new_node = tree.arena.new_node(CallTreeFrame{ item: f.clone(), total_samples: 1, self_samples });
             prev.append(new_node, &mut tree.arena);
             prev = new_node;
         }
@@ -45,7 +45,7 @@ impl<T: Copy + Default + Eq + Serialize> CallTree<T> {
             let my_children = my_curr.children(&mut self.arena).collect::<Vec<_>>();
             let other_children = other_curr.children(&other.arena).collect::<Vec<_>>();
             for other_child in other_children {
-                let other_frame = *other.arena.get(other_child).unwrap().get();
+                let other_frame = other.arena.get(other_child).unwrap().get().clone();
                 let mut found = false;
                 for my_child in &my_children {
                     let my_frame = self.arena.get_mut(*my_child).unwrap().get_mut();

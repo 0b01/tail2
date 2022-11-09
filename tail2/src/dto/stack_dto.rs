@@ -36,7 +36,7 @@ impl StackBatchDto {
             let mut dto = StackDto::default();
             let len = stack.unwind_success.unwrap_or(0);
             let proc_map = proc_map(stack.pid() as i32)?;
-            for address in &stack.user_stack[..len] {
+            for address in stack.user_stack[..len].iter().rev() {
                 let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
                 let path = entry.pathname
                     .path()

@@ -8,7 +8,6 @@ export interface ApplicationState {}
 
 export interface ActiveProfileState {
   profile: Profile
-  index: number
   chronoViewState: FlamechartViewState
   leftHeavyViewState: FlamechartViewState
   sandwichViewState: SandwichViewState
@@ -19,16 +18,12 @@ export function useActiveProfileState(): ActiveProfileState | null {
   const profileGroupState = useAtom(profileGroupAtom)
 
   if (!profileGroupState) return null
-  if (profileGroupState.indexToView >= profileGroupState.profiles.length) return null
-
-  const index = profileGroupState.indexToView
-  const profileState = profileGroupState.profiles[index]
+  const profileState = profileGroupState.profile;
   return {
-    ...profileGroupState.profiles[profileGroupState.indexToView],
+    ...profileGroupState.profile,
     profile: getProfileToView({
       profile: profileState.profile,
       flattenRecursion,
     }),
-    index: profileGroupState.indexToView,
   }
 }

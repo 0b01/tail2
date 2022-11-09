@@ -1,5 +1,5 @@
 use std::{path::Path};
-use anyhow::Result;
+use anyhow::{Result, Context};
 use symbolic::{common::ByteView, debuginfo::elf::ElfObject, demangle::demangle};
 
 pub fn dump_elf<P: AsRef<Path>>(path: P) -> Result<()> {
@@ -19,4 +19,18 @@ pub fn dump_elf<P: AsRef<Path>>(path: P) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn lookup<P: AsRef<Path>>(path: P, address: u64) -> Result<String> {
+    let path = path.as_ref();
+    let buffer = ByteView::open(path)?;
+    let obj = ElfObject::parse(&buffer)?;
+    obj.symbol_map()
+        .lookup(address)
+        .context("not found")
+        .map(|s|
+            s.name.as_deref()
+            .unwrap_or("")
+            .to_owned())
+        .map(|n|demangle(&n).to_string())
 }

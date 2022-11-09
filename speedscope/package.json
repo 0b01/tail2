@@ -16,7 +16,6 @@
     "coverage": "npm run jest -- --coverage",
     "typecheck": "tsc --noEmit",
     "test": "./scripts/ci.sh",
-    "serve": "parcel assets/index.html --no-autoinstall",
     "watch": "parcel watch assets/index.html --no-autoinstall --out-dir ../tail2-server/flamegraph"
   },
   "files": [

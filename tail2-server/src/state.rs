@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use tail2::{calltree::frames::CallTree, dto::FrameDto};
 
 pub struct CurrentCallTree {
-   pub ct: Arc<Mutex<CallTree<FrameDto>>>,
+   pub ct: Arc<Mutex<CallTree<String>>>,
 }
 
 impl CurrentCallTree {

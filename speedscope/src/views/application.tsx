@@ -4,17 +4,14 @@ import {StyleSheet, css} from 'aphrodite'
 import {CallTreeNode, Frame, Profile, ProfileGroup} from '../lib/profile'
 import {FontFamily, FontSize, Duration} from './style'
 import {SandwichViewContainer} from './sandwich-view'
-import {saveToFile} from '../lib/file-format'
 import {ActiveProfileState} from '../app-state/active-profile-state'
 import {LeftHeavyFlamechartView, ChronoFlamechartView} from './flamechart-view-container'
 import {CanvasContext} from '../gl/canvas-context'
-import {Toolbar} from './toolbar'
 import {Theme, withTheme} from './themes/theme'
 import {ViewMode} from '../lib/view-mode'
 import {ProfileGroupState} from '../app-state/profile-group'
 import {HashParams} from '../lib/hash-params'
 import {StatelessComponent} from '../lib/preact-helpers'
-import { lastOf } from '../lib/utils'
 
 // Force eager loading of a few code-split modules.
 //
@@ -130,7 +127,7 @@ export type ApplicationProps = {
 
 export class Application extends StatelessComponent<ApplicationProps> {
   private async loadProfile(loader: () => Promise<ProfileGroup | null>) {
-    this.props.setLoading(true)
+    // this.props.setLoading(true)
     await new Promise(resolve => setTimeout(resolve, 0))
 
     if (!this.props.glCanvas) return
@@ -149,11 +146,11 @@ export class Application extends StatelessComponent<ApplicationProps> {
     // TODO(jlfwong): Make these into nicer overlays
     if (profileGroup == null) {
       alert('Unrecognized format! See documentation about supported formats.')
-      this.props.setLoading(false)
+      // this.props.setLoading(false)
       return
-    } else if (profileGroup.profiles.length === 0) {
+    } else if (profileGroup.profile === null) {
       alert("Successfully imported profile, but it's empty!")
-      this.props.setLoading(false)
+      // this.props.setLoading(false)
       return
     }
 
@@ -165,23 +162,21 @@ export class Application extends StatelessComponent<ApplicationProps> {
     }
     document.title = `${profileGroup.name} - speedscope`
 
-    if (this.props.hashParams.viewMode) {
-      this.props.setViewMode(this.props.hashParams.viewMode)
-    }
+    // if (this.props.hashParams.viewMode) {
+    //   this.props.setViewMode(this.props.hashParams.viewMode)
+    // }
 
-    for (let profile of profileGroup.profiles) {
-      await profile.demangle()
-    }
+    // for (let profile of profileGroup.profiles) {
+    //   await profile.demangle()
+    // }
 
-    for (let profile of profileGroup.profiles) {
-      const title = this.props.hashParams.title || profile.getName()
-      profile.setName(title)
-    }
+    const title = this.props.hashParams.title || profileGroup.profile.getName()
+    profileGroup.profile.setName(title)
 
     console.timeEnd('import')
 
     this.props.setProfileGroup(profileGroup)
-    this.props.setLoading(false)
+    // this.props.setLoading(false)
   }
 
   getStyle(): ReturnType<typeof getStyle> {
@@ -189,14 +184,14 @@ export class Application extends StatelessComponent<ApplicationProps> {
   }
 
   loadFromApi() {
-    interface IApiData {
-      item: { offset: number },
+    interface IApiData<T> {
+      item: T,
       total_samples: number,
       self_samples: number,
-      children: IApiData[] | null,
+      children: IApiData<T>[] | null,
     }
 
-    function convert(root: IApiData): Profile {
+    function convert(root: IApiData<string>): Profile {
       if (!root.children) throw new Error();
       const sum = root.children.reduce((n, i) => i.total_samples + n, 0);
       const prof = new Profile(sum);
@@ -204,13 +199,13 @@ export class Application extends StatelessComponent<ApplicationProps> {
 
       let root_node = new CallTreeNode(Frame.root, null);
 
-      function aux(converted: CallTreeNode, node: IApiData): CallTreeNode {
+      function aux(converted: CallTreeNode, node: IApiData<string>): CallTreeNode {
         prof.samples.push(converted);
         prof.weights.push(node.self_samples);
 
         const frame = Frame.getOrInsert(prof.frames, {
-          key: node.item.offset,
-          name: node.item.offset.toString(),
+          key: node.item,
+          name: node.item.toString(),
         });
         frame.addToSelfWeight(node.self_samples);
         frame.addToTotalWeight(node.total_samples);
@@ -229,18 +224,19 @@ export class Application extends StatelessComponent<ApplicationProps> {
       return prof;
     }
 
-    this.loadProfile(async () => {
+    var load = async () => {
       let f = await fetch("/current");
-      let j: IApiData = await f.json();
-      let prof = convert(j);
-      console.log(prof);
+      let j: IApiData<string> = await f.json();
+      let profile = convert(j);
+      console.log(profile);
       let ret: ProfileGroup = {
         name: "default",
-        indexToView: 0,
-        profiles: [prof],
+        profile,
       };
       return ret;
-    })
+    };
+
+    setInterval(() => this.loadProfile(load), 1000);
   }
 
   onWindowKeyPress = async (ev: KeyboardEvent) => {
@@ -254,27 +250,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
       const {flattenRecursion} = this.props
       this.props.setFlattenRecursion(!flattenRecursion)
     } else if (ev.key === 'n') {
-      const {activeProfileState} = this.props
-      if (activeProfileState) {
-        this.props.setProfileIndexToView(activeProfileState.index + 1)
-      }
     } else if (ev.key === 'p') {
-      const {activeProfileState} = this.props
-      if (activeProfileState) {
-        this.props.setProfileIndexToView(activeProfileState.index - 1)
-      }
-    }
-  }
-
-  private saveFile = () => {
-    if (this.props.profileGroup) {
-      const {name, indexToView, profiles} = this.props.profileGroup
-      const profileGroup: ProfileGroup = {
-        name,
-        indexToView,
-        profiles: profiles.map(p => p.profile),
-      }
-      saveToFile(profileGroup)
     }
   }
 
@@ -283,7 +259,6 @@ export class Application extends StatelessComponent<ApplicationProps> {
     // page save action.
     if (ev.key === 's' && (ev.ctrlKey || ev.metaKey)) {
       ev.preventDefault()
-      this.saveFile()
     } else if (ev.key === 'o' && (ev.ctrlKey || ev.metaKey)) {
       ev.preventDefault()
     }
@@ -432,11 +407,6 @@ export class Application extends StatelessComponent<ApplicationProps> {
           setGLCanvas={this.props.setGLCanvas}
           canvasContext={this.props.canvasContext}
           theme={this.props.theme}
-        />
-        <Toolbar
-          saveFile={this.saveFile}
-          browseForFile={() => {}}
-          {...(this.props as ApplicationProps)}
         />
         <div className={css(style.contentContainer)}>{this.renderContent()}</div>
         {this.props.dragActive && <div className={css(style.dragTarget)} />}

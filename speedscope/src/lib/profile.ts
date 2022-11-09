@@ -106,8 +106,7 @@ export class CallTreeNode extends HasWeights {
 
 export interface ProfileGroup {
   name: string
-  indexToView: number
-  profiles: Profile[]
+  profile: Profile
 }
 
 
@@ -116,7 +115,7 @@ export class Profile {
 
   protected totalWeight: number
 
-  protected frames = new KeyedSet<Frame>()
+  public frames = new KeyedSet<Frame>()
 
   // Profiles store two call-trees.
   //
@@ -137,8 +136,8 @@ export class Profile {
 
   // List of references to CallTreeNodes at the top of the
   // stack at the time of the sample.
-  protected samples: CallTreeNode[] = []
-  protected weights: number[] = []
+  public samples: CallTreeNode[] = []
+  public weights: number[] = []
 
   protected valueFormatter: ValueFormatter = new RawValueFormatter()
 
@@ -273,61 +272,61 @@ export class Profile {
     this.frames.forEach(fn)
   }
 
-  getProfileWithRecursionFlattened(): Profile {
-    const builder = new CallTreeProfileBuilder()
+  // getProfileWithRecursionFlattened(): Profile {
+  //   const builder = new CallTreeProfileBuilder()
 
-    const stack: (CallTreeNode | null)[] = []
-    const framesInStack = new Set<Frame>()
+  //   const stack: (CallTreeNode | null)[] = []
+  //   const framesInStack = new Set<Frame>()
 
-    function openFrame(node: CallTreeNode, value: number) {
-      if (framesInStack.has(node.frame)) {
-        stack.push(null)
-      } else {
-        framesInStack.add(node.frame)
-        stack.push(node)
-        builder.enterFrame(node.frame, value)
-      }
-    }
-    function closeFrame(node: CallTreeNode, value: number) {
-      const stackTop = stack.pop()
-      if (stackTop) {
-        framesInStack.delete(stackTop.frame)
-        builder.leaveFrame(stackTop.frame, value)
-      }
-    }
+  //   function openFrame(node: CallTreeNode, value: number) {
+  //     if (framesInStack.has(node.frame)) {
+  //       stack.push(null)
+  //     } else {
+  //       framesInStack.add(node.frame)
+  //       stack.push(node)
+  //       builder.enterFrame(node.frame, value)
+  //     }
+  //   }
+  //   function closeFrame(node: CallTreeNode, value: number) {
+  //     const stackTop = stack.pop()
+  //     if (stackTop) {
+  //       framesInStack.delete(stackTop.frame)
+  //       builder.leaveFrame(stackTop.frame, value)
+  //     }
+  //   }
 
-    this.forEachCall(openFrame, closeFrame)
+  //   this.forEachCall(openFrame, closeFrame)
 
-    const flattenedProfile = builder.build()
-    flattenedProfile.name = this.name
-    flattenedProfile.valueFormatter = this.valueFormatter
+  //   const flattenedProfile = builder.build()
+  //   flattenedProfile.name = this.name
+  //   flattenedProfile.valueFormatter = this.valueFormatter
 
-    // When constructing a profile with recursion flattened,
-    // counter-intuitive things can happen to "self time" measurements
-    // for functions.
-    // For example, given the following list of stacks w/ weights:
-    //
-    // a 1
-    // a;b;a 1
-    // a;b;a;b;a 1
-    // a;b;a 1
-    //
-    // The resulting profile with recursion flattened out will look like this:
-    //
-    // a 1
-    // a;b 3
-    //
-    // Which is useful to view, but it's counter-intuitive to move self-time
-    // for frames around, since analyzing the self-time of functions is an important
-    // thing to be able to do accurately, and we don't want this to change when recursion
-    // is flattened. To work around that, we'll just copy the weights directly from the
-    // un-flattened profile.
-    this.forEachFrame(f => {
-      flattenedProfile.frames.getOrInsert(f).overwriteWeightWith(f)
-    })
+  //   // When constructing a profile with recursion flattened,
+  //   // counter-intuitive things can happen to "self time" measurements
+  //   // for functions.
+  //   // For example, given the following list of stacks w/ weights:
+  //   //
+  //   // a 1
+  //   // a;b;a 1
+  //   // a;b;a;b;a 1
+  //   // a;b;a 1
+  //   //
+  //   // The resulting profile with recursion flattened out will look like this:
+  //   //
+  //   // a 1
+  //   // a;b 3
+  //   //
+  //   // Which is useful to view, but it's counter-intuitive to move self-time
+  //   // for frames around, since analyzing the self-time of functions is an important
+  //   // thing to be able to do accurately, and we don't want this to change when recursion
+  //   // is flattened. To work around that, we'll just copy the weights directly from the
+  //   // un-flattened profile.
+  //   this.forEachFrame(f => {
+  //     flattenedProfile.frames.getOrInsert(f).overwriteWeightWith(f)
+  //   })
 
-    return flattenedProfile
-  }
+  //   return flattenedProfile
+  // }
 
   getInvertedProfileForCallersOf(focalFrameInfo: FrameInfo): Profile {
     const focalFrame = Frame.getOrInsert(this.frames, focalFrameInfo)
