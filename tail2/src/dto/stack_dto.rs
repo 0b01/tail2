@@ -7,7 +7,7 @@ use anyhow::{Result, Context};
 
 use crate::{symbolication::{module::Module, module_cache::{self, ModuleCache}}, utils::MMapPathExt};
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct FrameDto {
     pub module_idx: usize,
     pub offset: u64,

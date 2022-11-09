@@ -1,3 +1,4 @@
+use rocket::fs::{FileServer, relative};
 use rocket_dyn_templates::Template;
 
 extern crate rocket;
@@ -33,6 +34,7 @@ async fn main() {
     setup_logger().unwrap();
 
     let r = rocket::build();
+    let r = r.mount("/", FileServer::from(relative!("./flamegraph")));
     let r = r.attach(Template::fairing());
     let r = r.mount("/", routes::routes());
 

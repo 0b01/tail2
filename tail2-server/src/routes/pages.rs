@@ -8,16 +8,14 @@ struct LoginState {
     username: String,
 }
 
-
-#[get("/")]
-fn index() -> Template {
-    let context = LoginState::default();
-    Template::render("index", context)
-}
-
+// #[get("/")]
+// fn index() -> Template {
+//     let context = LoginState::default();
+//     Template::render("index", context)
+// }
 
 pub fn routes() -> Vec<Route> {
     rocket::routes![
-        index,
+        // index,
     ]
 }

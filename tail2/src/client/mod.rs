@@ -50,7 +50,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mu
     let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
         "http://127.0.0.1:8000/stack",
         Arc::clone(&module_cache),
-        2,
+        4,
     )));
 
     // receiver thread

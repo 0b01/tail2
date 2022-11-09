@@ -43,6 +43,7 @@ impl ApiStackEndpointClient {
         self.buf.push(st);
         if self.buf.len() == self.batch_size {
             let stacks = std::mem::replace(&mut self.buf, Vec::with_capacity(self.batch_size));
+            dbg!(&stacks);
             self.post_stacks(stacks).await?;
         }
         Ok(StatusCode::ACCEPTED)
