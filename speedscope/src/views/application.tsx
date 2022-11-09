@@ -1,6 +1,5 @@
 import {h} from 'preact'
 import {StyleSheet, css} from 'aphrodite'
-import {FileSystemDirectoryEntry} from '../import/file-system-entry'
 
 import {ProfileGroup, SymbolRemapper} from '../lib/profile'
 import {FontFamily, FontSize, Duration} from './style'
@@ -19,43 +18,12 @@ import {ProfileGroupState} from '../app-state/profile-group'
 import {HashParams} from '../lib/hash-params'
 import {StatelessComponent} from '../lib/preact-helpers'
 
-const importModule = import('../import')
-
 // Force eager loading of a few code-split modules.
 //
 // We put them all in one place so we can directly control the relative priority
 // of these.
-importModule.then(() => {})
 import('../lib/demangle-cpp').then(() => {})
 import('source-map').then(() => {})
-
-async function importProfilesFromText(
-  fileName: string,
-  contents: string,
-): Promise<ProfileGroup | null> {
-  return (await importModule).importProfileGroupFromText(fileName, contents)
-}
-
-async function importProfilesFromBase64(
-  fileName: string,
-  contents: string,
-): Promise<ProfileGroup | null> {
-  return (await importModule).importProfileGroupFromBase64(fileName, contents)
-}
-
-async function importProfilesFromArrayBuffer(
-  fileName: string,
-  contents: ArrayBuffer,
-): Promise<ProfileGroup | null> {
-  return (await importModule).importProfilesFromArrayBuffer(fileName, contents)
-}
-
-async function importProfilesFromFile(file: File): Promise<ProfileGroup | null> {
-  return (await importModule).importProfilesFromFile(file)
-}
-async function importFromFileSystemDirectoryEntry(entry: FileSystemDirectoryEntry) {
-  return (await importModule).importFromFileSystemDirectoryEntry(entry)
-}
 
 declare function require(x: string): any
 const exampleProfileURL = require('../../sample/profiles/stackcollapse/perf-vertx-stacks-01-collapsed-all.txt')
@@ -223,117 +191,20 @@ export class Application extends StatelessComponent<ApplicationProps> {
     return getStyle(this.props.theme)
   }
 
-  loadFromFile(file: File) {
+  loadFromApi() {
+    interface IApiData {
+      item: { offset: number },
+      total_samples: number,
+      self_samples: number,
+      children: IApiData[]
+    }
+
     this.loadProfile(async () => {
-      const profiles = await importProfilesFromFile(file)
-      if (profiles) {
-        for (let profile of profiles.profiles) {
-          if (!profile.getName()) {
-            profile.setName(file.name)
-          }
-        }
-        return profiles
-      }
-
-      if (this.props.profileGroup && this.props.activeProfileState) {
-        // If a profile is already loaded, it's possible the file being imported is
-        // a symbol map. If that's the case, we want to parse it, and apply the symbol
-        // mapping to the already loaded profile. This can be use to take an opaque
-        // profile and make it readable.
-        const reader = new FileReader()
-        const fileContentsPromise = new Promise<string>(resolve => {
-          reader.addEventListener('loadend', () => {
-            if (typeof reader.result !== 'string') {
-              throw new Error('Expected reader.result to be a string')
-            }
-            resolve(reader.result)
-          })
-        })
-        reader.readAsText(file)
-        const fileContents = await fileContentsPromise
-
-        let symbolRemapper: SymbolRemapper | null = null
-
-        const emscriptenSymbolRemapper = importEmscriptenSymbolRemapper(fileContents)
-        if (emscriptenSymbolRemapper) {
-          console.log('Importing as emscripten symbol map')
-          symbolRemapper = emscriptenSymbolRemapper
-        }
-
-        const jsSourceMapRemapper = await importJavaScriptSourceMapSymbolRemapper(
-          fileContents,
-          file.name,
-        )
-        if (!symbolRemapper && jsSourceMapRemapper) {
-          console.log('Importing as JavaScript source map')
-          symbolRemapper = jsSourceMapRemapper
-        }
-
-        if (symbolRemapper != null) {
-          return {
-            name: this.props.profileGroup.name || 'profile',
-            indexToView: this.props.profileGroup.indexToView,
-            profiles: this.props.profileGroup.profiles.map(profileState => {
-              // We do a shallow clone here to invalidate certain caches keyed
-              // on a reference to the profile group under the assumption that
-              // profiles are immutable. Symbol remapping is (at time of
-              // writing) the only exception to that immutability.
-              const p = profileState.profile.shallowClone()
-              p.remapSymbols(symbolRemapper!)
-              return p
-            }),
-          }
-        }
-      }
-
-      return null
-    })
-  }
-
-  loadExample = () => {
-    this.loadProfile(async () => {
-      const filename = 'perf-vertx-stacks-01-collapsed-all.txt'
-      const data = await fetch(exampleProfileURL).then(resp => resp.text())
-      const ret = await importProfilesFromText(filename, data)
-      console.log(ret);
+      let f = await fetch("/current");
+      let j: IApiData = await f.json();
+      let ret: ProfileGroup = {};
       return ret;
     })
-  }
-
-  onDrop = (ev: DragEvent) => {
-    this.props.setDragActive(false)
-    ev.preventDefault()
-
-    if (!ev.dataTransfer) return
-
-    const firstItem = ev.dataTransfer.items[0]
-    if ('webkitGetAsEntry' in firstItem) {
-      const webkitEntry: FileSystemDirectoryEntry = firstItem.webkitGetAsEntry()
-
-      // Instrument.app file format is actually a directory.
-      if (webkitEntry.isDirectory && webkitEntry.name.endsWith('.trace')) {
-        console.log('Importing as Instruments.app .trace file')
-        this.loadProfile(async () => {
-          return await importFromFileSystemDirectoryEntry(webkitEntry)
-        })
-        return
-      }
-    }
-
-    let file: File | null = ev.dataTransfer.files.item(0)
-    if (file) {
-      this.loadFromFile(file)
-    }
-  }
-
-  onDragOver = (ev: DragEvent) => {
-    this.props.setDragActive(true)
-    ev.preventDefault()
-  }
-
-  onDragLeave = (ev: DragEvent) => {
-    this.props.setDragActive(false)
-    ev.preventDefault()
   }
 
   onWindowKeyPress = async (ev: KeyboardEvent) => {
@@ -371,13 +242,6 @@ export class Application extends StatelessComponent<ApplicationProps> {
     }
   }
 
-  private browseForFile = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.addEventListener('change', this.onFileSelect)
-    input.click()
-  }
-
   private onWindowKeyDown = async (ev: KeyboardEvent) => {
     // This has to be handled on key down in order to prevent the default
     // page save action.
@@ -386,75 +250,17 @@ export class Application extends StatelessComponent<ApplicationProps> {
       this.saveFile()
     } else if (ev.key === 'o' && (ev.ctrlKey || ev.metaKey)) {
       ev.preventDefault()
-      this.browseForFile()
     }
-  }
-
-  onDocumentPaste = (ev: Event) => {
-    if (document.activeElement != null && document.activeElement.nodeName === 'INPUT') return
-
-    ev.preventDefault()
-    ev.stopPropagation()
-
-    const clipboardData = (ev as ClipboardEvent).clipboardData
-    if (!clipboardData) return
-    const pasted = clipboardData.getData('text')
-    this.loadProfile(async () => {
-      return await importProfilesFromText('From Clipboard', pasted)
-    })
   }
 
   componentDidMount() {
     window.addEventListener('keydown', this.onWindowKeyDown)
     window.addEventListener('keypress', this.onWindowKeyPress)
-    document.addEventListener('paste', this.onDocumentPaste)
-    this.maybeLoadHashParamProfile()
   }
 
   componentWillUnmount() {
     window.removeEventListener('keydown', this.onWindowKeyDown)
     window.removeEventListener('keypress', this.onWindowKeyPress)
-    document.removeEventListener('paste', this.onDocumentPaste)
-  }
-
-  async maybeLoadHashParamProfile() {
-    const {profileURL} = this.props.hashParams;
-    if (profileURL) {
-      if (!canUseXHR) {
-        alert(
-          `Cannot load a profile URL when loading from "${window.location.protocol}" URL protocol`,
-        )
-        return
-      }
-      this.loadProfile(async () => {
-        const response: Response = await fetch(profileURL)
-        let filename = new URL(profileURL, window.location.href).pathname
-        if (filename.includes('/')) {
-          filename = filename.slice(filename.lastIndexOf('/') + 1)
-        }
-        return await importProfilesFromArrayBuffer(filename, await response.arrayBuffer())
-      })
-    } else if (this.props.hashParams.localProfilePath) {
-      // There isn't good cross-browser support for XHR of local files, even from
-      // other local files. To work around this restriction, we load the local profile
-      // as a JavaScript file which will invoke a global function.
-      ;(window as any)['speedscope'] = {
-        loadFileFromBase64: (filename: string, base64source: string) => {
-          this.loadProfile(() => importProfilesFromBase64(filename, base64source))
-        },
-      }
-
-      const script = document.createElement('script')
-      script.src = `file:///${this.props.hashParams.localProfilePath}`
-      document.head.appendChild(script)
-    }
-  }
-
-  onFileSelect = (ev: Event) => {
-    const file = (ev.target as HTMLInputElement).files!.item(0)
-    if (file) {
-      this.loadFromFile(file)
-    }
   }
 
   renderLanding() {
@@ -463,6 +269,10 @@ export class Application extends StatelessComponent<ApplicationProps> {
     return (
       <div className={css(style.landingContainer)}>
         <div className={css(style.landingMessage)}>
+          <p className={css(style.landingP)}>
+            Hi
+          </p>
+{/* 
           <p className={css(style.landingP)}>
             👋 Hi there! Welcome to 🔬speedscope, an interactive{' '}
             <a
@@ -524,7 +334,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
               report any issues on GitHub
             </a>
             .
-          </p>
+          </p> */}
         </div>
       </div>
     )
@@ -580,9 +390,6 @@ export class Application extends StatelessComponent<ApplicationProps> {
     const style = this.getStyle()
     return (
       <div
-        onDrop={this.onDrop}
-        onDragOver={this.onDragOver}
-        onDragLeave={this.onDragLeave}
         className={css(style.root, this.props.dragActive && style.dragTargetRoot)}
       >
         <GLCanvas
@@ -592,7 +399,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
         />
         <Toolbar
           saveFile={this.saveFile}
-          browseForFile={this.browseForFile}
+          browseForFile={() => {}}
           {...(this.props as ApplicationProps)}
         />
         <div className={css(style.contentContainer)}>{this.renderContent()}</div>

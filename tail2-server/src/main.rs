@@ -3,6 +3,7 @@ use rocket_dyn_templates::Template;
 
 extern crate rocket;
 
+pub mod state;
 pub mod routes;
 pub mod error;
 
@@ -33,10 +34,11 @@ async fn main() {
 
     setup_logger().unwrap();
 
-    let r = rocket::build();
-    let r = r.mount("/", FileServer::from(relative!("./flamegraph")));
-    let r = r.attach(Template::fairing());
-    let r = r.mount("/", routes::routes());
+    let r = rocket::build()
+        .mount("/", routes::routes())
+        .mount("/", FileServer::from(relative!("./flamegraph")))
+        .manage(state::CurrentCallTree::new())
+        .attach(Template::fairing());
 
     let _ = r.launch().await.unwrap();
 }
