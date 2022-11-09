@@ -35,6 +35,7 @@ symbolic = { version = "10.1.1", features = [ "demangle" ] }
 lru = "0.8.1"
 lazy_static = "1.4.0"
 itertools = "0.10.5"
+indextree = "4.5.0"
 
 [features]
 server = ["rocket"]

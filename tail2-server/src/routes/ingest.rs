@@ -8,7 +8,6 @@ fn stack(var: tail2::dto::StackBatchDto) -> Result<Status> {
     Ok(Status::Ok)
 }
 
-
 pub fn routes() -> Vec<Route> {
     rocket::routes![
         stack,
