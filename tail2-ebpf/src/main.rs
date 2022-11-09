@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![allow(nonstandard_style, dead_code)]
+#![allow(unused, nonstandard_style, dead_code)]
 
 mod unwinding;
 

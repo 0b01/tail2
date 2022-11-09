@@ -1,22 +1,20 @@
 import {h} from 'preact'
 import {StyleSheet, css} from 'aphrodite'
 
-import {ProfileGroup, SymbolRemapper} from '../lib/profile'
+import {CallTreeNode, Frame, Profile, ProfileGroup} from '../lib/profile'
 import {FontFamily, FontSize, Duration} from './style'
-import {importEmscriptenSymbolMap as importEmscriptenSymbolRemapper} from '../lib/emscripten'
 import {SandwichViewContainer} from './sandwich-view'
 import {saveToFile} from '../lib/file-format'
 import {ActiveProfileState} from '../app-state/active-profile-state'
 import {LeftHeavyFlamechartView, ChronoFlamechartView} from './flamechart-view-container'
 import {CanvasContext} from '../gl/canvas-context'
 import {Toolbar} from './toolbar'
-import {importJavaScriptSourceMapSymbolRemapper} from '../lib/js-source-map'
 import {Theme, withTheme} from './themes/theme'
 import {ViewMode} from '../lib/view-mode'
-import {canUseXHR} from '../app-state'
 import {ProfileGroupState} from '../app-state/profile-group'
 import {HashParams} from '../lib/hash-params'
 import {StatelessComponent} from '../lib/preact-helpers'
+import { lastOf } from '../lib/utils'
 
 // Force eager loading of a few code-split modules.
 //
@@ -26,7 +24,6 @@ import('../lib/demangle-cpp').then(() => {})
 import('source-map').then(() => {})
 
 declare function require(x: string): any
-const exampleProfileURL = require('../../sample/profiles/stackcollapse/perf-vertx-stacks-01-collapsed-all.txt')
 
 interface GLCanvasProps {
   canvasContext: CanvasContext | null
@@ -196,13 +193,52 @@ export class Application extends StatelessComponent<ApplicationProps> {
       item: { offset: number },
       total_samples: number,
       self_samples: number,
-      children: IApiData[]
+      children: IApiData[] | null,
+    }
+
+    function convert(root: IApiData): Profile {
+      if (!root.children) throw new Error();
+      const sum = root.children.reduce((n, i) => i.total_samples + n, 0);
+      const prof = new Profile(sum);
+      prof.setName("a");
+
+      let root_node = new CallTreeNode(Frame.root, null);
+
+      function aux(converted: CallTreeNode, node: IApiData): CallTreeNode {
+        prof.samples.push(converted);
+        prof.weights.push(node.self_samples);
+
+        const frame = Frame.getOrInsert(prof.frames, {
+          key: node.item.offset,
+          name: node.item.offset.toString(),
+        });
+        frame.addToSelfWeight(node.self_samples);
+        frame.addToTotalWeight(node.total_samples);
+        const new_node = new CallTreeNode(frame, converted);
+        new_node.addToSelfWeight(node.self_samples);
+        new_node.addToTotalWeight(node.total_samples);
+        // console.log(node);
+        if (!node.children) { return converted; }
+        for (let child of node.children) {
+          converted.children.push(aux(new_node, child));
+        }
+        return converted;
+      }
+
+      aux(root_node, root);
+      return prof;
     }
 
     this.loadProfile(async () => {
       let f = await fetch("/current");
       let j: IApiData = await f.json();
-      let ret: ProfileGroup = {};
+      let prof = convert(j);
+      console.log(prof);
+      let ret: ProfileGroup = {
+        name: "default",
+        indexToView: 0,
+        profiles: [prof],
+      };
       return ret;
     })
   }
@@ -270,7 +306,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
       <div className={css(style.landingContainer)}>
         <div className={css(style.landingMessage)}>
           <p className={css(style.landingP)}>
-            Hi
+            <a onClick={() => this.loadFromApi()}>start</a>
           </p>
 {/* 
           <p className={css(style.landingP)}>

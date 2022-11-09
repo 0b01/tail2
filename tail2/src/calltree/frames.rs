@@ -49,7 +49,7 @@ impl<T: Copy + Default + Eq + Serialize> CallTree<T> {
                 let mut found = false;
                 for my_child in &my_children {
                     let my_frame = self.arena.get_mut(*my_child).unwrap().get_mut();
-                    if my_frame.item == my_frame.item {
+                    if my_frame.item == other_frame.item {
                         found = true;
                         my_frame.total_samples += other_frame.total_samples;
                         my_frame.self_samples += other_frame.self_samples;

@@ -1,3 +1,4 @@
+#![allow(unused)]
 use rocket::fs::{FileServer, relative};
 use rocket_dyn_templates::Template;
 

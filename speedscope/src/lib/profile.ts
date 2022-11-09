@@ -64,7 +64,7 @@ export class Frame extends HasWeights {
   // Column in the file
   col?: number
 
-  private constructor(info: FrameInfo) {
+  public constructor(info: FrameInfo) {
     super()
     this.key = info.key
     this.name = info.name
@@ -109,6 +109,7 @@ export interface ProfileGroup {
   indexToView: number
   profiles: Profile[]
 }
+
 
 export class Profile {
   protected name: string = ''
@@ -438,6 +439,7 @@ export class Profile {
   }
 }
 
+
 export class StackListProfileBuilder extends Profile {
   _appendSample(stack: FrameInfo[], weight: number, useAppendOrder: boolean) {
     if (isNaN(weight)) throw new Error('invalid weight')
@@ -543,148 +545,6 @@ export class StackListProfileBuilder extends Profile {
       this.totalWeight,
       this.weights.reduce((a, b) => a + b, 0),
     )
-    this.sortGroupedCallTree()
-    return this
-  }
-}
-
-// As an alternative API for importing profiles more efficiently, provide a
-// way to open & close frames directly without needing to construct tons of
-// arrays as intermediaries.
-export class CallTreeProfileBuilder extends Profile {
-  private appendOrderStack: CallTreeNode[] = [this.appendOrderCalltreeRoot]
-  private groupedOrderStack: CallTreeNode[] = [this.groupedCalltreeRoot]
-  private framesInStack = new Map<Frame, number>()
-  private stack: Frame[] = []
-
-  private lastValue: number = 0
-  private addWeightsToFrames(value: number) {
-    const delta = value - this.lastValue
-    for (let frame of this.framesInStack.keys()) {
-      frame.addToTotalWeight(delta)
-    }
-    const stackTop = lastOf(this.stack)
-    if (stackTop) {
-      stackTop.addToSelfWeight(delta)
-    }
-  }
-  private addWeightsToNodes(value: number, stack: CallTreeNode[]) {
-    const delta = value - this.lastValue
-    for (let node of stack) {
-      node.addToTotalWeight(delta)
-    }
-    const stackTop = lastOf(stack)
-    if (stackTop) {
-      stackTop.addToSelfWeight(delta)
-    }
-  }
-
-  private _enterFrame(frame: Frame, value: number, useAppendOrder: boolean) {
-    let stack = useAppendOrder ? this.appendOrderStack : this.groupedOrderStack
-    this.addWeightsToNodes(value, stack)
-
-    let prevTop = lastOf(stack)
-
-    if (prevTop) {
-      if (useAppendOrder) {
-        const delta = value - this.lastValue
-        if (delta > 0) {
-          this.samples.push(prevTop)
-          this.weights.push(value - this.lastValue)
-        } else if (delta < 0) {
-          throw new Error(
-            `Samples must be provided in increasing order of cumulative value. Last sample was ${this.lastValue}, this sample was ${value}`,
-          )
-        }
-      }
-
-      const last = useAppendOrder
-        ? lastOf(prevTop.children)
-        : prevTop.children.find(c => c.frame === frame)
-      let node: CallTreeNode
-      if (last && !last.isFrozen() && last.frame == frame) {
-        node = last
-      } else {
-        node = new CallTreeNode(frame, prevTop)
-        prevTop.children.push(node)
-      }
-      stack.push(node)
-    }
-  }
-  enterFrame(frameInfo: FrameInfo, value: number) {
-    const frame = Frame.getOrInsert(this.frames, frameInfo)
-    this.addWeightsToFrames(value)
-    this._enterFrame(frame, value, true)
-    this._enterFrame(frame, value, false)
-
-    this.stack.push(frame)
-    const frameCount = this.framesInStack.get(frame) || 0
-    this.framesInStack.set(frame, frameCount + 1)
-    this.lastValue = value
-    this.totalWeight = Math.max(this.totalWeight, this.lastValue)
-  }
-
-  private _leaveFrame(frame: Frame, value: number, useAppendOrder: boolean) {
-    let stack = useAppendOrder ? this.appendOrderStack : this.groupedOrderStack
-    this.addWeightsToNodes(value, stack)
-
-    if (useAppendOrder) {
-      const leavingStackTop = this.appendOrderStack.pop()
-      if (leavingStackTop == null) {
-        throw new Error(`Trying to leave ${frame.key} when stack is empty`)
-      }
-      if (this.lastValue == null) {
-        throw new Error(`Trying to leave a ${frame.key} before any have been entered`)
-      }
-      leavingStackTop.freeze()
-
-      if (leavingStackTop.frame.key !== frame.key) {
-        throw new Error(
-          `Tried to leave frame "${frame.name}" while frame "${leavingStackTop.frame.name}" was at the top at ${value}`,
-        )
-      }
-
-      const delta = value - this.lastValue
-      if (delta > 0) {
-        this.samples.push(leavingStackTop)
-        this.weights.push(value - this.lastValue)
-      } else if (delta < 0) {
-        throw new Error(
-          `Samples must be provided in increasing order of cumulative value. Last sample was ${this
-            .lastValue!}, this sample was ${value}`,
-        )
-      }
-    } else {
-      this.groupedOrderStack.pop()
-    }
-  }
-
-  leaveFrame(frameInfo: FrameInfo, value: number) {
-    const frame = Frame.getOrInsert(this.frames, frameInfo)
-    this.addWeightsToFrames(value)
-
-    this._leaveFrame(frame, value, true)
-    this._leaveFrame(frame, value, false)
-
-    this.stack.pop()
-    const frameCount = this.framesInStack.get(frame)
-    if (frameCount == null) return
-    if (frameCount === 1) {
-      this.framesInStack.delete(frame)
-    } else {
-      this.framesInStack.set(frame, frameCount - 1)
-    }
-    this.lastValue = value
-
-    this.totalWeight = Math.max(this.totalWeight, this.lastValue)
-  }
-
-  build(): Profile {
-    // Each stack is expected to contain a single node which we initialize to be
-    // the root node.
-    if (this.appendOrderStack.length > 1 || this.groupedOrderStack.length > 1) {
-      throw new Error('Tried to complete profile construction with a non-empty stack')
-    }
     this.sortGroupedCallTree()
     return this
   }
