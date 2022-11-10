@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
             }
             return Ok(());
         },
-        Commands::Sample { pid } => {
+        Commands::Sample { pid , period} => {
             ensure_root();
             let pid = pid.map(|i| if i == 0 {process::id() as i32} else {i});
 
@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
                     PerfTypeId::Software,
                     perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
                     scope,
-                    SamplePolicy::Frequency(4_000),
+                    SamplePolicy::Period(period.unwrap_or(40_000)),
                 )?;
             }
 

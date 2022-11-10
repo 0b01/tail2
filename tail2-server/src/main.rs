@@ -1,6 +1,7 @@
 #![allow(unused)]
 use rocket::fs::{FileServer, relative};
 use rocket_dyn_templates::Template;
+use tail2::symbolication::elf::ElfCache;
 
 extern crate rocket;
 

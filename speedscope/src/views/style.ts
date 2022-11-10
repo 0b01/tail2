@@ -1,7 +1,7 @@
 import {StyleSheet} from 'aphrodite'
 
 export enum FontFamily {
-  MONOSPACE = '"Source Code Pro", Courier, monospace',
+  MONOSPACE = 'Source Code Pro',
 }
 
 export enum FontSize {
@@ -11,13 +11,13 @@ export enum FontSize {
 }
 
 export enum Sizes {
-  MINIMAP_HEIGHT = 100,
+  MINIMAP_HEIGHT = 50,
   DETAIL_VIEW_HEIGHT = 150,
   TOOLTIP_WIDTH_MAX = 900,
   TOOLTIP_HEIGHT_MAX = 80,
   SEPARATOR_HEIGHT = 2,
   FRAME_HEIGHT = 20,
-  TOOLBAR_HEIGHT = 20,
+  TOOLBAR_HEIGHT = 0,
   TOOLBAR_TAB_HEIGHT = TOOLBAR_HEIGHT - SEPARATOR_HEIGHT,
 }
 

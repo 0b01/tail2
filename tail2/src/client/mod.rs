@@ -50,7 +50,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mu
     let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
         "http://127.0.0.1:8000/stack",
         Arc::clone(&module_cache),
-        4,
+        400,
     )));
 
     // receiver thread
@@ -63,11 +63,9 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mu
 
             let cli2 = Arc::clone(&cli);
             tokio::spawn(async move {
-                info!("posting");
                 if let Err(e) = cli2.lock().await.post_stack(st).await {
                     error!("sending stack failed: {}", e.to_string());
                 }
-                info!("done");
             });
 
             let elapsed = SystemTime::now().duration_since(start_time).unwrap();

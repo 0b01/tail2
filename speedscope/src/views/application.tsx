@@ -184,40 +184,46 @@ export class Application extends StatelessComponent<ApplicationProps> {
   }
 
   loadFromApi() {
-    interface IApiData<T> {
+    interface ICallTree<T> {
       item: T,
       total_samples: number,
       self_samples: number,
-      children: IApiData<T>[] | null,
+      children: ICallTree<T>[] | null,
     }
 
-    function convert(root: IApiData<string>): Profile {
-      if (!root.children) throw new Error();
+    type CallTree = ICallTree<{
+      name: string,
+    } | null>
+
+    function convert(root: CallTree): Profile {
+      if (!root.children) {
+        return new Profile(0);
+      }
+
       const sum = root.children.reduce((n, i) => i.total_samples + n, 0);
       const prof = new Profile(sum);
       prof.setName("a");
 
       let root_node = new CallTreeNode(Frame.root, null);
 
-      function aux(converted: CallTreeNode, node: IApiData<string>): CallTreeNode {
-        prof.samples.push(converted);
-        prof.weights.push(node.self_samples);
-
-        const frame = Frame.getOrInsert(prof.frames, {
-          key: node.item,
-          name: node.item.toString(),
+      function aux(curr: CallTreeNode, curr_node: CallTree): CallTreeNode {
+        curr.frame = Frame.getOrInsert(prof.frames, {
+          key: curr_node.item?.name ?? "(unk)",
+          name: curr_node.item?.name ?? "(unk)",
         });
-        frame.addToSelfWeight(node.self_samples);
-        frame.addToTotalWeight(node.total_samples);
-        const new_node = new CallTreeNode(frame, converted);
-        new_node.addToSelfWeight(node.self_samples);
-        new_node.addToTotalWeight(node.total_samples);
-        // console.log(node);
-        if (!node.children) { return converted; }
-        for (let child of node.children) {
-          converted.children.push(aux(new_node, child));
+        curr.frame.addToSelfWeight(curr_node.self_samples);
+        curr.frame.addToTotalWeight(curr_node.total_samples);
+
+        if (curr_node.total_samples > 0) {
+          prof.samples.push(curr);
+          prof.weights.push(curr_node.self_samples);
         }
-        return converted;
+
+        for (let child_node of curr_node.children ?? []) {
+          const child_ctn = new CallTreeNode(Frame.root, curr);
+          aux(child_ctn, child_node);
+        }
+        return curr;
       }
 
       aux(root_node, root);
@@ -226,7 +232,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
 
     var load = async () => {
       let f = await fetch("/current");
-      let j: IApiData<string> = await f.json();
+      let j: CallTree = await f.json();
       let profile = convert(j);
       console.log(profile);
       let ret: ProfileGroup = {
@@ -236,7 +242,12 @@ export class Application extends StatelessComponent<ApplicationProps> {
       return ret;
     };
 
-    setInterval(() => this.loadProfile(load), 1000);
+    const evtSource = new EventSource("/events");
+    console.log(evtSource);
+    evtSource.onmessage = (event) => {
+      console.log(event);
+      this.loadProfile(load);
+    };
   }
 
   onWindowKeyPress = async (ev: KeyboardEvent) => {
@@ -402,6 +413,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
     return (
       <div
         className={css(style.root, this.props.dragActive && style.dragTargetRoot)}
+        // style={{maxWidth:"300px", maxHeight:"300px"}}
       >
         <GLCanvas
           setGLCanvas={this.props.setGLCanvas}

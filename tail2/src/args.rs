@@ -16,6 +16,8 @@ pub enum Commands {
     Sample {
         #[clap(short, long)]
         pid: Option<i32>,
+        #[clap(short, long)]
+        period: Option<u64>,
     },
     /// Listen to alloc events
     Alloc {

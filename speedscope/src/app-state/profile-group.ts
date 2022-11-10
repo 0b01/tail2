@@ -66,6 +66,7 @@ export class ProfileGroupAtom extends Atom<ProfileGroupState> {
 
   setProfileGroup = (group: ProfileGroup) => {
     const p = group.profile;
+    console.log(this.state?.profile.chronoViewState);
     this.set({
       name: group.name,
       profile: {

@@ -375,7 +375,7 @@ export class FlamechartPanZoomView extends Component<FlamechartPanZoomViewProps,
       )
     }
 
-    this.renderTimeIndicators()
+    // this.renderTimeIndicators()
   }
 
   private renderTimeIndicators() {

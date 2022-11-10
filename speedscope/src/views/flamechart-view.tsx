@@ -87,7 +87,7 @@ export class FlamechartView extends StatelessComponent<FlamechartViewProps> {
     return (
       <Hovertip containerSize={new Vec2(width, height)} offset={offset}>
         <span className={css(style.hoverCount)}>
-          {this.formatValue(hover.node.getTotalWeight())}
+          {this.formatValue(hover.node.frame.getTotalWeight())}
         </span>{' '}
         {frame.name}
         {frame.file ? (
