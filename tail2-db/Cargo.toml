@@ -1,0 +1,13 @@
+[package]
+name = "tail2-db"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+tokio = "1.0"
+anyhow = "*"
+arrow-array = "26.0.0"
+arrow-schema = "26.0.0"

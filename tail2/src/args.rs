@@ -14,8 +14,10 @@ pub enum Commands {
     },
     /// Sample
     Sample {
+        /// Pid to listen to, if not supplied, listen for events system wide
+        /// If it's 0, listen to the tail2 agent itself
         #[clap(short, long)]
-        pid: Option<i32>,
+        pid: Option<u32>,
         #[clap(short, long)]
         period: Option<u64>,
     },

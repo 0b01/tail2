@@ -59,13 +59,17 @@ async fn main() -> Result<()> {
         },
         Commands::Sample { pid , period} => {
             ensure_root();
-            let pid = pid.map(|i| if i == 0 {process::id() as i32} else {i});
-
             let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
             program.load().unwrap();
             for cpu in online_cpus()? {
                 let scope = pid
-                    .map(|pid| PerfEventScope::OneProcessOneCpu { cpu, pid: pid as u32  })
+                    .map(|pid| {
+                        let pid = match pid {
+                            0 => process::id(),
+                            _ => pid,
+                        };
+                        PerfEventScope::OneProcessOneCpu { cpu, pid }
+                    })
                     .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
                 program.attach(
                     PerfTypeId::Software,
@@ -86,7 +90,11 @@ async fn main() -> Result<()> {
         },
         Commands::Alloc { pid } => {
             ensure_root();
-            let pid = pid.map(|i| if i == 0 {process::id() as i32} else {i});
+            let pid = pid.map(|pid| 
+                match pid {
+                    0 => process::id() as i32,
+                    _ => pid as i32,
+                });
 
             let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
             program.load().unwrap();
