@@ -13,6 +13,9 @@ pub struct Options {
     /// Build and run the release target
     #[clap(long)]
     pub release: bool,
+    /// Build only
+    #[clap(long)]
+    pub build: bool,
     /// The command used to wrap your application
     #[clap(short, long, default_value = "sudo -E")]
     pub runner: String,
@@ -26,6 +29,7 @@ fn build(opts: &Options) -> Result<(), anyhow::Error> {
     let mut args = vec!["build",
         "-p", "tail2",
         "-p", "tail2-server",
+        "--verbose"
     ];
     if opts.release {
         args.push("--release")
@@ -47,6 +51,10 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     })
     .context("Error while building eBPF program")?;
     build(&opts).context("Error while building userspace application")?;
+
+    if opts.build {
+        return Ok(());
+    }
 
     // profile we are building (release or debug)
     let profile = if opts.release { "release" } else { "debug" };
