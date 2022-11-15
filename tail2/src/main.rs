@@ -99,6 +99,7 @@ async fn main() -> Result<()> {
             let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
             program.load().unwrap();
             program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+            info!("loaded");
 
             spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
             let ts = run_bpf(&mut bpf, stop_rx, module_cache)?;

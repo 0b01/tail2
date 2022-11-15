@@ -24,5 +24,11 @@ cargo build
 ## Run
 
 ```bash
-cargo xtask run
+npm run watch
+cargo xtask run -- sample --pid $(pidof parade)
 ```
+
+## Troubleshooting
+
+Error: `"failed to create map"`
+Solution: ```ulimit -l unlimited```

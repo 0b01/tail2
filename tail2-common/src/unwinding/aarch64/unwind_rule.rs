@@ -334,7 +334,7 @@ pub(crate) fn translate_into_unwind_rule<R: gimli::Reader>(
 }
 
 #[cfg(feature="user")]
-fn register_rule_to_cfa_offset<R: gimli::Reader>(
+pub(crate) fn register_rule_to_cfa_offset<R: gimli::Reader>(
     rule: &RegisterRule<R>,
 ) -> Result<Option<i64>, ConversionError> {
     match *rule {

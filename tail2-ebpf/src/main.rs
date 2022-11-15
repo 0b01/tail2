@@ -2,17 +2,21 @@
 #![no_main]
 #![allow(unused, nonstandard_style, dead_code)]
 
-mod unwinding;
-
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
     helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user},
     maps::{HashMap, PerCpuArray, PerfEventArray},
-    bindings::{bpf_pidns_info, user_pt_regs, task_struct}, BpfContext
+    bindings::{bpf_pidns_info, pt_regs, task_struct}, BpfContext
 };
-use aya_log_ebpf::error;
-use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, MAX_USER_STACK};
+use aya_log_ebpf::{error, info};
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK};
+use tail2_common::unwinding::x86_64::unwindregs::UnwindRegsX86_64;
+
+#[cfg(feature = "x86_64")]
+type UnwindRule = UnwindRuleX86_64;
+#[cfg(feature = "aarch64")]
+type UnwindRule = UnwindRuleAarch64;
 
 #[map(name="STACKS")]
 static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
@@ -41,6 +45,7 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 }
 
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
+    info!(ctx, "test");
     // let sz = ctx.arg(0).unwrap();
     let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigMapKey::INO as u32)) }.copied().unwrap_or(1);
@@ -55,12 +60,11 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
         st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
         let task: *mut task_struct = unsafe { bpf_get_current_task_btf() };
-        let regs: *const user_pt_regs = unsafe { bpf_task_pt_regs(task) } as *const user_pt_regs;
-        let pc = unsafe { (*regs).pc };
-        let mut regs = UnwindRegsAarch64::new(
-            unsafe { (*regs).regs[30] },
-            unsafe { (*regs).sp },
-            unsafe { (*regs).regs[29] });
+        let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
+
+        let pc = get_pc(regs);
+        let mut regs = get_regs(regs); {
+        };
 
         unwind(ctx, st, pc, &mut regs);
 
@@ -74,7 +78,7 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     0
 }
 
-fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegsAarch64) -> Option<()> {
+fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegsX86_64) -> Option<()> {
     let proc_info = unsafe { PIDS.get(&st.pid())? };
 
     let mut read_stack = |addr: u64| {
@@ -85,7 +89,7 @@ fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs
     let mut is_first_frame = true;
     st.user_stack[0] = pc;
     for i in 1..MAX_USER_STACK {
-        let idx = binary_search(&proc_info.rows, frame, proc_info.rows_len)?;
+        let idx = binary_search(proc_info.rows.as_slice(), frame, proc_info.rows_len)?;
         let rule = proc_info.rows[idx].1;
 
         match rule.exec(is_first_frame, regs, &mut read_stack) {
@@ -110,7 +114,7 @@ fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs
 }
 
 /// binary search routine that passes the bpf verifier
-fn binary_search(rows: &[(u64, UnwindRuleAarch64)], pc: u64, right: usize) -> Option<usize> {
+fn binary_search(rows: &[(u64, UnwindRule)], pc: u64, right: usize) -> Option<usize> {
     let mut left = 0;
     let mut right = right;
     let mut found = 0;
@@ -145,4 +149,27 @@ pub fn incr_sent_stacks() {
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe { core::hint::unreachable_unchecked() }
+}
+
+#[cfg(feature = "x86_64")]
+fn get_pc(regs: *const pt_regs) -> u64 {
+    unsafe { (*regs).rip }
+}
+#[cfg(feature = "aarch64")]
+fn get_pc(regs: *const user_pt_regs) -> u64 {
+    unsafe { (*regs).pc }
+}
+#[cfg(feature = "aarch64")]
+fn get_regs(regs: *const user_pt_regs) -> UnwindRegsAarch64 {
+    UnwindRegsAarch64::new(
+        unsafe { (*regs).regs[30] },
+        unsafe { (*regs).sp },
+        unsafe { (*regs).regs[29] })
+}
+#[cfg(feature = "x86_64")]
+fn get_regs(regs: *const pt_regs) -> UnwindRegsX86_64 {
+    UnwindRegsX86_64::new(
+        unsafe { (*regs).rip },
+        unsafe { (*regs).rsp },
+        unsafe { (*regs).rbp })
 }

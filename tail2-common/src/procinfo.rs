@@ -1,11 +1,20 @@
-use crate::{runtime_type::RuntimeType, unwinding::aarch64::unwind_rule::UnwindRuleAarch64};
+use crate::{
+    runtime_type::RuntimeType,
+    unwinding::aarch64::unwind_rule::UnwindRuleAarch64,
+    unwinding::x86_64::unwind_rule::UnwindRuleX86_64,
+};
 
 /// 2 ^ 20
 pub const MAX_ROWS_PER_PROC: usize = 130_000;
 
+#[cfg(feature = "x86_64")]
+type UnwindRule = UnwindRuleX86_64;
+#[cfg(feature = "aarch64")]
+type UnwindRule = UnwindRuleAarch64;
+
 #[derive(Debug, Clone, Copy)]
 pub struct ProcInfo {
-    pub rows: [(u64, UnwindRuleAarch64); MAX_ROWS_PER_PROC],
+    pub rows: [(u64, UnwindRule); MAX_ROWS_PER_PROC],
     pub rows_len: usize,
     pub runtime_type: RuntimeType,
 }
@@ -43,10 +52,20 @@ impl ProcInfo {
 
 #[cfg(feature = "user")]
 pub mod user {
+
+    #[cfg(feature = "x86_64")]
+    type UnwindTable = crate::unwinding::x86_64::unwind_table::UnwindTable;
+    #[cfg(feature = "aarch64")]
+    type UnwindRule = crate::unwinding::aarch64::unwind_table::UnwindTable;
+    #[cfg(feature = "x86_64")]
+    type UnwindTableRow = crate::unwinding::x86_64::unwind_table::UnwindTableRow;
+    #[cfg(feature = "aarch64")]
+    type UnwindRuleRow = crate::unwinding::aarch64::unwind_table::UnwindTableRow;
+
     use core::{str::from_utf8_unchecked, cell::RefCell};
     use std::{path::{PathBuf, Path}, io::{BufReader, Read}, fs::File};
 
-    use crate::{runtime_type::PythonVersion, unwinding::aarch64::unwind_table::{UnwindTable, UnwindTableRow}};
+    use crate::{runtime_type::PythonVersion};
     const BUFSIZ: usize = 4096;
 
     use super::*;

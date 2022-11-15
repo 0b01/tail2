@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::{sync::Arc, fmt::Debug};
 
 use symbolic::{common::{ByteView}, debuginfo::{elf::ElfObject, ObjectKind}};
+#[cfg(target_arch="aarch64")]
 use tail2_common::unwinding::aarch64::unwind_table::UnwindTable;
+#[cfg(target_arch="x86_64")]
+use tail2_common::unwinding::x86_64::unwind_table::UnwindTable;
 
 #[derive(Serialize, Deserialize)]
 pub struct Module {

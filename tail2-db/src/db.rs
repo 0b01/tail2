@@ -18,7 +18,7 @@ macro_rules! lit_and_ms {
         (stringify!($lit), $lit)
     };
 }
-const SCALES: [(&'static str, u64); 9] = [
+const SCALES: [(&'static str, u64); 10] = [
     lit_and_ms!(0),
     lit_and_ms!(S),
     lit_and_ms!(S10),
@@ -63,12 +63,12 @@ impl Database {
         })
     }
 
-    pub fn insert(&mut self, ts: u64, call_tree: ()) {
-        // check each scale, if time has passed, we calculate last
-        for ((int, arr), (_, last)) in self.builders.iter().zip(self.lasts) {
-            // if last 
-        }
-    }
+    // pub fn insert(&mut self, ts: u64, call_tree: ()) {
+    //     // check each scale, if time has passed, we calculate last
+    //     for ((int, arr), (_, last)) in self.builders.iter().zip(self.lasts) {
+    //         // if last 
+    //     }
+    // }
 }
 
 // #[cfg(test)]

@@ -62,6 +62,6 @@ impl Processes {
             })
             .collect::<Vec<_>>();
 
-        ProcInfo::build(&paths)
+        ProcInfo::build(paths.as_slice())
     }
 }

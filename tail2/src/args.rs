@@ -18,7 +18,7 @@ pub enum Commands {
         /// If it's 0, listen to the tail2 agent itself
         #[clap(short, long)]
         pid: Option<u32>,
-        #[clap(short, long)]
+        #[clap(long)]
         period: Option<u64>,
     },
     /// Listen to alloc events
