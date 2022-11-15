@@ -16,6 +16,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: +nightly
+      run: rustup install nightly
+    -name: install bpf-linker
+      run: cargo install bpf-linker
     - name: Build
       run: cargo build --verbose && cargo xtask run --build
     - name: Run tests
