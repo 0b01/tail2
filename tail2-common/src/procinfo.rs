@@ -56,11 +56,11 @@ pub mod user {
     #[cfg(feature = "x86_64")]
     type UnwindTable = crate::unwinding::x86_64::unwind_table::UnwindTable;
     #[cfg(feature = "aarch64")]
-    type UnwindRule = crate::unwinding::aarch64::unwind_table::UnwindTable;
+    type UnwindTable = crate::unwinding::aarch64::unwind_table::UnwindTable;
     #[cfg(feature = "x86_64")]
     type UnwindTableRow = crate::unwinding::x86_64::unwind_table::UnwindTableRow;
     #[cfg(feature = "aarch64")]
-    type UnwindRuleRow = crate::unwinding::aarch64::unwind_table::UnwindTableRow;
+    type UnwindTableRow = crate::unwinding::aarch64::unwind_table::UnwindTableRow;
 
     use core::{str::from_utf8_unchecked, cell::RefCell};
     use std::{path::{PathBuf, Path}, io::{BufReader, Read}, fs::File};

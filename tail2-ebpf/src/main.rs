@@ -14,6 +14,11 @@ use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, procinfo::
 use tail2_common::unwinding::x86_64::unwindregs::UnwindRegsX86_64;
 
 #[cfg(feature = "x86_64")]
+type UnwindRegs = UnwindRegsX86_64;
+#[cfg(feature = "aarch64")]
+type UnwindRegs = UnwindRegsAarch64;
+
+#[cfg(feature = "x86_64")]
 type UnwindRule = UnwindRuleX86_64;
 #[cfg(feature = "aarch64")]
 type UnwindRule = UnwindRuleAarch64;
@@ -78,7 +83,7 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     0
 }
 
-fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegsX86_64) -> Option<()> {
+fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs) -> Option<()> {
     let proc_info = unsafe { PIDS.get(&st.pid())? };
 
     let mut read_stack = |addr: u64| {
@@ -156,11 +161,11 @@ fn get_pc(regs: *const pt_regs) -> u64 {
     unsafe { (*regs).rip }
 }
 #[cfg(feature = "aarch64")]
-fn get_pc(regs: *const user_pt_regs) -> u64 {
+fn get_pc(regs: *const aya_bpf::bindings::user_pt_regs) -> u64 {
     unsafe { (*regs).pc }
 }
 #[cfg(feature = "aarch64")]
-fn get_regs(regs: *const user_pt_regs) -> UnwindRegsAarch64 {
+fn get_regs(regs: *const aya_bpf::bindings::user_pt_regs) -> UnwindRegsAarch64 {
     UnwindRegsAarch64::new(
         unsafe { (*regs).regs[30] },
         unsafe { (*regs).sp },
