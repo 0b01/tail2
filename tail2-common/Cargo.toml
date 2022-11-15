@@ -10,8 +10,8 @@ x86_64 = []
 aarch64 = []
 
 [dependencies]
-# aya = { git = "https://github.com/aya-rs/aya", branch = "main", version = "0.11", optional = true}
-aya = { path = "../../aya/aya", version = "0.11", optional = true}
+aya = { git = "https://github.com/0b01/aya", branch = "main", version = "0.11", optional = true}
+# aya = { path = "../../aya/aya", version = "0.11", optional = true}
 gimli = { version = "0.26.1", default-features = false, features = ["read-core"], optional = true }
 anyhow = { version = "1.0.42", optional = true }
 memmap2 = { version = "0.5.3", optional = true }

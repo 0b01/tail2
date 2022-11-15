@@ -11,10 +11,10 @@ tail2-common = { path = "../tail2-common", features=["user", "aarch64"], default
 tail2-common = { path = "../tail2-common", features=["user", "x86_64"], default-features = false }
 
 [dependencies]
-# aya = { git = "https://github.com/aya-rs/aya", branch = "main", version = "0.11", features=["async_tokio"] }
-# aya-log = { git = "https://github.com/aya-rs/aya", branch = "main" }
-aya = { path = "../../aya/aya", version = "0.11", features=["async_tokio"] }
-aya-log = { path = "../../aya/aya-log" }
+aya = { git = "https://github.com/0b01/aya", branch = "main", version = "0.11", features=["async_tokio"] }
+aya-log = { git = "https://github.com/0b01/aya", branch = "main" }
+# aya = { path = "../../aya/aya", version = "0.11", features=["async_tokio"] }
+# aya-log = { path = "../../aya/aya-log" }
 
 anyhow = "1.0.42"
 clap = { version = "3.1", features = ["derive"] }

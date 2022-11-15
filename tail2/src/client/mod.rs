@@ -132,7 +132,7 @@ pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>,
                 // copy to maps
                 for (pid, nfo) in &processes.processes {
                     let nfo = nfo.as_ref();
-                    let _ = pid_info.insert(*pid as u32, nfo, 0);
+                    let _ = pid_info.insert(*pid as u32, *nfo, 0);
                 }
 
                 // sleep for 10 sec
