@@ -2,6 +2,6 @@
 limits = { form = "64 kB", json = "32 MiB", string = "32 MiB", data-form = "32 MiB" }
 cli_colors = false
 log_level = "normal"
-address = "127.0.0.1"
+address = "0.0.0.0"
 port = 8000
 template_dir = "tail2-server/templates/"

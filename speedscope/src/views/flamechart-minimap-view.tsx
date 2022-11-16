@@ -49,8 +49,8 @@ export class FlamechartMinimapView extends Component<FlamechartMinimapViewProps,
   }
 
   private minimapOrigin() {
-    // return new Vec2(0, Sizes.FRAME_HEIGHT * window.devicePixelRatio)
-    return new Vec2(0, 0)
+    return new Vec2(0, Sizes.FRAME_HEIGHT * window.devicePixelRatio)
+    // return new Vec2(0, 0)
   }
 
   private configSpaceSize() {
@@ -222,7 +222,7 @@ export class FlamechartMinimapView extends Component<FlamechartMinimapViewProps,
     this.maybeClearInteractionLock()
     this.resizeOverlayCanvasIfNeeded()
     this.renderRects()
-    // this.renderOverlays()
+    this.renderOverlays()
   }
 
   private renderCanvas = () => {

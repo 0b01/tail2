@@ -48,7 +48,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mu
     let (tx, mut rx) = mpsc::channel::<Stack>(2048);
 
     let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
-        "http://127.0.0.1:8000/stack",
+        "http://0.0.0.0:8000/stack",
         Arc::clone(&module_cache),
         400,
     )));
@@ -61,7 +61,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mu
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            dbg!(&st);
+            // dbg!(&st);
 
             let cli2 = Arc::clone(&cli);
             tokio::spawn(async move {
