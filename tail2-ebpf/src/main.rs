@@ -53,9 +53,9 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     // let sz = ctx.arg(0).unwrap();
     let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigMapKey::INO as u32)) }.copied().unwrap_or(1);
+    let task: *mut task_struct = unsafe { bpf_get_current_task() as _ };
 
     let mut ns: bpf_pidns_info = unsafe { core::mem::zeroed() };
-
     // TODO: make a nice wrapper for this so it'll always get initialized correctly.
     unsafe { bpf_get_ns_current_pid_tgid(dev, ino, &mut ns as *mut bpf_pidns_info, core::mem::size_of::<bpf_pidns_info>() as u32); }
 
@@ -64,7 +64,6 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
         let st: &mut Stack = unsafe { &mut *buf_ptr };
         st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
-        let task: *mut task_struct = unsafe { bpf_get_current_task() as _ };
         // let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
         let regs = ctx.as_ptr() as *const _;
 
