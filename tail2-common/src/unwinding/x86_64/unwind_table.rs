@@ -1,5 +1,5 @@
 use anyhow::Result;
-use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection};
+use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection, X86_64};
 use object::{Object, ObjectSection};
 use super::unwind_rule::{UnwindRuleX86_64, translate_into_unwind_rule};
 
@@ -20,9 +20,10 @@ impl UnwindTableRow {
         _encoding: gimli::Encoding,
     ) -> Result<Self> {
         let cfa_rule = row.cfa();
-        let fp_rule = row.register(gimli::AArch64::X29);
-        let lr_rule = row.register(gimli::AArch64::X30);
-        let rule = translate_into_unwind_rule(cfa_rule, &fp_rule, &lr_rule)?;
+        let bp_rule = row.register(X86_64::RBP);
+        let ra_rule = row.register(X86_64::RA);
+        let rule = translate_into_unwind_rule(cfa_rule, &bp_rule, &ra_rule)?;
+
         Ok(Self {
             start_address: row.start_address(),
             // end_address: row.end_address(),

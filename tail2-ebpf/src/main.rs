@@ -65,7 +65,7 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
 
         let task: *mut task_struct = unsafe { bpf_get_current_task() as _ };
         // let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
-        let regs = ctx.as_ptr() as *const pt_regs;
+        let regs = ctx.as_ptr() as *const _;
 
         let pc = get_pc(regs);
         let mut regs = get_regs(regs);
