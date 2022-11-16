@@ -2,15 +2,19 @@
 #![no_main]
 #![allow(unused, nonstandard_style, dead_code)]
 
+mod pyperf;
+mod helpers;
+
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
     helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task},
-    maps::{HashMap, PerCpuArray, PerfEventArray},
+    maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
     bindings::{bpf_pidns_info, pt_regs, task_struct}, BpfContext
 };
 use aya_log_ebpf::{error, info};
-use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, InfoMapKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK};
+use helpers::get_pid_tgid;
+use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK};
 use tail2_common::unwinding::x86_64::unwindregs::UnwindRegsX86_64;
 
 #[cfg(feature = "x86_64")]
@@ -32,9 +36,11 @@ static mut STACK_BUF: PerCpuArray<Stack> = PerCpuArray::with_max_entries(1, 0);
 #[map(name="CONFIG")]
 static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
-/// See InfoMapKey
-#[map(name="RUN_INFO")]
-static RUN_INFO: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
+#[map(name="RUN_STATS")]
+static RUN_STATS: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
+
+#[map(name="KERNEL_TRACES")]
+static KERNEL_STACKS: StackTrace = StackTrace::with_max_entries(10, 0);
 
 #[map(name="PIDS")]
 static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(256, 0);
@@ -51,13 +57,8 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     // let sz = ctx.arg(0).unwrap();
-    let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
-    let ino = unsafe { CONFIG.get(&(ConfigMapKey::INO as u32)) }.copied().unwrap_or(1);
-    let task: *mut task_struct = unsafe { bpf_get_current_task() as _ };
 
-    let mut ns: bpf_pidns_info = unsafe { core::mem::zeroed() };
-    // TODO: make a nice wrapper for this so it'll always get initialized correctly.
-    unsafe { bpf_get_ns_current_pid_tgid(dev, ino, &mut ns as *mut bpf_pidns_info, core::mem::size_of::<bpf_pidns_info>() as u32); }
+    let ns: bpf_pidns_info = get_pid_tgid();
 
     // try to copy stack
     if let Some(buf_ptr) = unsafe { STACK_BUF.get_ptr_mut(0) } {
@@ -146,8 +147,8 @@ fn binary_search(rows: &[(u64, UnwindRule)], pc: u64, right: usize) -> Option<us
 }
 
 pub fn incr_sent_stacks() {
-    let cnt = unsafe { RUN_INFO.get(&(InfoMapKey::SentStackCount as u32)) }.copied().unwrap_or(0);
-    let _ = RUN_INFO.insert(&(InfoMapKey::SentStackCount as u32), &(cnt+1), 0);
+    let cnt = unsafe { RUN_STATS.get(&(RunStatsKey::SentStackCount as u32)) }.copied().unwrap_or(0);
+    let _ = RUN_STATS.insert(&(RunStatsKey::SentStackCount as u32), &(cnt+1), 0);
 }
 
 #[panic_handler]

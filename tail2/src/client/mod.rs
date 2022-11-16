@@ -161,7 +161,7 @@ pub(crate) fn load_bpf() -> Result<Bpf> {
 }
 
 pub(crate) async fn print_stats(bpf: &mut Bpf) -> Result<()> {
-    let info: HashMap<_, u32, u64> = HashMap::try_from(bpf.map("RUN_INFO").context("no such map")?)?;
+    let info: HashMap<_, u32, u64> = HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
     info!("Sent: {} stacks", info.get(&(InfoMapKey::SentStackCount as u32), 0)?);
     Ok(())
 }

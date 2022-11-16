@@ -1,4 +1,5 @@
 #![allow(unused)]
+#![allow(non_camel_case_types)]
 #![cfg_attr(not(feature = "user"), no_std)]
 
 pub mod runtime_type;
@@ -13,7 +14,7 @@ pub use stack::Stack;
 /// Maximum number of frames to unwind 
 pub const MAX_USER_STACK: usize = 40;
 
-pub enum InfoMapKey {
+pub enum RunStatsKey {
     SentStackCount = 0,
 }
 

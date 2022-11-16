@@ -1,13 +1,4 @@
-#[repr(C)]
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub struct PythonVersion {
-    pub major: u8,
-    pub minor: u8,
-    pub patch: u8,
-} 
-
-#[cfg(feature = "user")]
-unsafe impl aya::Pod for PythonVersion {}
+use crate::python::{PythonVersion, state::pthreads_impl};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum RuntimeType {
@@ -15,6 +6,7 @@ pub enum RuntimeType {
     Python {
         is_lib: bool,
         version: PythonVersion,
+        pthreads_impl: pthreads_impl,
     },
 }
 
@@ -31,5 +23,12 @@ impl RuntimeType {
 
     pub fn is_python(&self) -> bool {
         matches!(self, Self::Python { .. })
+    }
+
+    pub fn as_python(&self) -> PythonVersion {
+        match self {
+            RuntimeType::Unknown => unimplemented!(),
+            RuntimeType::Python { is_lib: _, version, pthreads_impl: _ } => *version,
+        }
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     runtime_type::RuntimeType,
     unwinding::aarch64::unwind_rule::UnwindRuleAarch64,
-    unwinding::x86_64::unwind_rule::UnwindRuleX86_64,
+    unwinding::x86_64::unwind_rule::UnwindRuleX86_64, python::state::pid_data,
 };
 
 /// 2 ^ 20
@@ -17,6 +17,7 @@ pub struct ProcInfo {
     pub rows: [(u64, UnwindRule); MAX_ROWS_PER_PROC],
     pub rows_len: usize,
     pub runtime_type: RuntimeType,
+    pub pid_data: pid_data,
 }
 
 #[cfg(feature = "user")]
@@ -39,17 +40,6 @@ impl ProcInfo {
     }
 }
 
-// impl Default for ProcInfo {
-//     fn default() -> Self {
-//         let rows = [Default::default(); MAX_ROWS_PER_PROC];
-//         ProcInfo {
-//             rows,
-//             rows_len: Default::default(),
-//             runtime_type: Default::default()
-//         }
-//     }
-// }
-
 #[cfg(feature = "user")]
 pub mod user {
 
@@ -65,7 +55,7 @@ pub mod user {
     use core::{str::from_utf8_unchecked, cell::RefCell};
     use std::{path::{PathBuf, Path}, io::{BufReader, Read}, fs::File};
 
-    use crate::{runtime_type::PythonVersion};
+    use crate::python::PythonVersion;
     const BUFSIZ: usize = 4096;
 
     use super::*;
