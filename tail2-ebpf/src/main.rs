@@ -56,7 +56,8 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
 
     let mut ns: bpf_pidns_info = unsafe { core::mem::zeroed() };
 
-    // unsafe { bpf_get_ns_current_pid_tgid(dev, ino, &mut ns as *mut bpf_pidns_info, core::mem::size_of::<bpf_pidns_info>() as u32); }
+    // TODO: make a nice wrapper for this so it'll always get initialized correctly.
+    unsafe { bpf_get_ns_current_pid_tgid(dev, ino, &mut ns as *mut bpf_pidns_info, core::mem::size_of::<bpf_pidns_info>() as u32); }
 
     // try to copy stack
     if let Some(buf_ptr) = unsafe { STACK_BUF.get_ptr_mut(0) } {
