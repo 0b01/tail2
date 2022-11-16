@@ -5,7 +5,7 @@
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
-    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user},
+    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task},
     maps::{HashMap, PerCpuArray, PerfEventArray},
     bindings::{bpf_pidns_info, pt_regs, task_struct}, BpfContext
 };
@@ -50,26 +50,25 @@ fn capture_stack(ctx: PerfEventContext) -> u32 {
 }
 
 fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
-    info!(ctx, "test");
     // let sz = ctx.arg(0).unwrap();
     let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
     let ino = unsafe { CONFIG.get(&(ConfigMapKey::INO as u32)) }.copied().unwrap_or(1);
 
     let mut ns: bpf_pidns_info = unsafe { core::mem::zeroed() };
 
-    unsafe { bpf_get_ns_current_pid_tgid(dev, ino, &mut ns as *mut bpf_pidns_info, core::mem::size_of::<bpf_pidns_info>() as u32); }
+    // unsafe { bpf_get_ns_current_pid_tgid(dev, ino, &mut ns as *mut bpf_pidns_info, core::mem::size_of::<bpf_pidns_info>() as u32); }
 
     // try to copy stack
     if let Some(buf_ptr) = unsafe { STACK_BUF.get_ptr_mut(0) } {
         let st: &mut Stack = unsafe { &mut *buf_ptr };
         st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
-        let task: *mut task_struct = unsafe { bpf_get_current_task_btf() };
-        let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
+        let task: *mut task_struct = unsafe { bpf_get_current_task() as _ };
+        // let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
+        let regs = ctx.as_ptr() as *const pt_regs;
 
         let pc = get_pc(regs);
-        let mut regs = get_regs(regs); {
-        };
+        let mut regs = get_regs(regs);
 
         unwind(ctx, st, pc, &mut regs);
 

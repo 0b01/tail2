@@ -11,8 +11,8 @@ tail2-common = { path = "../tail2-common", features=["user", "aarch64"], default
 tail2-common = { path = "../tail2-common", features=["user", "x86_64"], default-features = false }
 
 [dependencies]
-aya = { git = "https://github.com/0b01/aya", branch = "main", version = "0.11", features=["async_tokio"] }
-aya-log = { git = "https://github.com/0b01/aya", branch = "main" }
+aya = { git = "https://github.com/0b01/aya", branch = "refs", version = "0.11", features=["async_tokio"] }
+aya-log = { git = "https://github.com/0b01/aya", branch = "refs" }
 # aya = { path = "../../aya/aya", version = "0.11", features=["async_tokio"] }
 # aya-log = { path = "../../aya/aya-log" }
 

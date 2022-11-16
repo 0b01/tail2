@@ -31,7 +31,6 @@ fn build(opts: &Options) -> Result<(), anyhow::Error> {
         "build",
         "-p", "tail2",
         "-p", "tail2-server",
-        "--verbose"
     ];
     if opts.release {
         args.push("--release")

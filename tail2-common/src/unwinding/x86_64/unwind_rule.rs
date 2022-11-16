@@ -266,22 +266,22 @@ mod test {
         let mut regs = UnwindRegsX86_64::new(0x100400, 0x10, 0x20);
         let res =
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Ok(Some(0x100300)));
+        assert_eq!(res, Some(Some(0x100300)));
         assert_eq!(regs.ip(), 0x100300);
         assert_eq!(regs.sp(), 0x18);
         assert_eq!(regs.bp(), 0x20);
         let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Ok(Some(0x100200)));
+        assert_eq!(res, Some(Some(0x100200)));
         assert_eq!(regs.ip(), 0x100200);
         assert_eq!(regs.sp(), 0x30);
         assert_eq!(regs.bp(), 0x40);
         let res = UnwindRuleX86_64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
-        assert_eq!(res, Ok(Some(0x100100)));
+        assert_eq!(res, Some(Some(0x100100)));
         assert_eq!(regs.ip(), 0x100100);
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.bp(), 0x70);
         let res = UnwindRuleX86_64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
-        assert_eq!(res, Ok(None));
+        assert_eq!(res, Some(None));
     }
 
     #[test]
@@ -295,17 +295,17 @@ mod test {
         let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsX86_64::new(0x100400, u64::MAX / 8 * 8, u64::MAX);
         let res = UnwindRuleX86_64::JustReturn.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Err(Error::IntegerOverflow));
+        assert_eq!(res, None);
         let res =
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Err(Error::IntegerOverflow));
+        assert_eq!(res, None);
         let res = UnwindRuleX86_64::OffsetSpAndRestoreBp {
             sp_offset_by_8: 1,
             bp_storage_offset_from_sp_by_8: 2,
         }
         .exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Err(Error::IntegerOverflow));
+        assert_eq!(res, None);
         let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Err(Error::IntegerOverflow));
+        assert_eq!(res, None);
     }
 }

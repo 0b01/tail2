@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aya-bpf = { git = "https://github.com/0b01/aya", branch = "main" }
-aya-log-ebpf = { git = "https://github.com/0b01/aya", branch = "main" }
+aya-bpf = { git = "https://github.com/0b01/aya", branch = "refs" }
+aya-log-ebpf = { git = "https://github.com/0b01/aya", branch = "refs" }
 # aya-bpf = { path = "../../aya/bpf/aya-bpf" }
 # aya-log-ebpf = { path = "../../aya/bpf/aya-log-ebpf" }
 tail2-common = { path = "../tail2-common" }
