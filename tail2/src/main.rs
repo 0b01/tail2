@@ -9,7 +9,6 @@ use clap::Parser;
 use client::{load_bpf, init_logger};
 use libc::getuid;
 use log::{info, error};
-use tail2::symbolication::dump_elf::dump_elf;
 use tail2::symbolication::module_cache::{ModuleCache};
 use tokio::sync::{watch, Mutex};
 use tokio::signal;
@@ -53,7 +52,7 @@ async fn main() -> Result<()> {
         },
         Commands::Symbols { paths } => {
             for p in &paths {
-                dump_elf(p)?;
+                // dump_elf(p)?;
             }
             return Ok(());
         },

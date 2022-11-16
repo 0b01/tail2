@@ -4,6 +4,7 @@
 
 1. Install a rust stable toolchain: `rustup install stable`
 1. Install a rust nightly toolchain: `rustup install nightly`
+1. Install rust src `rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu`
 1. Install bpf-linker: `cargo install bpf-linker`
 
 ## Build eBPF

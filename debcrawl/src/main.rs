@@ -2,7 +2,6 @@ use ruzstd::StreamingDecoder;
 use sqlx::ConnectOptions;
 use anyhow::Result;
 use sqlx::sqlite::SqliteConnectOptions;
-use symbolic::{debuginfo::elf::ElfObject, demangle::demangle};
 use std::{str::{FromStr, from_utf8}, fs::File, io::{BufReader, BufRead, Cursor, Read}};
 use ar::Archive;
 

@@ -27,4 +27,4 @@ jobs:
     - name: Build
       run: cargo build && cargo xtask run --build
     - name: Run tests
-      run: cargo test --verbose --all
+      run: cargo +nightly test --verbose --all
