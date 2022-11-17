@@ -10,7 +10,7 @@ use crate::{symbolication::{module::Module, module_cache::{self, ModuleCache}}, 
 #[derive(Serialize, Deserialize, Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct FrameDto {
     pub module_idx: usize,
-    pub offset: u64,
+    pub offset: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -70,10 +70,10 @@ impl StackBatchDto {
     }
 }
 
-fn lookup(proc_map: &[MemoryMap], address: u64) -> Option<(u64, &MemoryMap)> {
+fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)> {
     for entry in proc_map.iter() {
-        if address >= entry.address.0 && address < entry.address.1 {
-            let translated = address - entry.address.0 + entry.offset;
+        if address >= entry.address.0 as usize && address < entry.address.1  as usize{
+            let translated = address - entry.address.0 as usize + entry.offset as usize;
             return Some((translated, entry));
         }
     }

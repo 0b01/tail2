@@ -32,6 +32,7 @@ fn ensure_root() {
     }
 }
 
+// TODO: use Tail2.toml for config
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut bpf = load_bpf()?;
@@ -51,14 +52,15 @@ async fn main() -> Result<()> {
             return Ok(());
         },
         Commands::Symbols { paths } => {
-            for p in &paths {
+            for _p in &paths {
                 // dump_elf(p)?;
             }
             return Ok(());
         },
         Commands::Sample { pid , period} => {
             ensure_root();
-            let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
+            // let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
+            let program: &mut PerfEvent = bpf.program_mut("pyperf").unwrap().try_into().unwrap();
             program.load().unwrap();
             for cpu in online_cpus()? {
                 let scope = pid

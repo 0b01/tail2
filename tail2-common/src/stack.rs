@@ -4,7 +4,7 @@ use crate::{pidtgid::PidTgid, unwinding::aarch64::unwindregs::UnwindRegsAarch64,
 #[derive(Clone, Copy, Debug)]
 pub struct Stack {
     pub pidtgid: PidTgid,
-    pub user_stack: [u64; MAX_USER_STACK],
+    pub user_stack: [usize; MAX_USER_STACK],
     pub unwind_success: Option<usize>,
 }
 

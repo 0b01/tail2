@@ -15,7 +15,7 @@ use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
-use tail2_common::{ConfigMapKey, Stack, InfoMapKey};
+use tail2_common::{ConfigMapKey, Stack, RunStatsKey};
 use anyhow::{Result, Context};
 
 use crate::processes::Processes;
@@ -162,6 +162,6 @@ pub(crate) fn load_bpf() -> Result<Bpf> {
 
 pub(crate) async fn print_stats(bpf: &mut Bpf) -> Result<()> {
     let info: HashMap<_, u32, u64> = HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
-    info!("Sent: {} stacks", info.get(&(InfoMapKey::SentStackCount as u32), 0)?);
+    info!("Sent: {} stacks", info.get(&(RunStatsKey::SentStackCount as u32), 0)?);
     Ok(())
 }

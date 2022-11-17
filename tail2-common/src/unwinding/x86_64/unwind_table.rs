@@ -7,7 +7,7 @@ use super::unwind_rule::{UnwindRuleX86_64, translate_into_unwind_rule};
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub struct UnwindTableRow {
     /// Instruction pointer start range (inclusive).
-    pub start_address: u64,
+    pub start_address: usize,
     // /// Instruction pointer end range (exclusive).
     // pub end_address: u64,
     /// unwind rule
@@ -25,7 +25,7 @@ impl UnwindTableRow {
         let rule = translate_into_unwind_rule(cfa_rule, &bp_rule, &ra_rule)?;
 
         Ok(Self {
-            start_address: row.start_address(),
+            start_address: row.start_address() as usize,
             // end_address: row.end_address(),
             rule,
         })

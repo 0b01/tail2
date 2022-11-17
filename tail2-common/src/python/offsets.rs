@@ -2,41 +2,41 @@ structstruck::strike! {
     #[derive(Clone, Copy, Debug)]
     pub struct PythonOffsets {
         pub py_object: #[derive(Clone, Copy, Debug)] struct {
-            pub ob_type: i64
+            pub ob_type: usize
         },
         pub string: #[derive(Clone, Copy, Debug)] struct {
-            pub data: i64,
+            pub data: usize,
             pub size: i64,
         },
         pub py_type_object: #[derive(Clone, Copy, Debug)] struct {
-            pub tp_name: i64
+            pub tp_name: usize
         },
         pub py_thread_state: #[derive(Clone, Copy, Debug)] struct {
-            pub next: i64,
-            pub interp: i64,
-            pub frame: i64,
-            pub thread: i64,
+            pub next: usize,
+            pub interp: usize,
+            pub frame: usize,
+            pub thread: usize,
         },
         pub py_interpreter_state: #[derive(Clone, Copy, Debug)] struct {
-            pub tstate_head: i64,
+            pub tstate_head: usize,
         },
         pub py_runtime_state: #[derive(Clone, Copy, Debug)] struct {
-            pub interp_main: i64,
+            pub interp_main: usize,
         },
         pub py_frame_object: #[derive(Clone, Copy, Debug)] struct {
-            pub f_back: i64,
-            pub f_code: i64,
-            pub f_lineno: i64,
-            pub f_localsplus: i64,
+            pub f_back: usize,
+            pub f_code: usize,
+            pub f_lineno: usize,
+            pub f_localsplus: usize,
         },
         pub py_code_object: #[derive(Clone, Copy, Debug)] struct {
-            pub co_filename: i64,
-            pub co_name: i64,
-            pub co_varnames: i64,
-            pub co_firstlineno: i64,
+            pub co_filename: usize,
+            pub co_name: usize,
+            pub co_varnames: usize,
+            pub co_firstlineno: usize,
         },
         pub py_tuple_object: #[derive(Clone, Copy, Debug)] struct {
-            pub ob_item: i64,
+            pub ob_item: usize,
         },
     }
 }
@@ -76,7 +76,7 @@ pub const PY27_OFFSETS: PythonOffsets = PythonOffsets {
         tstate_head: 8,
     },
     py_runtime_state: PyRuntimeState{
-        interp_main: -1, // N/A
+        interp_main: 0, // N/A
     },
     py_frame_object: PyFrameObject{
         f_back: 24,
@@ -116,7 +116,7 @@ pub const PY36_OFFSETS: PythonOffsets = PythonOffsets {
         tstate_head: 8,
     },
     py_runtime_state: PyRuntimeState{
-        interp_main: -1, // N/A
+        interp_main: 0, // N/A
     },
     py_frame_object: PyFrameObject{
         f_back: 24,

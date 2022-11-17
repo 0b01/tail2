@@ -83,7 +83,7 @@ fn capture_stack_inner<C: BpfContext>(ctx: &C) -> u32 {
     0
 }
 
-fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs) -> Option<()> {
+fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: usize, regs: &mut UnwindRegs) -> Option<()> {
     let proc_info = unsafe { PIDS.get(&st.pid())? };
 
     let mut read_stack = |addr: u64| {
@@ -99,8 +99,8 @@ fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs
 
         match rule.exec(is_first_frame, regs, &mut read_stack) {
             Some(Some(f)) => {
-                st.user_stack[i] = f;
-                frame = f;
+                st.user_stack[i] = f as usize;
+                frame = f as usize;
             }
             Some(None) => {
                 st.unwind_success = Some(i);
@@ -119,7 +119,7 @@ fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs
 }
 
 /// binary search routine that passes the bpf verifier
-fn binary_search(rows: &[(u64, UnwindRule)], pc: u64, right: usize) -> Option<usize> {
+fn binary_search(rows: &[(usize, UnwindRule)], pc: usize, right: usize) -> Option<usize> {
     let mut left = 0;
     let mut right = right;
     let mut found = 0;
@@ -157,12 +157,12 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 }
 
 #[cfg(feature = "x86_64")]
-fn get_pc(regs: *const pt_regs) -> u64 {
-    unsafe { (*regs).rip }
+fn get_pc(regs: *const pt_regs) -> usize {
+    unsafe { (*regs).rip as usize }
 }
 #[cfg(feature = "aarch64")]
-fn get_pc(regs: *const aya_bpf::bindings::user_pt_regs) -> u64 {
-    unsafe { (*regs).pc }
+fn get_pc(regs: *const aya_bpf::bindings::user_pt_regs) -> usize {
+    unsafe { (*regs).pc as usize }
 }
 #[cfg(feature = "aarch64")]
 fn get_regs(regs: *const aya_bpf::bindings::user_pt_regs) -> UnwindRegsAarch64 {

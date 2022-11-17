@@ -46,7 +46,7 @@ pub enum ErrorCode {
     /// 
     CANT_ALLOC = 13,
     ///
-    NO_PID,
+    NO_PID = 14,
 }
 
 #[derive(Copy, Clone)]
@@ -69,14 +69,14 @@ pub enum pthreads_impl {
 
 /// This struct contains offsets when used in the offsets map,
 /// and resolved vaddrs when used in the pid_data map.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct py_globals {
-    pub constant_buffer: i64,  // arbitrary constant offset
-    pub py_thread_state_current: i64, // 3.6-
-    pub py_runtime: i64,  // 3.7+
+    pub constant_buffer: usize,  // arbitrary constant offset
+    pub _PyThreadState_Current: usize, // 3.6-
+    pub _PyRuntime: usize,  // 3.7+
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct pid_data {
   pub pthreads_impl: pthreads_impl,
   pub globals: py_globals,

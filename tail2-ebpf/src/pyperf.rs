@@ -1,4 +1,5 @@
 use aya_bpf::{maps::{ProgramArray, PerCpuArray, PerfEventArray, HashMap}, programs::PerfEventContext, macros::{perf_event, map}, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_probe_read_kernel, bpf_get_current_task}, bindings::{BPF_F_REUSE_STACKID, task_struct}, BpfContext};
+use aya_log_ebpf::info;
 use tail2_common::python::{state::{PythonSymbol, Event, pid_data, StackStatus, ErrorCode, pthreads_impl}, offsets::PythonOffsets};
 
 use crate::{PIDS, helpers::get_pid_tgid, KERNEL_STACKS};
@@ -47,14 +48,20 @@ static EVENTS: PerfEventArray<Event> = PerfEventArray::new(0);
 
 #[perf_event(name="pyperf")]
 fn pyperf(ctx: PerfEventContext) -> Option<u32> {
-    pyperf_inner(&ctx).ok()
+    let result = pyperf_inner(&ctx);
+    match result {
+        Ok(v) => info!(&ctx, "ok: {}", v as usize),
+        Err(e) => info!(&ctx, "err: {}", e as usize),
+    }
+    
+    Some(0)
 }
 
 fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
     let task: *const _ = unsafe { bpf_get_current_task() as *const _ };
     let ns = get_pid_tgid();
     let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(ErrorCode::NO_PID)? };
-    let pid_data = &mut proc_info.pid_data;
+    let pid_data = &mut proc_info.runtime_type.python_pid_data();
 
     let Some(buf_ptr) = STATE_HEAP.get_ptr_mut(0) else { return Err(ErrorCode::CANT_ALLOC); };
     let state = unsafe { &mut *buf_ptr };
@@ -75,23 +82,21 @@ fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
     event.stack_status = StackStatus::STACK_STATUS_ERROR;
     event.error_code = ErrorCode::ERROR_NONE;
 
-    let offsets = proc_info.runtime_type.as_python().offsets();
+    let offsets = proc_info.runtime_type.python_version().offsets();
 
     if (pid_data.interp == 0) {
         // This is the first time we sample this process (or the GIL is still released).
         // Let's find PyInterpreterState:
-        let interp_ptr: i64;
-        if pid_data.globals.py_runtime != 0 {
-            interp_ptr = pid_data.globals.py_runtime + offsets.py_runtime_state.interp_main;
-        }
-        else {
-            if pid_data.globals.py_thread_state_current == 0 {
+        let interp_ptr = if pid_data.globals._PyRuntime != 0 {
+            pid_data.globals._PyRuntime + offsets.py_runtime_state.interp_main
+        } else {
+            if pid_data.globals._PyThreadState_Current == 0 {
                 return Err(ErrorCode::ERROR_MISSING_PYSTATE);
             }
 
             // Get PyThreadState of the thread that currently holds the GIL
-            let _PyThreadState_Current: i64 = unsafe {
-                bpf_probe_read_user(pid_data.globals.py_thread_state_current as *const _)
+            let _PyThreadState_Current: usize = unsafe {
+                bpf_probe_read_user(pid_data.globals._PyThreadState_Current as *const _)
             }.unwrap();
 
             if _PyThreadState_Current == 0 {
@@ -101,14 +106,27 @@ fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
                 return Err(ErrorCode::ERROR_THREAD_STATE_NULL);
             }
             // Read the interpreter pointer from the ThreadState:
-            interp_ptr = _PyThreadState_Current + offsets.py_thread_state.interp;
-        }
-        pid_data.interp = unsafe { bpf_probe_read_user(interp_ptr as *const _) }.unwrap();
+            _PyThreadState_Current + offsets.py_thread_state.interp
+        };
+        pid_data.interp = unsafe { bpf_probe_read_user(interp_ptr as *const _) }.map_err(|_|ErrorCode::ERROR_INTERPRETER_NULL)?;
         if pid_data.interp == 0 {
             return Err(ErrorCode::ERROR_INTERPRETER_NULL);
         }
     }
-    state.current_thread_id = get_task_thread_id(task, pid_data.pthreads_impl).unwrap();
+    state.current_thread_id = get_task_thread_id(task, pid_data.pthreads_impl)?;
+
+    state.offsets = offsets;
+    state.interp_head = pid_data.interp;
+    state.constant_buffer_addr = pid_data.globals.constant_buffer;
+    // Read pointer to first PyThreadState in thread states list:
+    state.thread_state = unsafe { bpf_probe_read_user(
+        (state.interp_head +
+            offsets.py_interpreter_state.tstate_head) as *const _)}
+        .map_err(|i| {info!(ctx, "{}", i); ErrorCode::ERROR_NONE} )? ;
+    if (state.thread_state == 0) {
+        return Err(ErrorCode::ERROR_THREAD_STATE_HEAD_NULL);
+    }
+    info!(ctx, "thread state: {}", state.thread_state);
 
     Ok(0)
 }

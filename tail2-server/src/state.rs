@@ -26,7 +26,7 @@ impl CurrentCallTree {
 #[derive(Default, Clone, Eq, Serialize)]
 pub struct ResolvedFrame {
     pub module_idx: usize,
-    pub offset: u64,
+    pub offset: usize,
     pub name: Option<String>,
 }
 
