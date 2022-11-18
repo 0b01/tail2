@@ -171,6 +171,7 @@ on_event(struct pt_regs* ctx) {
   if (event->error_code != ERROR_NONE) {
     goto submit;
   }
+
   // Copy some required info:
   state->offsets = pid_data->offsets;
   state->interp_head = pid_data->interp;
@@ -183,6 +184,7 @@ on_event(struct pt_regs* ctx) {
     event->error_code = ERROR_THREAD_STATE_HEAD_NULL;
     goto submit;
   }
+
   // Call get_thread_state to find the PyThreadState of this thread:
   state->get_thread_state_call_count = 0;
   progs.call(ctx, GET_THREAD_STATE_PROG_IDX);
@@ -191,6 +193,7 @@ submit:
   events.perf_submit(ctx, &state->event, sizeof(struct event));
   return 0;
 }
+
 /**
 Searches through all the PyThreadStates in the interpreter to find the one
 corresponding to the current task. Once found, call `read_python_stack`.
@@ -255,6 +258,7 @@ submit:
   events.perf_submit(ctx, &state->event, sizeof(struct event));
   return 0;
 }
+
 static __always_inline void
 clear_symbol(const struct sample_state *state, struct symbol *sym) {
   // Helper bpf_perf_prog_read_value clears the buffer on error, so we can
