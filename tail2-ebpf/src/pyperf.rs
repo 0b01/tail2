@@ -1,6 +1,7 @@
-use aya_bpf::{maps::{ProgramArray, PerCpuArray, PerfEventArray, HashMap}, programs::PerfEventContext, macros::{perf_event, map}, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_probe_read_kernel, bpf_get_current_task}, bindings::{BPF_F_REUSE_STACKID, task_struct}, BpfContext};
-use aya_log_ebpf::info;
-use tail2_common::python::{state::{PythonSymbol, Event, pid_data, StackStatus, ErrorCode, pthreads_impl}, offsets::PythonOffsets};
+use aya_bpf::{maps::{ProgramArray, PerCpuArray, PerfEventArray, HashMap}, programs::PerfEventContext, macros::{perf_event, map}, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_probe_read_kernel, bpf_get_current_task, bpf_probe_read, bpf_get_smp_processor_id}, bindings::BPF_F_REUSE_STACKID, BpfContext};
+use aya_log_ebpf::{info, error};
+use tail2_common::python::{state::{PythonSymbol, Event, pid_data, StackStatus, ErrorCode, pthreads_impl}, offsets::PythonOffsets, GET_THREAD_STATE_PROG_IDX};
+use crate::vmlinux::task_struct;
 
 use crate::{PIDS, helpers::get_pid_tgid, KERNEL_STACKS};
 
@@ -32,11 +33,11 @@ const CPU_BITS: u32 = 10;
 const COUNTER_BITS: u32 = (31 - CPU_BITS);
 const MAX_SYMBOLS: u32 = (1 << COUNTER_BITS);
 
-#[map(name="py_symbols")]
+#[map(name="PY_SYMBOLS")]
 static SYMBOLS: HashMap<PythonSymbol, i32> = HashMap::with_max_entries(32768/* TODO: configurable */, 0);
 
 /// Contains fd's of get_thread_state and read_python_stack programs.
-#[map]
+#[map(name="JUMP_TABLE")]
 static PROGS: ProgramArray = ProgramArray::with_max_entries(2, 0);
 
 #[map]
@@ -46,19 +47,87 @@ static STATE_HEAP: PerCpuArray<SampleState> = PerCpuArray::with_max_entries(1, 0
 static EVENTS: PerfEventArray<Event> = PerfEventArray::new(0);
 
 
+fn read_python_stack<C: BpfContext>(ctx: &C, state: &mut SampleState) {
+    // get_thread_state(ctx, state);
+}
+
+/// Searches through all the PyThreadStates in the interpreter to find the one
+/// corresponding to the current task. Once found, call `read_python_stack`.
+/// If not found, submit an event containing the error.
+fn get_thread_state<C: BpfContext>(ctx: &C, state: &mut SampleState) {
+    let event = state.event;
+    state.get_thread_state_call_count += 1;
+    const THREAD_STATES_PER_PROG: i32 = 32;
+    const THREAD_STATES_PROG_CNT: i32 = 8;
+    for _ in 0..THREAD_STATES_PROG_CNT {
+        let mut found = false;
+        for i in 0..THREAD_STATES_PER_PROG {
+            // Read the PyThreadState::thread_id to which this PyThreadState belongs:
+            let thread_id = unsafe { bpf_probe_read_user((state.thread_state + state.offsets.py_thread_state.thread) as *const u64) };
+            match thread_id {
+                Ok(id) => {
+                    if id == state.current_thread_id {
+                        found = true;
+                        break;
+                    } else {
+                        // Read next thread state:
+                        state.thread_state = unsafe { bpf_probe_read_user((state.thread_state + state.offsets.py_thread_state.next) as *const _).unwrap_or_default() };
+                        if (state.thread_state == 0) {
+                            error!(ctx, "not found");
+                            return;
+                        }
+
+                    }
+                }
+                Err(e) => {
+                    error!(ctx, "unable to read thread_id: {}", e);
+                    return;
+                }
+            }
+        }
+
+        if found {
+            break
+        }
+        if state.get_thread_state_call_count == THREAD_STATES_PROG_CNT {
+            // event->error_code = ERROR_TOO_MANY_THREADS;
+            error!(ctx, "too many threads");
+            return;
+        }
+        else {
+            info!(ctx, "continue");
+            continue;
+        }
+    }
+
+    // Get pointer to top frame from PyThreadState
+    state.frame_ptr = unsafe { bpf_probe_read_user( (state.thread_state + state.offsets.py_thread_state.frame) as *const _).unwrap_or_default() };
+    if state.frame_ptr == 0 {
+        // event->error_code = ERROR_EMPTY_STACK;
+        error!(ctx, "empty stack");
+    }
+
+    // We are going to need this later
+    state.cur_cpu = unsafe { bpf_get_smp_processor_id() };
+    // Jump to reading first set of Python frames
+    state.python_stack_prog_call_cnt = 0;
+    info!(ctx, "found");
+    read_python_stack(ctx, state);
+}
+
 #[perf_event(name="pyperf")]
 fn pyperf(ctx: PerfEventContext) -> Option<u32> {
     let result = pyperf_inner(&ctx);
-    match result {
-        Ok(v) => info!(&ctx, "ok: {}", v as usize),
-        Err(e) => info!(&ctx, "err: {}", e as usize),
-    }
+//     match result {
+//         Ok(v) => info!(&ctx, "ok: {}", v as usize),
+//         Err(e) => info!(&ctx, "err: {}", e as usize),
+//     }
     
     Some(0)
 }
 
 fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
-    let task: *const _ = unsafe { bpf_get_current_task() as *const _ };
+    let task: *const task_struct = unsafe { bpf_get_current_task() as *const _ };
     let ns = get_pid_tgid();
     let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(ErrorCode::NO_PID)? };
     let pid_data = &mut proc_info.runtime_type.python_pid_data();
@@ -113,7 +182,7 @@ fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
             return Err(ErrorCode::ERROR_INTERPRETER_NULL);
         }
     }
-    state.current_thread_id = get_task_thread_id(task, pid_data.pthreads_impl)?;
+    state.current_thread_id = unsafe { get_task_thread_id(task, pid_data.pthreads_impl)? };
 
     state.offsets = offsets;
     state.interp_head = pid_data.interp;
@@ -126,32 +195,37 @@ fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
     if (state.thread_state == 0) {
         return Err(ErrorCode::ERROR_THREAD_STATE_HEAD_NULL);
     }
-    info!(ctx, "thread state: {}", state.thread_state);
 
+    // Call get_thread_state to find the PyThreadState of this thread:
+    state.get_thread_state_call_count = 0;
+
+    get_thread_state(ctx, state);
+
+    // event.error_code = ErrorCode::ERROR_CALL_FAILED;
+    // EVENTS.output(ctx, event, 0);
     Ok(0)
 }
 
-
 /// Get the thread id for a task just as Python would. Currently assumes Python uses pthreads.
-pub fn get_task_thread_id(task: *const task_struct, pthreads_impl: pthreads_impl) -> Result<u64, ErrorCode> {
+pub unsafe fn get_task_thread_id(task: *const task_struct, pthreads_impl: pthreads_impl) -> Result<u64, ErrorCode> {
     // The thread id that is written in the PyThreadState is the value of `pthread_self()`.
     // For glibc, corresponds to THREAD_SELF in "tls.h" in glibc source.
     // For musl, see definition of `__pthread_self`.
     // HACK: Usually BCC would translate a deref of the field into `read_kernel` for us, but it
     //       doesn't detect it due to the macro (because it transforms before preprocessing).
-    let fs_offset = 0; // TODO: ?
-    let fsbase: u64 = unsafe { bpf_probe_read_kernel((task as i64 + fs_offset) as *const _).unwrap() };
+    let fsbase = bpf_probe_read(&(*task).thread.uw.tp_value).unwrap();
     let ret = match pthreads_impl {
         pthreads_impl::PTI_GLIBC => {
             // 0x10 = offsetof(tcbhead_t, self)
-            unsafe { bpf_probe_read_user((fsbase + 0x10) as *const _).unwrap() }
+            bpf_probe_read_user((fsbase + 0x10) as *const _).unwrap_or(902)
         }
         pthreads_impl::PTI_MUSL => {
-            unsafe { bpf_probe_read_user(fsbase as *const _).unwrap() }
+            bpf_probe_read_user(fsbase as *const _).unwrap_or(903)
         }
     };
-
     Ok(ret)
+
+    // Ok(ret)
 // if (ret < 0) {
 //     return ERROR_BAD_FSBASE;
 //   }

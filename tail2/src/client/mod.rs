@@ -1,28 +1,21 @@
-use std::mem::size_of;
-use std::os::unix::prelude::MetadataExt;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
-use aya::maps::perf::{AsyncPerfEventArray};
 use aya::maps::{HashMap, MapData};
-use aya::util::online_cpus;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
-use bytes::BytesMut;
-use log::{info, error};
+use log::info;
 use tail2::symbolication::module_cache::ModuleCache;
 use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
-use tokio::sync::{mpsc, Mutex};
-use tokio::task::JoinHandle;
-use tail2_common::{ConfigMapKey, Stack, RunStatsKey};
+use tokio::sync::Mutex;
+use tail2_common::RunStatsKey;
 use anyhow::{Result, Context};
 
 use crate::processes::Processes;
 
-use self::api_client::ApiStackEndpointClient;
-
 pub mod api_client;
+pub mod run;
 
 pub(crate) async fn init_logger(bpf: &mut Bpf) -> Result<()> {
     // init logger
@@ -33,89 +26,6 @@ pub(crate) async fn init_logger(bpf: &mut Bpf) -> Result<()> {
 
     BpfLogger::init(bpf).unwrap();
     Ok(())
-}
-
-pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) -> Result<Vec<JoinHandle<()>>> {
-    // send device info
-    let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
-    let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-    config.insert(ConfigMapKey::DEV as u32, stats.dev(), 0).unwrap();
-    config.insert(ConfigMapKey::INO as u32, stats.ino(), 0).unwrap();
-
-    // open bpf maps
-    let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map("STACKS").unwrap()).unwrap();
-
-    let (tx, mut rx) = mpsc::channel::<Stack>(2048);
-
-    let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
-        "http://0.0.0.0:8000/stack",
-        Arc::clone(&module_cache),
-        400,
-    )));
-
-    // receiver thread
-    let mut ts = vec![];
-    let mut total_time = Duration::new(0, 0);
-    let t = tokio::spawn(async move {
-        let mut c = 0;
-        while let Some(st) = rx.recv().await {
-            let start_time = SystemTime::now();
-
-            // dbg!(&st);
-
-            let cli2 = Arc::clone(&cli);
-            tokio::spawn(async move {
-                if let Err(e) = cli2.lock().await.post_stack(st).await {
-                    error!("sending stack failed: {}", e.to_string());
-                }
-            });
-
-            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
-            total_time += elapsed;
-            c += 1;
-        }
-
-        cli.lock().await.flush().await.unwrap();
-
-        let avg_t = total_time / c;
-        info!("Processed: {c} stacks. {avg_t:?}/st");
-    });
-    ts.push(t);
-
-    // listen to bpf perf buf, send stacks to tx
-    for cpu_id in online_cpus().unwrap() {
-        let mut buf = stacks.open(cpu_id, Some(1024)).unwrap();
-        
-        let tx = tx.clone();
-        let mut stop_rx2 = stop_rx.clone();
-        let t = tokio::spawn(async move {
-            let mut buffers = (0..10)
-                .map(|_| BytesMut::with_capacity(size_of::<Stack>()))
-                .collect::<Vec<_>>();
-
-            loop {
-                // poll for events
-                tokio::select! {
-                    evts = buf.read_events(&mut buffers) => {
-                        let events = evts.unwrap();
-                        for buf in buffers.iter_mut().take(events.read) {
-                            let st = unsafe { *std::mem::transmute::<_, *const Stack>(buf.as_ptr()) };
-                            if tx.try_send(st).is_err() {
-                                error!("slow");
-                            }
-                        }
-                    },
-                    _ = stop_rx2.changed() => {
-                        break;
-                    },
-                };
-            }
-        });
-        ts.push(t);
-    }
-    // Drop tx from main thread, so when producers join, consumer thread will also join.
-    drop(tx);
-    Ok(ts)
 }
 
 // TODO: don't refresh, listen to mmap and execve calls

@@ -4,14 +4,16 @@
 
 mod pyperf;
 mod helpers;
+mod vmlinux;
 
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
     helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task},
     maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
-    bindings::{bpf_pidns_info, pt_regs, task_struct}, BpfContext
+    bindings::{bpf_pidns_info, pt_regs}, BpfContext
 };
+use vmlinux::task_struct;
 use aya_log_ebpf::{error, info};
 use helpers::get_pid_tgid;
 use tail2_common::{Stack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK};

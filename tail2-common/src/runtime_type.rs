@@ -70,9 +70,12 @@ pub mod user {
             let is_lib = base_name.starts_with("libpython");
             let mut version = PythonVersion { major: 0, minor: 0, patch: 0 };
             if let Some(v_str) = base_name.split("python").last() {
-                if let Ok(v) = to_python_version(&row.mod_name, v_str) {
-                    version = v;
-                }
+                let mut segs = v_str.split(".");
+                version.major = segs.next().unwrap().parse().unwrap();
+                version.minor = segs.next().unwrap().parse().unwrap();
+                // if let Ok(v) = to_python_version(&row.mod_name, v_str) {
+                //     version = v;
+                // }
             }
 
             let mut globals: py_globals = Default::default();
@@ -85,13 +88,14 @@ pub mod user {
             // one of _PyRuntime or _PyThreadState_Current is set, depending on Python version
             if py_info._PyRuntime != 0 {
                 globals._PyRuntime = row.avma + py_info._PyRuntime;
-                // info!("_PyRuntime: {}", globals.py_runtime);
+                log::info!("_PyRuntime: {}", globals._PyRuntime);
             }
             else {
                 assert!(py_info._PyThreadState_Current != 0);
                 globals._PyThreadState_Current = row.avma + py_info._PyThreadState_Current;
-                // info!("_PyThreadState_Current: {}", globals.py_thread_state_current);
+                log::info!("_PyThreadState_Current: {}", globals._PyThreadState_Current);
             }
+            dbg!(&version);
 
             let pthreads_impl = if paths.iter().any(|i|i.mod_name.contains("musl")) { pthreads_impl::PTI_MUSL } else { pthreads_impl::PTI_GLIBC };
             return RuntimeType::Python {
