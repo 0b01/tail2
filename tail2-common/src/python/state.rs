@@ -8,6 +8,7 @@ pub const FUNCTION_NAME_LEN: usize = 64;
 pub const FILE_NAME_LEN: usize = 256;
 pub const TASK_COMM_LEN: usize = 16;
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub enum ErrorCode {
     /// No error
@@ -47,6 +48,10 @@ pub enum ErrorCode {
     CANT_ALLOC = 13,
     ///
     NO_PID = 14,
+    ///
+    ERROR_READ_FRAME = 15,
+    ERROR_GET_FIRST_ARG = 16,
+    FIRST_ARG_NOT_FOUND,
 }
 
 #[derive(Copy, Clone)]
@@ -69,6 +74,7 @@ pub enum pthreads_impl {
 
 /// This struct contains offsets when used in the offsets map,
 /// and resolved vaddrs when used in the pid_data map.
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct py_globals {
     pub constant_buffer: usize,  // arbitrary constant offset
@@ -76,6 +82,7 @@ pub struct py_globals {
     pub _PyRuntime: usize,  // 3.7+
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct pid_data {
   pub pthreads_impl: pthreads_impl,
@@ -88,17 +95,25 @@ pub struct pid_data {
 /// file. This can be avoided with additional maps but it's ok because generally speaking symbols are
 /// spread across a variety of files and classes. Using a separate map for `name` would be useless
 /// overhead because symbol names are mostly unique.
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PythonSymbol {
-  lineno: u32,
-  classname: [u8; CLASS_NAME_LEN],
-  name: [u8; FUNCTION_NAME_LEN],
-  file: [u8; FILE_NAME_LEN],
+  pub lineno: u32,
+  pub classname: [u8; CLASS_NAME_LEN],
+  pub name: [u8; FUNCTION_NAME_LEN],
+  pub file: [u8; FILE_NAME_LEN],
   // NOTE: PyFrameObject also has line number but it is typically just the
   // first line of that function and PyCode_Addr2Line needs to be called
   // to get the actual line
 }
 
+impl Default for PythonSymbol {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Event {
     pub pid: u32,

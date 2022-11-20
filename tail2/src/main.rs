@@ -15,7 +15,7 @@ use tokio::signal;
 use anyhow::Result;
 
 use crate::args::Commands;
-use crate::client::run::{insert_python_progs, run_bpf};
+use crate::client::run::run_bpf;
 use crate::client::{print_stats, spawn_proc_refresh};
 use crate::processes::Processes;
 
@@ -81,7 +81,6 @@ async fn main() -> Result<()> {
             }
 
             spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
-            insert_python_progs(&mut bpf)?;
             let tasks = run_bpf(&mut bpf, stop_rx, module_cache)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");

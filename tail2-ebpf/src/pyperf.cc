@@ -11,6 +11,134 @@
 #define FUNCTION_NAME_LEN 64
 #define FILE_NAME_LEN 256
 #define TASK_COMM_LEN 16
+/**
+See PyPerfType.h
+*/
+enum error_code {
+  ERROR_NONE = 0,
+  ERROR_MISSING_PYSTATE = 1,
+  ERROR_THREAD_STATE_NULL = 2,
+  ERROR_INTERPRETER_NULL = 3,
+  ERROR_TOO_MANY_THREADS = 4,
+  ERROR_THREAD_STATE_NOT_FOUND = 5,
+  ERROR_EMPTY_STACK = 6,
+  // ERROR_FRAME_CODE_IS_NULL = 7,
+  ERROR_BAD_FSBASE = 8,
+  ERROR_INVALID_PTHREADS_IMPL = 9,
+  ERROR_THREAD_STATE_HEAD_NULL = 10,
+  ERROR_BAD_THREAD_STATE = 11,
+  ERROR_CALL_FAILED = 12,
+};
+/**
+See PyPerfType.h
+*/
+enum stack_status {
+  STACK_STATUS_COMPLETE = 0,
+  STACK_STATUS_ERROR = 1,
+  STACK_STATUS_TRUNCATED = 2,
+};
+/**
+Identifies the POSIX threads implementation used by a Python process.
+*/
+enum pthreads_impl {
+  PTI_GLIBC = 0,
+  PTI_MUSL = 1,
+};
+/**
+See PyOffsets.cc
+*/
+struct struct_offsets {
+  struct {
+    int64_t ob_type;
+  } PyObject;
+  struct {
+    int64_t data;
+    int64_t size;
+  } String;
+  struct {
+    int64_t tp_name;
+  } PyTypeObject;
+  struct {
+    int64_t next;
+    int64_t interp;
+    int64_t frame;
+    int64_t thread;
+  } PyThreadState;
+  struct {
+    int64_t tstate_head;
+  } PyInterpreterState;
+  struct {
+    int64_t interp_main;
+  } PyRuntimeState;
+  struct {
+    int64_t f_back;
+    int64_t f_code;
+    int64_t f_lineno;
+    int64_t f_localsplus;
+  } PyFrameObject;
+  struct {
+    int64_t co_filename;
+    int64_t co_name;
+    int64_t co_varnames;
+    int64_t co_firstlineno;
+  } PyCodeObject;
+  struct {
+    int64_t ob_item;
+  } PyTupleObject;
+};
+struct py_globals {
+  /*
+  This struct contains offsets when used in the offsets map,
+  and resolved vaddrs when used in the pid_data map.
+  */
+  uint64_t constant_buffer;  // arbitrary constant offset
+  uint64_t _PyThreadState_Current; // 3.6-
+  uint64_t _PyRuntime;  // 3.7+
+};
+struct pid_data {
+  enum pthreads_impl pthreads_impl;
+  struct py_globals globals;
+  struct struct_offsets offsets;
+  uintptr_t interp;  // vaddr of PyInterpreterState
+};
+/**
+Contains all the info we need for a stack frame.
+Storing `classname` and `file` here means these are duplicated for symbols in the same class or
+file. This can be avoided with additional maps but it's ok because generally speaking symbols are
+spread across a variety of files and classes. Using a separate map for `name` would be useless
+overhead because symbol names are mostly unique.
+*/
+struct symbol {
+  uint32_t lineno;
+  char classname[CLASS_NAME_LEN];
+  char name[FUNCTION_NAME_LEN];
+  char file[FILE_NAME_LEN];
+  // NOTE: PyFrameObject also has line number but it is typically just the
+  // first line of that function and PyCode_Addr2Line needs to be called
+  // to get the actual line
+};
+/**
+Represents final event data passed to user-mode driver. Storing all symbol data in each sample would
+quickly inflate the output buffer. Instead we store 32-bit ids in the stack array which map to the
+symbols via the `symbols` hashmap. Only positive ids are valid. A negative "id" represents an error.
+*/
+struct event {
+  uint32_t pid;
+  uint32_t tid;
+  char comm[TASK_COMM_LEN];
+  uint8_t error_code;
+  uint8_t stack_status;
+  int32_t kernel_stack_id;
+  // instead of storing symbol name here directly, we add it to another
+  // hashmap with Symbols and only store the ids here
+  uint32_t stack_len;
+  int32_t stack[STACK_MAX_LEN];
+  uintptr_t user_ip;
+  uintptr_t user_sp;
+  uint32_t user_stack_len;
+  uint8_t raw_user_stack[__USER_STACKS_PAGES__ * PAGE_SIZE];
+#define FRAME_CODE_IS_NULL 0x80000001
+};
 struct sample_state {
   uint64_t current_thread_id;
   uintptr_t constant_buffer_addr;
@@ -24,7 +152,6 @@ struct sample_state {
   int python_stack_prog_call_cnt;
   struct event event;
 };
-
 // Hashtable of symbol to unique id.
 // An id looks like this: |sign||cpu||counter|
 // Where:
@@ -45,7 +172,6 @@ BPF_PROG_ARRAY(progs, 2);
 BPF_PERCPU_ARRAY(state_heap, struct sample_state, 1);
 BPF_PERF_OUTPUT(events);
 BPF_STACK_TRACE(kernel_stacks, __KERNEL_STACKS_SIZE__);
-
 /**
 Get the thread id for a task just as Python would. Currently assumes Python uses pthreads.
 */
@@ -82,7 +208,6 @@ get_task_thread_id(struct task_struct const *task, enum pthreads_impl pthreads_i
 #error "Unsupported platform"
 #endif // __x86_64__
 }
-
 // this function is trivial, but we need to do map lookup in separate function,
 // because BCC doesn't allow direct map calls (including lookups) from inside
 // a macro (which we want to do in GET_STATE() macro below)
@@ -131,7 +256,47 @@ on_event(struct pt_regs* ctx) {
   event->stack_status = STACK_STATUS_ERROR;
   event->error_code = ERROR_NONE;
   struct task_struct const *const task = (struct task_struct *)bpf_get_current_task();
-
+  if (sizeof(event->raw_user_stack) > 0) {
+    // Get raw native user stack
+    struct pt_regs user_regs;
+    // ebpf doesn't allow direct access to ctx->cs, so we need to copy it
+    int cs;
+    bpf_probe_read_kernel(&cs, sizeof(cs), &(ctx->cs));
+    // Are we in user mode?
+    if (cs & 3) {
+      // Yes - use the registers context given to the BPF program
+      user_regs = *ctx;
+    }
+    else {
+      // No - use the registers context of usermode, that is stored on the stack.
+      // The third argument is equivalent to `task_pt_regs(task)` for x86. Macros doesn't
+      // work properly on bcc, so we need to re-implement.
+      bpf_probe_read_kernel(
+          &user_regs, sizeof(user_regs),
+          // Note - BCC emits an implicit bpf_probe_read_kernel() here (for the deref of 'task').
+          // I don't like the implicitness (and it will be something we'll need to fix if we're ever
+          // to move from BCC). Meanwhile, I tried to change it to be explicit but the BPF assembly
+          // varies too much so I prefer to avoid this change now ;(
+          (struct pt_regs *)(*(unsigned long*)((unsigned long)task + STACK_OFS) + THREAD_SIZE -
+                            TOP_OF_KERNEL_STACK_PADDING) - 1);
+    }
+    event->user_sp = user_regs.sp;
+    event->user_ip = user_regs.ip;
+    event->user_stack_len = 0;
+    // Subtract 128 from sp for x86-ABI red zone
+    uintptr_t top_of_stack = user_regs.sp - 128;
+    // Copy one page at the time - if one fails we don't want to lose the others
+    int i;
+    #pragma unroll
+    for (i = 0; i < sizeof(event->raw_user_stack) / PAGE_SIZE; ++i) {
+      if (bpf_probe_read_user(
+              event->raw_user_stack + i * PAGE_SIZE, PAGE_SIZE,
+              (void *)((top_of_stack & PAGE_MASK) + (i * PAGE_SIZE))) < 0) {
+        break;
+      }
+      event->user_stack_len = (i + 1) * PAGE_SIZE;
+    }
+  }
   if (pid_data->interp == 0) {
     // This is the first time we sample this process (or the GIL is still released).
     // Let's find PyInterpreterState:
@@ -165,13 +330,11 @@ on_event(struct pt_regs* ctx) {
       goto submit;
     }
   }
-
   // Get current thread id:
   event->error_code = get_task_thread_id(task, pid_data->pthreads_impl, &state->current_thread_id);
   if (event->error_code != ERROR_NONE) {
     goto submit;
   }
-
   // Copy some required info:
   state->offsets = pid_data->offsets;
   state->interp_head = pid_data->interp;
@@ -184,7 +347,6 @@ on_event(struct pt_regs* ctx) {
     event->error_code = ERROR_THREAD_STATE_HEAD_NULL;
     goto submit;
   }
-
   // Call get_thread_state to find the PyThreadState of this thread:
   state->get_thread_state_call_count = 0;
   progs.call(ctx, GET_THREAD_STATE_PROG_IDX);
@@ -193,7 +355,6 @@ submit:
   events.perf_submit(ctx, &state->event, sizeof(struct event));
   return 0;
 }
-
 /**
 Searches through all the PyThreadStates in the interpreter to find the one
 corresponding to the current task. Once found, call `read_python_stack`.
@@ -258,7 +419,6 @@ submit:
   events.perf_submit(ctx, &state->event, sizeof(struct event));
   return 0;
 }
-
 static __always_inline void
 clear_symbol(const struct sample_state *state, struct symbol *sym) {
   // Helper bpf_perf_prog_read_value clears the buffer on error, so we can
@@ -272,6 +432,7 @@ clear_symbol(const struct sample_state *state, struct symbol *sym) {
   // classname is not always read, so it must be cleared explicitly
   sym->classname[0] = '\0';
 }
+
 /**
 Reads the name of the first argument of a PyCodeObject.
 */
@@ -306,6 +467,7 @@ get_first_arg_name(
   }
   return result;
 }
+
 /**
 Read the name of the class wherein a code object is defined.
 For global functions, sets an empty string.
@@ -315,7 +477,8 @@ get_classname(
   const struct struct_offsets *offsets,
   const void *cur_frame,
   const void *code_ptr,
-  struct symbol *symbol) {
+  struct symbol *symbol)
+{
   int result = 0;
   // Figure out if we want to parse class name, basically checking the name of
   // the first argument. If it's 'self', we get the type and its name, if it's
@@ -347,6 +510,7 @@ get_classname(
   result |= bpf_probe_read_user_str(&symbol->classname, sizeof(symbol->classname), tmp);
   return (result < 0) ? result : 0;
 }
+
 static __always_inline int
 read_symbol_names(
     const struct struct_offsets *offsets,
@@ -457,4 +621,3 @@ submit:
   events.perf_submit(ctx, &state->event, sizeof(struct event));
   return 0;
 }
-)

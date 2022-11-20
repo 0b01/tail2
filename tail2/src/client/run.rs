@@ -18,21 +18,6 @@ use aya::Bpf;
 
 use super::api_client::ApiStackEndpointClient;
 
-pub(crate) fn insert_python_progs(bpf: &mut Bpf) -> Result<()> {
-    // let mut prog_array = ProgramArray::try_from(bpf.take_map("JUMP_TABLE").unwrap())?;
-
-    // let prog_0: &mut PerfEvent = bpf.program_mut("read_python_stack").unwrap().try_into()?;
-    // prog_0.load().unwrap();
-    // let prog_0_fd =  prog_0.fd().unwrap();
-    // prog_array.set(READ_PYTHON_STACK_PROG_IDX, prog_0_fd, 0)?;
-
-    // let prog_1: &mut PerfEvent = bpf.program_mut("get_thread_state").unwrap().try_into()?;
-    // prog_1.load().unwrap();
-    // let prog_1_fd =  prog_1.fd().unwrap();
-    // prog_array.set(GET_THREAD_STATE_PROG_IDX, prog_1_fd, 0)?;
-
-    Ok(())
-}
 pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) -> Result<Vec<JoinHandle<()>>> {
     // send device info
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();

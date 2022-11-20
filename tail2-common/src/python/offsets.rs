@@ -156,7 +156,7 @@ pub const PY37_OFFSETS: PythonOffsets = PythonOffsets {
         tstate_head: 8,
     },
     py_runtime_state: PyRuntimeState {
-        interp_main: 32,
+        interp_main: 40,
     },
     py_frame_object: PyFrameObject {
         f_back: 24,
