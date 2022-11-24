@@ -1,10 +1,15 @@
-use core::{mem::{size_of, self}};
+use core::{mem::{size_of, self, transmute}};
 
-use aya_bpf::{BpfContext, helpers::{bpf_probe_read_user}, cty::c_void};
+use aya_bpf::{BpfContext, helpers::{bpf_probe_read_user}, cty::c_void, memset};
 use aya_log_ebpf::info;
-use tail2_common::python::{state::{PYTHON_STACK_FRAMES_PER_PROG, PythonSymbol, ErrorCode, CLASS_NAME_LEN, FILE_NAME_LEN}, offsets::PythonOffsets};
+use tail2_common::python::{state::{PYTHON_STACK_FRAMES_PER_PROG, PythonSymbol, ErrorCode, CLASS_NAME_LEN, FILE_NAME_LEN, STACK_MAX_LEN}, offsets::PythonOffsets};
 
-use super::SampleState;
+use super::{SampleState, SYMBOLS, COUNTER_BITS, MAX_SYMBOLS};
+
+pub unsafe fn upsert_symbol(state: &mut SampleState) -> i32 {
+    let id = SYMBOLS.get(&state.symbol).unwrap_or(&-1);
+    *id
+}
 
 pub unsafe fn read_python_stack<C: BpfContext>(ctx: &C, state: &mut SampleState, frame_ptr: usize) -> Result<(), ErrorCode> {
     // info!(ctx, "read_python_stack: {}", frame_ptr);
@@ -16,19 +21,19 @@ pub unsafe fn read_python_stack<C: BpfContext>(ctx: &C, state: &mut SampleState,
         // The compiler substitutes a constant for `i` because the loop is unrolled. This guarantees we
         // are always within the array bounds. On the other hand, `stack_len` is a variable, so the
         // verifier can't guarantee it's within bounds without an explicit check.
-        let mut sym = PythonSymbol::default();
-        read_symbol(ctx, state, cur_frame, cur_code_ptr, &mut sym)?;
+        read_symbol(ctx, &state.offsets, cur_frame, cur_code_ptr, &mut state.symbol)?;
         // to please the verifier...
-        // if (event->stack_len < STACK_MAX_LEN) {
-        //     event->stack[event->stack_len++] = symbol_id;
-        // }
-    //     // read next PyFrameObject pointer, update in place
-    //     bpf_probe_read_user(
-    //         &state->frame_ptr, sizeof(state->frame_ptr),
-    //         cur_frame + state->offsets.PyFrameObject.f_back);
-    //     if (!state->frame_ptr) {
-    //         goto complete;
-    //     }
+        if (state.event.stack_len < STACK_MAX_LEN) {
+            let id = upsert_symbol(state);
+            state.event.stack[state.event.stack_len] = id;
+            state.event.stack_len += 1;
+        }
+
+        // read next PyFrameObject pointer, update in place
+        cur_frame = read(cur_frame + state.offsets.py_frame_object.f_back)?;
+        if cur_frame == 0 {
+            break;
+        }
     }
 
     Ok(())
@@ -40,25 +45,25 @@ unsafe fn read<T>(ptr: usize) -> Result<T, ErrorCode> {
 
 
 /// read_symbol_names in the original source
-pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, state: &mut SampleState, frame: usize, code_ptr: usize, sym: &mut PythonSymbol) -> Result<(), ErrorCode> {
+pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame: usize, code_ptr: usize, sym: &mut PythonSymbol) -> Result<(), ErrorCode> {
     if (code_ptr == 0) {
         return Err(ErrorCode::ERROR_FRAME_CODE_IS_NULL);
     }
-    sym.lineno = read(code_ptr + state.offsets.py_code_object.co_firstlineno)?;
+    sym.lineno = read(code_ptr + offsets.py_code_object.co_firstlineno)?;
     info!(ctx, "lineno: {}", sym.lineno);
-    // get_classname(&state.offsets, frame, code_ptr, &mut sym.classname)?;
-    let pystr_ptr: usize = read(code_ptr + state.offsets.py_code_object.co_filename)?;
+    // get_classname(&offsets, frame, code_ptr, &mut sym.classname)?;
+    let pystr_ptr: usize = read(code_ptr + offsets.py_code_object.co_filename)?;
     // TODO: too big for stack
-    // sym.file = read(pystr_ptr + state.offsets.string.data)?;
+    // sym.file = read(pystr_ptr + offsets.string.data)?;
     // aya_bpf::helpers::gen::bpf_probe_read_user(
     //     (&mut sym.file).as_mut_ptr() as *mut c_void,
     //     mem::size_of::<[u8; FILE_NAME_LEN]>() as u32,
-    //     (pystr_ptr + state.offsets.string.data) as *const c_void,
+    //     (pystr_ptr + offsets.string.data) as *const c_void,
     // );
 
     // read PyCodeObject's name into symbol
-    let pystr_ptr: usize = read(code_ptr + state.offsets.py_code_object.co_name)?;
-    sym.name = read(pystr_ptr + state.offsets.string.data)?;
+    let pystr_ptr: usize = read(code_ptr + offsets.py_code_object.co_name)?;
+    sym.name = read(pystr_ptr + offsets.string.data)?;
     Ok(())
 }
 
@@ -99,10 +104,10 @@ unsafe fn get_first_arg_name(offsets: &PythonOffsets, code_ptr: usize) -> Result
     // gdb:  ((PyTupleObject*)$frame->f_code->co_varnames)->ob_item[0]
     let args_ptr: usize = read(code_ptr + offsets.py_code_object.co_varnames)?;
     // String.size is PyVarObject.ob_size
-    let ob_size: usize = read((args_ptr as i64 + offsets.string.size) as usize)?;
-    if ob_size <= 0 {
-        return Err(ErrorCode::ERROR_GET_FIRST_ARG);
-    }
+    // let ob_size: usize = read((args_ptr as i64 + offsets.string.size) as usize)?;
+    // if ob_size <= 0 {
+    //     return Err(ErrorCode::ERROR_GET_FIRST_ARG);
+    // }
     let args_ptr: usize = read((args_ptr + offsets.py_tuple_object.ob_item) as usize)?;
     read(args_ptr + offsets.string.data)
 }

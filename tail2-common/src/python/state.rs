@@ -98,13 +98,13 @@ pub struct pid_data {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PythonSymbol {
-  pub lineno: u32,
-  pub classname: [u8; CLASS_NAME_LEN],
-  pub name: [u8; FUNCTION_NAME_LEN],
-  pub file: [u8; FILE_NAME_LEN],
-  // NOTE: PyFrameObject also has line number but it is typically just the
-  // first line of that function and PyCode_Addr2Line needs to be called
-  // to get the actual line
+    pub lineno: u32,
+    pub classname: [u8; CLASS_NAME_LEN],
+    pub name: [u8; FUNCTION_NAME_LEN],
+    pub file: [u8; FILE_NAME_LEN],
+    // NOTE: PyFrameObject also has line number but it is typically just the
+    // first line of that function and PyCode_Addr2Line needs to be called
+    // to get the actual line
 }
 
 impl Default for PythonSymbol {
@@ -124,7 +124,7 @@ pub struct Event {
     pub kernel_stack_id: i64,
     /// instead of storing symbol name here directly, we add it to another
     /// hashmap with Symbols and only store the ids here
-    pub stack_len: i32,
+    pub stack_len: usize,
     pub stack: [i32; STACK_MAX_LEN],
 }
 

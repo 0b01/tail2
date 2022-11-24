@@ -6,7 +6,7 @@ use crate::vmlinux::task_struct;
 
 use super::SampleState;
 
-const THREAD_STATES_PER_PROG: i32 = 32;
+const THREAD_STATES_PER_PROG: usize = 32;
 const THREAD_STATES_PROG_CNT: usize = 8;
 
 /// Searches through all the PyThreadStates in the interpreter to find the one

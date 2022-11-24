@@ -1,4 +1,5 @@
 structstruck::strike! {
+    #[repr(C)]
     #[derive(Clone, Copy, Debug)]
     pub struct PythonOffsets {
         pub py_object: #[derive(Clone, Copy, Debug)] struct {

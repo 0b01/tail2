@@ -1,4 +1,6 @@
-use aya_bpf::{maps::{ProgramArray, PerCpuArray, PerfEventArray, HashMap}, programs::PerfEventContext, macros::{perf_event, map}, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_probe_read_kernel, bpf_get_current_task, bpf_probe_read, bpf_get_smp_processor_id}, bindings::BPF_F_REUSE_STACKID, BpfContext};
+use core::mem::{size_of, transmute};
+
+use aya_bpf::{maps::{ProgramArray, PerCpuArray, PerfEventArray, HashMap}, programs::PerfEventContext, macros::{perf_event, map}, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_probe_read_kernel, bpf_get_current_task, bpf_probe_read, bpf_get_smp_processor_id}, bindings::BPF_F_REUSE_STACKID, BpfContext, memset};
 use aya_log_ebpf::{info, error};
 use tail2_common::python::{state::{PythonSymbol, Event, pid_data, StackStatus, ErrorCode, pthreads_impl}, offsets::PythonOffsets, GET_THREAD_STATE_PROG_IDX};
 use crate::vmlinux::task_struct;
@@ -10,16 +12,18 @@ use crate::{PIDS, helpers::get_pid_tgid, KERNEL_STACKS};
 
 use self::{thread::{get_thread_state, get_task_thread_id}, python_stack::read_python_stack};
 
+#[repr(C)]
 pub struct SampleState {
     current_thread_id: u64,
     constant_buffer_addr: usize,
     interp_head: usize,
     thread_state: usize,
     offsets: PythonOffsets,
-    cur_cpu: u32,
-    symbol_counter: u32,
-    get_thread_state_call_count: i32,
-    python_stack_prog_call_cnt: i32,
+    cur_cpu: i32,
+    symbol: PythonSymbol,
+    symbol_counter: i32,
+    get_thread_state_call_count: usize,
+    python_stack_prog_call_cnt: usize,
     event: Event,
 }
 
@@ -33,9 +37,9 @@ pub struct SampleState {
 // Thus, the maximum amount of CPUs supported is 2^10 (=1024) and the maximum amount of symbols is
 // 2^21 (~2M).
 // See `get_symbol_id`.
-const CPU_BITS: u32 = 10;
-const COUNTER_BITS: u32 = (31 - CPU_BITS);
-const MAX_SYMBOLS: u32 = (1 << COUNTER_BITS);
+const CPU_BITS: i32 = 10;
+const COUNTER_BITS: i32 = (31 - CPU_BITS);
+const MAX_SYMBOLS: i32 = (1 << COUNTER_BITS);
 
 #[map(name="PY_SYMBOLS")]
 static SYMBOLS: HashMap<PythonSymbol, i32> = HashMap::with_max_entries(32768/* TODO: configurable */, 0);
@@ -46,6 +50,9 @@ static STATE_HEAP: PerCpuArray<SampleState> = PerCpuArray::with_max_entries(1, 0
 #[map]
 static EVENTS: PerfEventArray<Event> = PerfEventArray::new(0);
 
+#[map]
+static TEST_MAP: HashMap<u32, i32> = HashMap::with_max_entries(32768/* TODO: configurable */, 0);
+
 
 #[perf_event(name="pyperf")]
 fn pyperf(ctx: PerfEventContext) -> Option<u32> {
@@ -54,7 +61,7 @@ fn pyperf(ctx: PerfEventContext) -> Option<u32> {
         Ok(v) => info!(&ctx, "ok: {}", v as usize),
         Err(e) => (), //info!(&ctx, "err: {}", e as usize),
     }
-    
+
     Some(0)
 }
 
