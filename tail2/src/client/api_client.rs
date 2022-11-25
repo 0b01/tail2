@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use log::info;
 use reqwest::{Client, StatusCode};
 use tail2::{symbolication::module_cache::ModuleCache, dto::stack_dto::StackBatchDto};
 use tail2_common::stack::Stack;

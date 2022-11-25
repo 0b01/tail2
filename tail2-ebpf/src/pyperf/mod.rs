@@ -63,7 +63,6 @@ pub(crate) fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
         event.comm = comm;
     }
 
-    event.stack_len = 0;
     event.stack_status = StackStatus::STACK_STATUS_ERROR;
     event.error_code = ErrorCode::ERROR_NONE;
 

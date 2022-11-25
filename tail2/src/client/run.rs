@@ -4,7 +4,7 @@ use aya::util::online_cpus;
 use bytes::BytesMut;
 use log::{error, info};
 use tail2_common::stack::Stack;
-use tail2_common::{ConfigMapKey, SystemStack};
+use tail2_common::{ConfigMapKey, NativeStack};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use std::{mem::size_of, sync::Arc};
@@ -29,7 +29,7 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, map_name: &str, tx: mpsc::Sender<
         let mut stop_rx2 = stop_rx.clone();
         let t = tokio::spawn(async move {
             let mut buffers = (0..10)
-                .map(|_| BytesMut::with_capacity(size_of::<SystemStack>()))
+                .map(|_| BytesMut::with_capacity(size_of::<NativeStack>()))
                 .collect::<Vec<_>>();
 
             loop {

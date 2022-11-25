@@ -7,10 +7,12 @@ impl PidTgid {
         Self((pid as u64) << 32 | tgid as u64)
     }
 
+    #[inline(always)]
     pub fn pid(&self) -> u32 {
         (self.0 >> 32) as _
     }
 
+    #[inline(always)]
     pub fn tgid(&self) -> u32 {
         (self.0 & 0xf) as _
     }

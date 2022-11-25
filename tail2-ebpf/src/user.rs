@@ -1,7 +1,6 @@
 use aya_bpf::{helpers::bpf_probe_read_user, BpfContext, bindings::bpf_pidns_info};
 use aya_log_ebpf::error;
-use tail2_common::{SystemStack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, stack::Stack};
-use tail2_common::unwinding::x86_64::unwindregs::UnwindRegsX86_64;
+use tail2_common::{NativeStack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, stack::Stack, native::unwinding::x86_64::unwindregs::UnwindRegsX86_64};
 
 use crate::{vmlinux::task_struct, helpers::get_pid_tgid};
 use crate::sample::PIDS;
@@ -17,7 +16,7 @@ type UnwindRule = UnwindRuleX86_64;
 type UnwindRule = UnwindRuleAarch64;
 
 
-pub(crate) fn sample_user<'a, 'b, C: BpfContext>(ctx: &'a C, st: &mut SystemStack) {
+pub(crate) fn sample_user<'a, 'b, C: BpfContext>(ctx: &'a C, st: &mut NativeStack) {
     let ns: bpf_pidns_info = get_pid_tgid();
 
     /* set pid tid */
@@ -31,7 +30,7 @@ pub(crate) fn sample_user<'a, 'b, C: BpfContext>(ctx: &'a C, st: &mut SystemStac
     unwind(ctx, st, pc, &mut regs);
 }
 
-fn unwind<C: BpfContext>(ctx: &C, st: &mut SystemStack, pc: usize, regs: &mut UnwindRegs) -> Option<()> {
+fn unwind<C: BpfContext>(ctx: &C, st: &mut NativeStack, pc: usize, regs: &mut UnwindRegs) -> Option<()> {
     let proc_info = unsafe { PIDS.get(&st.pid())? };
 
     let mut read_stack = |addr: u64| {

@@ -8,11 +8,12 @@ use super::{SampleState, SYMBOLS, COUNTER_BITS, MAX_SYMBOLS};
 
 pub unsafe fn read_python_stack<C: BpfContext>(ctx: &C, state: &mut SampleState, frame_ptr: usize) -> Result<(), ErrorCode> {
     let mut cur_frame = frame_ptr;
+    state.event.frames_len = 0;
     for _ in 0..PYTHON_STACK_FRAMES_PER_PROG {
         read_symbol(ctx, &state.offsets, cur_frame, &mut state.symbol)?;
-        if (state.event.stack_len < STACK_MAX_LEN) {
-            state.event.stack[state.event.stack_len] = state.symbol;
-            state.event.stack_len += 1;
+        if (state.event.frames_len < STACK_MAX_LEN) {
+            state.event.frames[state.event.frames_len] = state.symbol;
+            state.event.frames_len += 1;
         }
 
         // read next PyFrameObject pointer, update in place

@@ -123,8 +123,8 @@ pub struct PythonStack {
     pub stack_status: StackStatus,
     /// instead of storing symbol name here directly, we add it to another
     /// hashmap with Symbols and only store the ids here
-    pub stack_len: usize,
-    pub stack: [PythonSymbol; STACK_MAX_LEN],
+    pub frames_len: usize,
+    pub frames: [PythonSymbol; STACK_MAX_LEN],
 }
 
 impl Debug for PythonStack {
@@ -133,8 +133,8 @@ impl Debug for PythonStack {
             .field("comm", &self.comm)
             .field("error_code", &self.error_code)
             .field("stack_status", &self.stack_status)
-            .field("stack_len", &self.stack_len)
-            .field("stack", &self.stack)
+            .field("stack_len", &self.frames_len)
+            .field("stack", &self.frames)
             .finish()
     }
 }

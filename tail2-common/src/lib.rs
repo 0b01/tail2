@@ -7,9 +7,10 @@ pub mod pidtgid;
 pub mod procinfo;
 
 pub mod stack;
-pub mod unwinding;
 pub mod python;
-pub use stack::SystemStack;
+pub mod native;
+
+pub use native::native_stack::NativeStack;
 
 /// Maximum number of frames to unwind 
 pub const MAX_USER_STACK: usize = 40;

@@ -5,7 +5,7 @@ use aya_bpf::{
     maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
     bindings::{bpf_pidns_info, pt_regs, BPF_F_REUSE_STACKID}, BpfContext
 };
-use tail2_common::{stack::Stack, procinfo::ProcInfo, unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey};
+use tail2_common::{stack::Stack, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey};
 use aya_log_ebpf::{error, info};
 
 use crate::{pyperf::pyperf_inner, user::sample_user};
