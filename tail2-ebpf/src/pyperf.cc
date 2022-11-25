@@ -534,6 +534,7 @@ read_symbol_names(
   result |= bpf_probe_read_user_str(&symbol->name, sizeof(symbol->name), pystr_ptr + offsets->String.data);
   return (result < 0) ? result : 0;
 }
+
 /**
 Gets the key in the symbols map for a symbol.
 If the symbol is not in the map a new key is generated and the symbol is inserted.
@@ -556,6 +557,7 @@ get_symbol_id(struct sample_state* state, struct symbol* sym) {
   int update_result = symbols.update(sym, &id);
   return (update_result < 0) ? update_result : id;
 }
+
 /**
 Reads the symbol for the current frame and returns its id in the symbols map (or a negative error
 code in case of failure).
