@@ -9,7 +9,7 @@ pub mod procinfo;
 pub mod stack;
 pub mod unwinding;
 pub mod python;
-pub use stack::Stack;
+pub use stack::SystemStack;
 
 /// Maximum number of frames to unwind 
 pub const MAX_USER_STACK: usize = 40;

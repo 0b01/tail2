@@ -2,13 +2,13 @@ use core::mem::{size_of, transmute};
 
 use aya_bpf::{maps::{ProgramArray, PerCpuArray, PerfEventArray, HashMap}, programs::PerfEventContext, macros::{perf_event, map}, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_probe_read_kernel, bpf_get_current_task, bpf_probe_read, bpf_get_smp_processor_id}, bindings::BPF_F_REUSE_STACKID, BpfContext, memset};
 use aya_log_ebpf::{info, error};
-use tail2_common::python::{state::{PythonSymbol, Event, pid_data, StackStatus, ErrorCode, pthreads_impl}, offsets::PythonOffsets, GET_THREAD_STATE_PROG_IDX};
-use crate::vmlinux::task_struct;
+use tail2_common::python::{state::{PythonSymbol, PythonStack, pid_data, StackStatus, ErrorCode, pthreads_impl}, offsets::PythonOffsets};
+use crate::{vmlinux::task_struct, sample::PIDS};
 
 pub mod thread;
 pub mod python_stack;
 
-use crate::{PIDS, helpers::get_pid_tgid, KERNEL_STACKS};
+use crate::{helpers::get_pid_tgid};
 
 use self::{thread::{get_thread_state, get_task_thread_id}, python_stack::read_python_stack};
 
@@ -24,7 +24,7 @@ pub struct SampleState {
     symbol_counter: i32,
     get_thread_state_call_count: usize,
     python_stack_prog_call_cnt: usize,
-    event: Event,
+    event: PythonStack,
 }
 
 
@@ -48,24 +48,9 @@ static SYMBOLS: HashMap<PythonSymbol, i32> = HashMap::with_max_entries(32768/* T
 static STATE_HEAP: PerCpuArray<SampleState> = PerCpuArray::with_max_entries(1, 0);
 
 #[map]
-static EVENTS: PerfEventArray<Event> = PerfEventArray::new(0);
+static EVENTS: PerfEventArray<PythonStack> = PerfEventArray::new(0);
 
-#[map]
-static TEST_MAP: HashMap<u32, i32> = HashMap::with_max_entries(32768/* TODO: configurable */, 0);
-
-
-#[perf_event(name="pyperf")]
-fn pyperf(ctx: PerfEventContext) -> Option<u32> {
-    let result = pyperf_inner(&ctx);
-    match result {
-        Ok(v) => info!(&ctx, "ok: {}", v as usize),
-        Err(e) => (), //info!(&ctx, "err: {}", e as usize),
-    }
-
-    Some(0)
-}
-
-fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
+pub(crate) fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
     let task: *const task_struct = unsafe { bpf_get_current_task() as *const _ };
     let ns = get_pid_tgid();
     let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(ErrorCode::NO_PID)? };
@@ -74,18 +59,10 @@ fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
     let Some(buf_ptr) = STATE_HEAP.get_ptr_mut(0) else { return Err(ErrorCode::CANT_ALLOC); };
     let state = unsafe { &mut *buf_ptr };
     let event = &mut state.event;
-    event.pid = ns.pid;
-    event.tid = ns.tgid;
     if let Ok(comm) = bpf_get_current_comm() {
         event.comm = comm;
     }
 
-    // Initialize stack info
-    if let Ok(stack_id) = unsafe { KERNEL_STACKS.get_stackid(ctx, BPF_F_REUSE_STACKID as u64) } {
-        event.kernel_stack_id = stack_id;
-    } else {
-        event.kernel_stack_id = -1;
-    }
     event.stack_len = 0;
     event.stack_status = StackStatus::STACK_STATUS_ERROR;
     event.error_code = ErrorCode::ERROR_NONE;
@@ -145,6 +122,6 @@ fn pyperf_inner<C: BpfContext>(ctx: &C) -> Result<u32, ErrorCode> {
     unsafe { read_python_stack(ctx, state, frame_ptr) };
 
     // event.error_code = ErrorCode::ERROR_CALL_FAILED;
-    // EVENTS.output(ctx, event, 0);
+    EVENTS.output(ctx, &state.event, 0);
     Ok(0)
 }

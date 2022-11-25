@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use procfs::process::{all_processes, Process, MemoryMap};
 use serde::{Deserialize, Serialize};
-use tail2_common::Stack;
+use tail2_common::stack::Stack;
 use anyhow::{Result, Context};
 
 use crate::{symbolication::{module::Module, module_cache::{self, ModuleCache}}, utils::MMapPathExt};
@@ -34,27 +34,30 @@ impl StackBatchDto {
         let mut ret = StackBatchDto::default();
         let mut from_stack = |stack: Stack| {
             let mut dto = StackDto::default();
-            let len = stack.unwind_success.unwrap_or(0);
-            let proc_map = proc_map(stack.pid() as i32)?;
-            for address in stack.user_stack[..len].iter().rev() {
-                let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
-                let path = entry.pathname
-                    .path()
-                    .context("not a path we can resolve")?
-                    .to_str().context("unable to convert to str")?;
-                let module = module_cache.resolve(path).context("module not found")?;
-                let module_idx = match ret.modules.iter().position(|m| Arc::ptr_eq(m, &module)) {
-                    Some(idx) => idx,
-                    None => {
-                        ret.modules.push(module);
-                        ret.modules.len() - 1
-                    }
-                };
 
-                dto.frames.push(FrameDto {
-                    module_idx,
-                    offset,
-                });
+            if let Some(stack) = stack.user_stack {
+                let len = stack.unwind_success.unwrap_or(0);
+                let proc_map = proc_map(stack.pid() as i32)?;
+                for address in stack.user_stack[..len].iter().rev() {
+                    let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
+                    let path = entry.pathname
+                        .path()
+                        .context("not a path we can resolve")?
+                        .to_str().context("unable to convert to str")?;
+                    let module = module_cache.resolve(path).context("module not found")?;
+                    let module_idx = match ret.modules.iter().position(|m| Arc::ptr_eq(m, &module)) {
+                        Some(idx) => idx,
+                        None => {
+                            ret.modules.push(module);
+                            ret.modules.len() - 1
+                        }
+                    };
+
+                    dto.frames.push(FrameDto {
+                        module_idx,
+                        offset,
+                    });
+                }
             }
 
             Result::<StackDto>::Ok(dto)

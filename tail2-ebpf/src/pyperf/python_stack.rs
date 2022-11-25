@@ -6,26 +6,12 @@ use tail2_common::python::{state::{PYTHON_STACK_FRAMES_PER_PROG, PythonSymbol, E
 
 use super::{SampleState, SYMBOLS, COUNTER_BITS, MAX_SYMBOLS};
 
-pub unsafe fn upsert_symbol(state: &mut SampleState) -> i32 {
-    let id = SYMBOLS.get(&state.symbol).unwrap_or(&-1);
-    *id
-}
-
 pub unsafe fn read_python_stack<C: BpfContext>(ctx: &C, state: &mut SampleState, frame_ptr: usize) -> Result<(), ErrorCode> {
-    // info!(ctx, "read_python_stack: {}", frame_ptr);
     let mut cur_frame = frame_ptr;
     for _ in 0..PYTHON_STACK_FRAMES_PER_PROG {
-        // read PyCodeObject first, if that fails, then no point reading next frame
-        let cur_code_ptr: usize = bpf_probe_read_user(((cur_frame + state.offsets.py_frame_object.f_code) as *const _)).unwrap_or_default();
-        // read current PyFrameObject filename/name
-        // The compiler substitutes a constant for `i` because the loop is unrolled. This guarantees we
-        // are always within the array bounds. On the other hand, `stack_len` is a variable, so the
-        // verifier can't guarantee it's within bounds without an explicit check.
-        read_symbol(ctx, &state.offsets, cur_frame, cur_code_ptr, &mut state.symbol)?;
-        // to please the verifier...
+        read_symbol(ctx, &state.offsets, cur_frame, &mut state.symbol)?;
         if (state.event.stack_len < STACK_MAX_LEN) {
-            let id = upsert_symbol(state);
-            state.event.stack[state.event.stack_len] = id;
+            state.event.stack[state.event.stack_len] = state.symbol;
             state.event.stack_len += 1;
         }
 
@@ -43,9 +29,9 @@ unsafe fn read<T>(ptr: usize) -> Result<T, ErrorCode> {
     bpf_probe_read_user(ptr as *const T).map_err(|_| ErrorCode::ERROR_READ_FRAME)
 }
 
-
 /// read_symbol_names in the original source
-pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame: usize, code_ptr: usize, sym: &mut PythonSymbol) -> Result<(), ErrorCode> {
+pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame: usize, sym: &mut PythonSymbol) -> Result<(), ErrorCode> {
+    let code_ptr: usize = read(frame + offsets.py_frame_object.f_code).unwrap_or_default();
     if (code_ptr == 0) {
         return Err(ErrorCode::ERROR_FRAME_CODE_IS_NULL);
     }

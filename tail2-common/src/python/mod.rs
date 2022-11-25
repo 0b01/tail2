@@ -3,9 +3,6 @@ use self::offsets::*;
 pub mod offsets;
 pub mod state;
 
-pub const GET_THREAD_STATE_PROG_IDX: u32 = 0;
-pub const READ_PYTHON_STACK_PROG_IDX: u32 = 1;
-
 #[repr(C)]
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct PythonVersion {

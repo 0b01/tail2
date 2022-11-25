@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use super::offsets::PythonOffsets;
 
 pub const PYTHON_STACK_FRAMES_PER_PROG: usize = 16;
@@ -54,7 +56,7 @@ pub enum ErrorCode {
     FIRST_ARG_NOT_FOUND,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum StackStatus {
     /// Read all the Python stack frames for the running thread, from first to last.
     STACK_STATUS_COMPLETE = 0,
@@ -96,7 +98,7 @@ pub struct pid_data {
 /// spread across a variety of files and classes. Using a separate map for `name` would be useless
 /// overhead because symbol names are mostly unique.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct PythonSymbol {
     pub lineno: u32,
     pub classname: [u8; CLASS_NAME_LEN],
@@ -115,21 +117,30 @@ impl Default for PythonSymbol {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct Event {
-    pub pid: u32,
-    pub tid: u32,
+pub struct PythonStack {
     pub comm: [u8; TASK_COMM_LEN],
     pub error_code: ErrorCode,
     pub stack_status: StackStatus,
-    pub kernel_stack_id: i64,
     /// instead of storing symbol name here directly, we add it to another
     /// hashmap with Symbols and only store the ids here
     pub stack_len: usize,
-    pub stack: [i32; STACK_MAX_LEN],
+    pub stack: [PythonSymbol; STACK_MAX_LEN],
+}
+
+impl Debug for PythonStack {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PythonStack")
+            .field("comm", &self.comm)
+            .field("error_code", &self.error_code)
+            .field("stack_status", &self.stack_status)
+            .field("stack_len", &self.stack_len)
+            .field("stack", &self.stack)
+            .finish()
+    }
 }
 
 #[cfg(feature = "user")]
-unsafe impl aya::Pod for Event {}
+unsafe impl aya::Pod for PythonStack {}
 
 #[cfg(feature = "user")]
 unsafe impl aya::Pod for PythonSymbol {}

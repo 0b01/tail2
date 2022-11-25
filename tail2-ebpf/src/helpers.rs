@@ -1,7 +1,7 @@
 use aya_bpf::{bindings::{bpf_pidns_info, task_struct}, helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task}};
 use tail2_common::ConfigMapKey;
 
-use crate::CONFIG;
+use crate::sample::CONFIG;
 
 pub fn get_pid_tgid() -> bpf_pidns_info {
     let dev = unsafe { CONFIG.get(&(ConfigMapKey::DEV as u32)) }.copied().unwrap_or(1);
