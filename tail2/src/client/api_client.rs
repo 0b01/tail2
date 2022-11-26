@@ -2,15 +2,14 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
-use tail2::{symbolication::module_cache::ModuleCache, dto::stack_dto::StackBatchDto};
-use tail2_common::stack::Stack;
+use tail2::{symbolication::module_cache::ModuleCache, dto::{stack_dto::StackBatchDto, resolved_bpf_sample::ResolvedBpfSample}};
 use tokio::sync::Mutex;
 
 pub struct ApiStackEndpointClient {
     client: Client,
     url: String,
     batch_size: usize,
-    buf: Vec<Stack>,
+    buf: Vec<ResolvedBpfSample>,
     module_cache: Arc<Mutex<ModuleCache>>,
 }
 
@@ -39,7 +38,7 @@ impl ApiStackEndpointClient {
         self.post_stacks(buf).await
     }
 
-    pub async fn post_stack(&mut self, st: Stack) -> Result<StatusCode> {
+    pub async fn post_stack(&mut self, st: ResolvedBpfSample) -> Result<StatusCode> {
         self.buf.push(st);
         if self.buf.len() == self.batch_size {
             let stacks = std::mem::replace(&mut self.buf, Vec::with_capacity(self.batch_size));
@@ -48,15 +47,13 @@ impl ApiStackEndpointClient {
         Ok(StatusCode::ACCEPTED)
     }
 
-    async fn post_stacks(&mut self, stacks: Vec<Stack>) -> Result<StatusCode> {
+    async fn post_stacks(&mut self, stacks: Vec<ResolvedBpfSample>) -> Result<StatusCode> {
         if stacks.is_empty() {
             return Ok(StatusCode::ACCEPTED);
         }
 
         let module_cache = &mut *self.module_cache.lock().await;
-        let dto = StackBatchDto::from_stacks(
-            stacks,
-            module_cache)?;
+        let dto = StackBatchDto::from_stacks(stacks, module_cache)?;
         drop(module_cache);
         let body = bincode::serialize(&dto).unwrap();
         self.post(&self.url, body).await

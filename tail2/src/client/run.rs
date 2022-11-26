@@ -1,9 +1,10 @@
 use anyhow::Result;
-use aya::maps::{AsyncPerfEventArray, HashMap};
+use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
 use log::{error, info};
-use tail2_common::stack::Stack;
+use tail2::dto::resolved_bpf_sample::ResolvedBpfSample;
+use tail2_common::bpf_sample::BpfSample;
 use tail2_common::{ConfigMapKey, NativeStack};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -17,7 +18,7 @@ use aya::Bpf;
 
 use super::api_client::ApiStackEndpointClient;
 
-pub(crate) fn open_and_subcribe(bpf: &mut Bpf, map_name: &str, tx: mpsc::Sender<Stack>, stop_rx: watch::Receiver<()>, ts: &mut Vec<JoinHandle<()>>) {
+pub(crate) fn open_and_subcribe(bpf: &mut Bpf, map_name: &str, tx: mpsc::Sender<BpfSample>, stop_rx: watch::Receiver<()>, ts: &mut Vec<JoinHandle<()>>) {
     // open bpf maps
     let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map(map_name).unwrap()).unwrap();
 
@@ -38,7 +39,8 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, map_name: &str, tx: mpsc::Sender<
                     evts = buf.read_events(&mut buffers) => {
                         let events = evts.unwrap();
                         for buf in buffers.iter_mut().take(events.read) {
-                            let st = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
+                            let st: BpfSample = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
+
                             if tx.try_send(st).is_err() {
                                 error!("slow");
                             }
@@ -62,13 +64,16 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
     config.insert(ConfigMapKey::DEV as u32, stats.dev(), 0).unwrap();
     config.insert(ConfigMapKey::INO as u32, stats.ino(), 0).unwrap();
 
-    let (tx, mut rx) = mpsc::channel(2048);
+    let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
 
     let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
         "http://0.0.0.0:8000/stack",
         Arc::clone(&module_cache),
         400,
     )));
+
+    let kernel_stacks = StackTraceMap::try_from(bpf.take_map("KERNEL_STACKS").unwrap()).unwrap();
+    let ksyms = aya::util::kernel_symbols().unwrap();
 
     // receiver thread
     let mut ts = vec![];
@@ -79,6 +84,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
             let start_time = SystemTime::now();
 
             // dbg!(&st);
+            let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
 
             let cli2 = Arc::clone(&cli);
             tokio::spawn(async move {

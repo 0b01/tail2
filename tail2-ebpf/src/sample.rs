@@ -5,16 +5,16 @@ use aya_bpf::{
     maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
     bindings::{bpf_pidns_info, pt_regs, BPF_F_REUSE_STACKID}, BpfContext
 };
-use tail2_common::{stack::Stack, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey, NativeStack, python::state::PythonStack};
+use tail2_common::{bpf_sample::BpfSample, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey, NativeStack, python::state::PythonStack, pidtgid::PidTgid};
 use aya_log_ebpf::{error, info};
 
-use crate::{pyperf::pyperf::sample_python, user::sample_user};
+use crate::{pyperf::pyperf::sample_python, user::sample_user, helpers::get_pid_tgid};
 
 #[map(name="STACKS")]
-pub(crate) static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
+pub(crate) static mut STACKS: PerfEventArray<BpfSample> = PerfEventArray::new(0);
 
 #[map(name="STACK_BUF")]
-pub(crate) static mut STACK_BUF: PerCpuArray<Stack> = PerCpuArray::with_max_entries(1, 0);
+pub(crate) static mut STACK_BUF: PerCpuArray<BpfSample> = PerCpuArray::with_max_entries(1, 0);
 
 #[map(name="CONFIG")]
 pub(crate) static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
@@ -22,7 +22,7 @@ pub(crate) static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 #[map(name="RUN_STATS")]
 pub(crate) static RUN_STATS: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
-#[map(name="KERNEL_TRACES")]
+#[map(name="KERNEL_STACKS")]
 pub(crate) static KERNEL_STACKS: StackTrace = StackTrace::with_max_entries(10, 0);
 
 #[map(name="PIDS")]
@@ -32,14 +32,16 @@ pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(256, 
 fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
     // let sz = ctx.arg(0).unwrap();
 
-    let st: &mut Stack = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
+    let st: &mut BpfSample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
     st.clear();
-    // st.python_stack = None;
+
+    let ns: bpf_pidns_info = get_pid_tgid();
+    st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
     st.kernel_stack_id = sample_kernel(&ctx);
 
-    st.user_stack = Some(NativeStack::uninit());
-    sample_user(&ctx, st.user_stack.as_mut().unwrap());
+    st.native_stack = Some(NativeStack::uninit());
+    sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
 
     unsafe {
         STACKS.output(&ctx, st, 0);
@@ -51,12 +53,16 @@ fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
 
 #[perf_event(name="capture_stack")]
 fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
-    let st: &mut Stack = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
+    let st: &mut BpfSample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
     st.clear();
+
+    let ns: bpf_pidns_info = get_pid_tgid();
+    st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+
     st.kernel_stack_id = sample_kernel(&ctx);
 
-    st.user_stack = Some(NativeStack::uninit());
-    sample_user(&ctx, st.user_stack.as_mut().unwrap());
+    st.native_stack = Some(NativeStack::uninit());
+    sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
 
     unsafe {
         STACKS.output(&ctx, st, 0);
@@ -67,12 +73,16 @@ fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
 
 #[perf_event(name="pyperf")]
 fn pyperf(ctx: PerfEventContext) -> Option<u32> {
-    let st: &mut Stack = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
+    let st: &mut BpfSample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
     st.clear();
+
+    let ns: bpf_pidns_info = get_pid_tgid();
+    st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+
     st.kernel_stack_id = sample_kernel(&ctx);
 
-    st.user_stack = Some(NativeStack::uninit());
-    sample_user(&ctx, st.user_stack.as_mut().unwrap());
+    st.native_stack = Some(NativeStack::uninit());
+    sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
 
     st.python_stack = Some(PythonStack::uninit());
     let result = sample_python(&ctx, st.python_stack.as_mut().unwrap());

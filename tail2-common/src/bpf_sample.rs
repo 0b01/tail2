@@ -2,19 +2,21 @@ use crate::{pidtgid::PidTgid, MAX_USER_STACK, python::state::PythonStack, Native
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct Stack {
+pub struct BpfSample {
+    pub pidtgid: PidTgid,
     pub kernel_stack_id: i64,
-    pub user_stack: Option<NativeStack>,
+    pub native_stack: Option<NativeStack>,
     pub python_stack: Option<PythonStack>,
 }
 
-impl Stack {
+impl BpfSample {
     pub fn clear(&mut self) {
+        self.pidtgid = PidTgid::new();
         self.kernel_stack_id = -1;
-        self.user_stack = None;
+        self.native_stack = None;
         self.python_stack = None;
     }
 }
 
 #[cfg(feature = "user")]
-unsafe impl aya::Pod for Stack {}
+unsafe impl aya::Pod for BpfSample {}

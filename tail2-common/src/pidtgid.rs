@@ -3,6 +3,10 @@
 pub struct PidTgid(u64);
 
 impl PidTgid {
+    pub fn new() -> Self {
+        Self(0)
+    }
+
     pub fn current(pid: u32, tgid: u32) -> Self {
         Self((pid as u64) << 32 | tgid as u64)
     }

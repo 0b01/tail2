@@ -1,6 +1,6 @@
 use aya_bpf::{helpers::bpf_probe_read_user, BpfContext, bindings::bpf_pidns_info};
 use aya_log_ebpf::error;
-use tail2_common::{NativeStack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, stack::Stack, native::unwinding::x86_64::unwindregs::UnwindRegsX86_64};
+use tail2_common::{NativeStack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, bpf_sample::BpfSample, native::unwinding::x86_64::unwindregs::UnwindRegsX86_64};
 
 use crate::{vmlinux::task_struct, helpers::get_pid_tgid};
 use crate::sample::PIDS;
@@ -16,22 +16,23 @@ type UnwindRule = UnwindRuleX86_64;
 type UnwindRule = UnwindRuleAarch64;
 
 
-pub(crate) fn sample_user<'a, 'b, C: BpfContext>(ctx: &'a C, st: &mut NativeStack) {
-    let ns: bpf_pidns_info = get_pid_tgid();
-
-    /* set pid tid */
-    st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
-
+pub(crate) fn sample_user<'a, 'b, C: BpfContext>(ctx: &'a C, st: &mut NativeStack, pid: u32) {
     /* unwind user stack */
     // let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
     let regs = ctx.as_ptr() as *const _;
     let pc = get_pc(regs);
     let mut regs = get_regs(regs);
-    unwind(ctx, st, pc, &mut regs);
+    unwind(ctx, st, pc, &mut regs, pid);
 }
 
-fn unwind<C: BpfContext>(ctx: &C, st: &mut NativeStack, pc: usize, regs: &mut UnwindRegs) -> Option<()> {
-    let proc_info = unsafe { PIDS.get(&st.pid())? };
+fn unwind<C: BpfContext>(
+    ctx: &C,
+    st: &mut NativeStack,
+    pc: usize,
+    regs: &mut UnwindRegs,
+    pid: u32
+) -> Option<()> {
+    let proc_info = unsafe { PIDS.get(&pid)? };
 
     let mut read_stack = |addr: u64| {
         unsafe { bpf_probe_read_user(addr as *const u64).map_err(|_|()) }
@@ -39,14 +40,14 @@ fn unwind<C: BpfContext>(ctx: &C, st: &mut NativeStack, pc: usize, regs: &mut Un
 
     let mut frame = pc;
     let mut is_first_frame = true;
-    st.user_stack[0] = pc;
+    st.native_stack[0] = pc;
     for i in 1..MAX_USER_STACK {
         let idx = binary_search(proc_info.rows.as_slice(), frame, proc_info.rows_len)?;
         let rule = proc_info.rows[idx].1;
 
         match rule.exec(is_first_frame, regs, &mut read_stack) {
             Some(Some(f)) => {
-                st.user_stack[i] = f as usize;
+                st.native_stack[i] = f as usize;
                 frame = f as usize;
             }
             Some(None) => {

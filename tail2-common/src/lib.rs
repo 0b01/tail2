@@ -6,7 +6,7 @@ pub mod runtime_type;
 pub mod pidtgid;
 pub mod procinfo;
 
-pub mod stack;
+pub mod bpf_sample;
 pub mod python;
 pub mod native;
 

@@ -1,11 +1,14 @@
-use std::sync::Arc;
+use std::{sync::Arc};
 
+use log::info;
 use procfs::process::{all_processes, Process, MemoryMap};
 use serde::{Deserialize, Serialize};
-use tail2_common::stack::Stack;
+use tail2_common::{bpf_sample::BpfSample, NativeStack};
 use anyhow::{Result, Context};
 
 use crate::{symbolication::{module::Module, module_cache::{self, ModuleCache}}, utils::MMapPathExt};
+
+use super::resolved_bpf_sample::ResolvedBpfSample;
 
 #[derive(Serialize, Deserialize, Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct FrameDto {
@@ -25,52 +28,70 @@ pub struct StackBatchDto {
     pub modules: Vec<Arc<Module>>,
 }
 
-pub fn proc_map(pid: i32) -> Result<Vec<MemoryMap>> {
-    Process::new(pid)?.maps().context("unable to get maps")
+pub fn proc_map(pid: u32) -> Result<Vec<MemoryMap>> {
+    Process::new(pid as i32)?.maps().context("unable to get maps")
 }
 
 impl StackBatchDto {
-    pub fn from_stacks(stacks: Vec<Stack>, module_cache: &mut ModuleCache) -> Result<StackBatchDto> {
-        let mut ret = StackBatchDto::default();
-        let mut from_stack = |stack: Stack| {
-            let mut dto = StackDto::default();
-
-            if let Some(stack) = stack.user_stack {
-                let len = stack.unwind_success.unwrap_or(0);
-                let proc_map = proc_map(stack.pid() as i32)?;
-                for address in stack.user_stack[..len].iter().rev() {
-                    let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
-                    let path = entry.pathname
-                        .path()
-                        .context("not a path we can resolve")?
-                        .to_str().context("unable to convert to str")?;
-                    let module = module_cache.resolve(path).context("module not found")?;
-                    let module_idx = match ret.modules.iter().position(|m| Arc::ptr_eq(m, &module)) {
-                        Some(idx) => idx,
-                        None => {
-                            ret.modules.push(module);
-                            ret.modules.len() - 1
-                        }
-                    };
-
-                    dto.frames.push(FrameDto {
-                        module_idx,
-                        offset,
-                    });
-                }
-            }
-
-            Result::<StackDto>::Ok(dto)
-        };
-
+    pub fn from_stacks(stacks: Vec<ResolvedBpfSample>, module_cache: &mut ModuleCache) -> Result<StackBatchDto> {
+        let mut batch = StackBatchDto::default();
         for stack in stacks {
-            if let Ok(dto) = from_stack(stack) {
-                ret.stacks.push(dto);
+            let mut dto = StackDto::default();
+            if let Some(s) = stack.native_stack {
+                from_native_stack(&mut batch, &mut dto, s, stack.pid_tgid.pid(), module_cache);
             }
+            if let Some(s) = stack.python_stack {
+                from_python_stack(&mut dto, s);
+            }
+            batch.stacks.push(dto);
         }
 
-        Ok(ret)
+        Ok(batch)
     }
+}
+
+fn from_native_stack(batch: &mut StackBatchDto, dto: &mut StackDto, native_stack: NativeStack, pid: u32, module_cache: &mut ModuleCache) -> Result<()> {
+    let len = native_stack.unwind_success.unwrap_or(0);
+    let proc_map = proc_map(pid)?;
+    for address in native_stack.native_stack[..len].iter().rev() {
+        let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
+        let path = entry.pathname
+            .path()
+            .context("not a path we can resolve")?
+            .to_str().context("unable to convert to str")?;
+        let module = module_cache.resolve(path).context("module not found")?;
+        let module_idx = match batch.modules.iter().position(|m| Arc::ptr_eq(m, &module)) {
+            Some(idx) => idx,
+            None => {
+                batch.modules.push(module);
+                batch.modules.len() - 1
+            }
+        };
+
+        dto.frames.push(FrameDto {
+            module_idx,
+            offset,
+        });
+
+    }
+
+    Ok(())
+}
+
+fn str_from_u8_nul_utf8(utf8_src: &[u8]) -> Result<&str, std::str::Utf8Error> {
+    let nul_range_end = utf8_src.iter()
+        .position(|&c| c == b'\0')
+        .unwrap_or(utf8_src.len()); // default to length if no `\0` present
+    ::std::str::from_utf8(&utf8_src[0..nul_range_end])
+}
+
+fn from_python_stack(dto: &mut StackDto, s: tail2_common::python::state::PythonStack) -> Result<()> {
+    for f in &s.frames[..s.frames_len] {
+        if let Ok(name) = str_from_u8_nul_utf8(&f.name) {
+            info!("{}", name);
+        }
+    }
+    Ok(())
 }
 
 fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)> {

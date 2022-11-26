@@ -33,18 +33,16 @@ unsafe fn read<T>(ptr: usize) -> Result<T, ErrorCode> {
 }
 
 #[inline(always)]
-/// read_symbol_names in the original source
 pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame: usize, sym: &mut PythonSymbol) -> Result<(), ErrorCode> {
     let code_ptr: usize = read(frame + offsets.py_frame_object.f_code).unwrap_or_default();
     if (code_ptr == 0) {
         return Err(ErrorCode::ERROR_FRAME_CODE_IS_NULL);
     }
     sym.lineno = read(code_ptr + offsets.py_code_object.co_firstlineno)?;
-    info!(ctx, "lineno: {}", sym.lineno);
+    // info!(ctx, "lineno: {}", sym.lineno);
     // get_classname(&offsets, frame, code_ptr, &mut sym.classname)?;
     let pystr_ptr: usize = read(code_ptr + offsets.py_code_object.co_filename)?;
     // TODO: too big for stack
-    sym.file = [0; FILE_NAME_LEN];
     // sym.file = read(pystr_ptr + offsets.string.data)?;
     // aya_bpf::helpers::gen::bpf_probe_read_user(
     //     (&mut sym.file).as_mut_ptr() as *mut c_void,

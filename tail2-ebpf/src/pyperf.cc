@@ -135,8 +135,8 @@ struct event {
   int32_t stack[STACK_MAX_LEN];
   uintptr_t user_ip;
   uintptr_t user_sp;
-  uint32_t user_stack_len;
-  uint8_t raw_user_stack[__USER_STACKS_PAGES__ * PAGE_SIZE];
+  uint32_t native_stack_len;
+  uint8_t raw_native_stack[__USER_STACKS_PAGES__ * PAGE_SIZE];
 #define FRAME_CODE_IS_NULL 0x80000001
 };
 struct sample_state {
@@ -256,7 +256,7 @@ on_event(struct pt_regs* ctx) {
   event->stack_status = STACK_STATUS_ERROR;
   event->error_code = ERROR_NONE;
   struct task_struct const *const task = (struct task_struct *)bpf_get_current_task();
-  if (sizeof(event->raw_user_stack) > 0) {
+  if (sizeof(event->raw_native_stack) > 0) {
     // Get raw native user stack
     struct pt_regs user_regs;
     // ebpf doesn't allow direct access to ctx->cs, so we need to copy it
@@ -282,19 +282,19 @@ on_event(struct pt_regs* ctx) {
     }
     event->user_sp = user_regs.sp;
     event->user_ip = user_regs.ip;
-    event->user_stack_len = 0;
+    event->native_stack_len = 0;
     // Subtract 128 from sp for x86-ABI red zone
     uintptr_t top_of_stack = user_regs.sp - 128;
     // Copy one page at the time - if one fails we don't want to lose the others
     int i;
     #pragma unroll
-    for (i = 0; i < sizeof(event->raw_user_stack) / PAGE_SIZE; ++i) {
+    for (i = 0; i < sizeof(event->raw_native_stack) / PAGE_SIZE; ++i) {
       if (bpf_probe_read_user(
-              event->raw_user_stack + i * PAGE_SIZE, PAGE_SIZE,
+              event->raw_native_stack + i * PAGE_SIZE, PAGE_SIZE,
               (void *)((top_of_stack & PAGE_MASK) + (i * PAGE_SIZE))) < 0) {
         break;
       }
-      event->user_stack_len = (i + 1) * PAGE_SIZE;
+      event->native_stack_len = (i + 1) * PAGE_SIZE;
     }
   }
   if (pid_data->interp == 0) {
