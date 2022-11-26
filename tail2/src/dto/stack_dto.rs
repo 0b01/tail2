@@ -3,22 +3,28 @@ use std::{sync::Arc};
 use log::info;
 use procfs::process::{all_processes, Process, MemoryMap};
 use serde::{Deserialize, Serialize};
-use tail2_common::{bpf_sample::BpfSample, NativeStack};
+use tail2_common::{bpf_sample::BpfSample, NativeStack, python::{state::PythonStack, self}};
 use anyhow::{Result, Context};
 
 use crate::{symbolication::{module::Module, module_cache::{self, ModuleCache}}, utils::MMapPathExt};
 
-use super::resolved_bpf_sample::ResolvedBpfSample;
+use super::resolved_bpf_sample::{ResolvedBpfSample, ResolvedPythonFrames};
 
-#[derive(Serialize, Deserialize, Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub struct FrameDto {
-    pub module_idx: usize,
-    pub offset: usize,
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub enum FrameDto {
+    Native {
+        module_idx: usize,
+        offset: usize,
+    },
+    Python {
+        name: String,
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct StackDto {
-    pub frames: Vec<FrameDto>,
+    pub native_frames: Vec<FrameDto>,
+    pub python_frames: Vec<FrameDto>,
     pub success: bool,
 }
 
@@ -33,15 +39,17 @@ pub fn proc_map(pid: u32) -> Result<Vec<MemoryMap>> {
 }
 
 impl StackBatchDto {
-    pub fn from_stacks(stacks: Vec<ResolvedBpfSample>, module_cache: &mut ModuleCache) -> Result<StackBatchDto> {
+    pub fn from_stacks(samples: Vec<ResolvedBpfSample>, module_cache: &mut ModuleCache) -> Result<StackBatchDto> {
         let mut batch = StackBatchDto::default();
-        for stack in stacks {
+        for bpf_sample in samples {
             let mut dto = StackDto::default();
-            if let Some(s) = stack.native_stack {
-                from_native_stack(&mut batch, &mut dto, s, stack.pid_tgid.pid(), module_cache);
+            if let Some(s) = bpf_sample.python_stack {
+                dto.python_frames = s.frames.into_iter().map(|name| FrameDto::Python { name }).collect();
             }
-            if let Some(s) = stack.python_stack {
-                from_python_stack(&mut dto, s);
+            if let Some(s) = bpf_sample.native_stack {
+                if let Ok(native_frames ) = from_native_stack(&mut batch, s, bpf_sample.pid_tgid.pid(), module_cache) {
+                    dto.native_frames = native_frames;
+                }
             }
             batch.stacks.push(dto);
         }
@@ -50,9 +58,10 @@ impl StackBatchDto {
     }
 }
 
-fn from_native_stack(batch: &mut StackBatchDto, dto: &mut StackDto, native_stack: NativeStack, pid: u32, module_cache: &mut ModuleCache) -> Result<()> {
+fn from_native_stack(batch: &mut StackBatchDto, native_stack: NativeStack, pid: u32, module_cache: &mut ModuleCache) -> Result<Vec<FrameDto>> {
     let len = native_stack.unwind_success.unwrap_or(0);
     let proc_map = proc_map(pid)?;
+    let mut native_frames = vec![];
     for address in native_stack.native_stack[..len].iter().rev() {
         let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
         let path = entry.pathname
@@ -68,14 +77,12 @@ fn from_native_stack(batch: &mut StackBatchDto, dto: &mut StackDto, native_stack
             }
         };
 
-        dto.frames.push(FrameDto {
+        native_frames.push(FrameDto::Native {
             module_idx,
             offset,
         });
-
     }
-
-    Ok(())
+    Ok(native_frames)
 }
 
 fn str_from_u8_nul_utf8(utf8_src: &[u8]) -> Result<&str, std::str::Utf8Error> {
@@ -85,11 +92,11 @@ fn str_from_u8_nul_utf8(utf8_src: &[u8]) -> Result<&str, std::str::Utf8Error> {
     ::std::str::from_utf8(&utf8_src[0..nul_range_end])
 }
 
-fn from_python_stack(dto: &mut StackDto, s: tail2_common::python::state::PythonStack) -> Result<()> {
-    for f in &s.frames[..s.frames_len] {
-        if let Ok(name) = str_from_u8_nul_utf8(&f.name) {
-            info!("{}", name);
-        }
+fn from_python_stack(dto: &mut StackDto, python_stack: ResolvedPythonFrames) -> Result<()> {
+    for frame in python_stack.frames.into_iter().rev() {
+        dto.native_frames.push(FrameDto::Python {
+            name: frame,
+        });
     }
     Ok(())
 }
