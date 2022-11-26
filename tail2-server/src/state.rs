@@ -23,10 +23,18 @@ impl CurrentCallTree {
     }
 }
 
-#[derive(Default, Clone, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Debug)]
+pub enum CodeType {
+    Native = 0,
+    Python = 1,
+    Kernel = 2,
+}
+
+#[derive(Clone, Eq, Serialize, Debug)]
 pub struct ResolvedFrame {
     pub module_idx: usize,
     pub offset: usize,
+    pub code_type: CodeType,
     pub name: Option<String>,
 }
 

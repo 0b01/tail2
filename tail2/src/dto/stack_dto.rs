@@ -18,14 +18,42 @@ pub enum FrameDto {
     },
     Python {
         name: String,
+    },
+    Kernel {
+        name: String,
+    },
+}
+
+impl FrameDto {
+    pub fn kernel_name(self) -> Option<String> {
+        match self {
+            FrameDto::Kernel { name } => Some(format!("kernel: {}", name)),
+            _ => None,
+        }
+    }
+    pub fn python_name(self) -> Option<String> {
+        match self {
+            FrameDto::Python { name } => Some(format!("python: {}", name)),
+            _ => None,
+        }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct StackDto {
+    pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
     pub python_frames: Vec<FrameDto>,
-    pub success: bool,
+}
+
+impl StackDto {
+    pub fn new() -> Self {
+        Self {
+            kernel_frames: vec![],
+            native_frames: vec![],
+            python_frames: vec![],
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -42,14 +70,20 @@ impl StackBatchDto {
     pub fn from_stacks(samples: Vec<ResolvedBpfSample>, module_cache: &mut ModuleCache) -> Result<StackBatchDto> {
         let mut batch = StackBatchDto::default();
         for bpf_sample in samples {
-            let mut dto = StackDto::default();
+            let mut dto = StackDto::new();
             if let Some(s) = bpf_sample.python_stack {
-                dto.python_frames = s.frames.into_iter().map(|name| FrameDto::Python { name }).collect();
+                dto.python_frames = s.frames.into_iter().rev().map(|name| FrameDto::Python { name }).collect();
             }
             if let Some(s) = bpf_sample.native_stack {
                 if let Ok(native_frames ) = from_native_stack(&mut batch, s, bpf_sample.pid_tgid.pid(), module_cache) {
                     dto.native_frames = native_frames;
                 }
+            }
+            if let Some(s) = bpf_sample.kernel_frames {
+                dto.kernel_frames = s.into_iter()
+                    .map(|i| i.unwrap_or("".to_owned()))
+                    .map(|name| FrameDto::Kernel { name })
+                    .collect();
             }
             batch.stacks.push(dto);
         }
@@ -92,15 +126,6 @@ fn str_from_u8_nul_utf8(utf8_src: &[u8]) -> Result<&str, std::str::Utf8Error> {
     ::std::str::from_utf8(&utf8_src[0..nul_range_end])
 }
 
-fn from_python_stack(dto: &mut StackDto, python_stack: ResolvedPythonFrames) -> Result<()> {
-    for frame in python_stack.frames.into_iter().rev() {
-        dto.native_frames.push(FrameDto::Python {
-            name: frame,
-        });
-    }
-    Ok(())
-}
-
 fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)> {
     for entry in proc_map.iter() {
         if address >= entry.address.0 as usize && address < entry.address.1  as usize{
@@ -135,7 +160,7 @@ mod server {
             use rocket::outcome::Outcome::*;
 
             // Use a configured limit with name 'stack' or fallback to default.
-            let limit = req.limits().get("stack").unwrap_or_else(||20.megabytes());
+            let limit = req.limits().get("stack").unwrap_or_else(||40.megabytes());
 
             // Read the data into a string.
             let buf = match data.open(limit).into_bytes().await {

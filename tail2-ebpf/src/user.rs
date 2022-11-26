@@ -1,4 +1,4 @@
-use aya_bpf::{helpers::bpf_probe_read_user, BpfContext, bindings::bpf_pidns_info};
+use aya_bpf::{helpers::{bpf_probe_read_user, bpf_get_current_task, bpf_task_pt_regs, bpf_get_current_task_btf}, BpfContext, bindings::bpf_pidns_info};
 use aya_log_ebpf::error;
 use tail2_common::{NativeStack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, bpf_sample::BpfSample, native::unwinding::x86_64::unwindregs::UnwindRegsX86_64};
 
@@ -18,8 +18,9 @@ type UnwindRule = UnwindRuleAarch64;
 
 pub(crate) fn sample_user<'a, 'b, C: BpfContext>(ctx: &'a C, st: &mut NativeStack, pid: u32) {
     /* unwind user stack */
-    // let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
-    let regs = ctx.as_ptr() as *const _;
+    let task = unsafe { bpf_get_current_task_btf()};
+    let regs = unsafe { bpf_task_pt_regs(task) } as *const _;
+    // let regs = ctx.as_ptr() as *const _;
     let pc = get_pc(regs);
     let mut regs = get_regs(regs);
     unwind(ctx, st, pc, &mut regs, pid);

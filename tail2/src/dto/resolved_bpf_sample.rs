@@ -31,6 +31,7 @@ impl ResolvedPythonFrames {
     }
 }
 
+#[derive(Debug)]
 pub struct ResolvedBpfSample {
     pub pid_tgid: PidTgid,
     pub native_stack: Option<NativeStack>,

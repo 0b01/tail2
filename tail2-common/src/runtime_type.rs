@@ -95,7 +95,6 @@ pub mod user {
                 globals._PyThreadState_Current = row.avma + py_info._PyThreadState_Current;
                 log::info!("_PyThreadState_Current: {}", globals._PyThreadState_Current);
             }
-            dbg!(&version);
 
             let pthreads_impl = if paths.iter().any(|i|i.mod_name.contains("musl")) { pthreads_impl::PTI_MUSL } else { pthreads_impl::PTI_GLIBC };
             return RuntimeType::Python {

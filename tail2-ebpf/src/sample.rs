@@ -38,10 +38,10 @@ fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
     let ns: bpf_pidns_info = get_pid_tgid();
     st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
-    st.kernel_stack_id = sample_kernel(&ctx);
-
     st.native_stack = Some(NativeStack::uninit());
     sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
+
+    st.kernel_stack_id = sample_kernel(&ctx);
 
     unsafe {
         STACKS.output(&ctx, st, 0);
@@ -59,10 +59,10 @@ fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
     let ns: bpf_pidns_info = get_pid_tgid();
     st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
-    st.kernel_stack_id = sample_kernel(&ctx);
-
     st.native_stack = Some(NativeStack::uninit());
     sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
+
+    st.kernel_stack_id = sample_kernel(&ctx);
 
     unsafe {
         STACKS.output(&ctx, st, 0);
@@ -79,18 +79,18 @@ fn pyperf(ctx: PerfEventContext) -> Option<u32> {
     let ns: bpf_pidns_info = get_pid_tgid();
     st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
-    st.kernel_stack_id = sample_kernel(&ctx);
-
     st.native_stack = Some(NativeStack::uninit());
     sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
 
     st.python_stack = Some(PythonStack::uninit());
     let result = sample_python(&ctx, st.python_stack.as_mut().unwrap());
 
-    match result {
-        Ok(v) => info!(&ctx, "ok: {}", v as usize),
-        Err(e) => (), //info!(&ctx, "err: {}", e as usize),
-    }
+    st.kernel_stack_id = sample_kernel(&ctx);
+
+    // match result {
+    //     Ok(v) => info!(&ctx, "ok: {}", v as usize),
+    //     Err(e) => (), //info!(&ctx, "err: {}", e as usize),
+    // }
 
     unsafe {
         STACKS.output(&ctx, st, 0);
