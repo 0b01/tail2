@@ -1,3 +1,5 @@
+use core::mem::MaybeUninit;
+
 use crate::{MAX_USER_STACK, pidtgid::PidTgid};
 
 #[repr(C)]
@@ -17,7 +19,11 @@ impl NativeStack {
         }
     }
 
-    #[inline]
+    pub fn uninit() -> Self {
+        unsafe { MaybeUninit::uninit().assume_init() }
+    }
+
+    #[inline(always)]
     pub fn pid(&self) -> u32 {
         self.pidtgid.pid()
     }

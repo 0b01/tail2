@@ -4,10 +4,10 @@ use super::offsets::PythonOffsets;
 
 pub const PYTHON_STACK_FRAMES_PER_PROG: usize = 16;
 pub const PYTHON_STACK_PROG_CNT: usize = 5;
-pub const STACK_MAX_LEN: usize = (PYTHON_STACK_FRAMES_PER_PROG * PYTHON_STACK_PROG_CNT);
+pub const FRAME_MAX_LEN: usize = (PYTHON_STACK_FRAMES_PER_PROG * PYTHON_STACK_PROG_CNT);
 pub const CLASS_NAME_LEN: usize = 32;
 pub const FUNCTION_NAME_LEN: usize = 64;
-pub const FILE_NAME_LEN: usize = 256;
+pub const FILE_NAME_LEN: usize = 128;
 pub const TASK_COMM_LEN: usize = 16;
 
 #[repr(u8)]
@@ -115,6 +115,17 @@ impl Default for PythonSymbol {
     }
 }
 
+impl PythonSymbol {
+    /// Somehow using Copy trait directly causes bpf verifier to complain...
+    /// use a function call so we don't accidentally overflow the stack...
+    pub fn copy(&mut self, other: &mut Self) {
+        self.lineno = other.lineno;
+        self.classname = other.classname;
+        self.name = other.name;
+        self.file = other.file;
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PythonStack {
@@ -124,7 +135,15 @@ pub struct PythonStack {
     /// instead of storing symbol name here directly, we add it to another
     /// hashmap with Symbols and only store the ids here
     pub frames_len: usize,
-    pub frames: [PythonSymbol; STACK_MAX_LEN],
+    pub frames: [PythonSymbol; FRAME_MAX_LEN],
+}
+
+impl PythonStack {
+    pub fn uninit() -> Self {
+        unsafe {
+            core::mem::MaybeUninit::uninit().assume_init()
+        }
+    }
 }
 
 impl Debug for PythonStack {

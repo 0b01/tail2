@@ -5,10 +5,10 @@ use aya_bpf::{
     maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
     bindings::{bpf_pidns_info, pt_regs, BPF_F_REUSE_STACKID}, BpfContext
 };
-use tail2_common::{stack::Stack, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey};
+use tail2_common::{stack::Stack, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey, NativeStack, python::state::PythonStack};
 use aya_log_ebpf::{error, info};
 
-use crate::{pyperf::pyperf_inner, user::sample_user};
+use crate::{pyperf::pyperf::sample_python, user::sample_user};
 
 #[map(name="STACKS")]
 pub(crate) static mut STACKS: PerfEventArray<Stack> = PerfEventArray::new(0);
@@ -29,51 +29,62 @@ pub(crate) static KERNEL_STACKS: StackTrace = StackTrace::with_max_entries(10, 0
 pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(256, 0);
 
 #[uprobe(name="malloc_enter")]
-fn malloc_enter(ctx: ProbeContext) -> u32 {
+fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
     // let sz = ctx.arg(0).unwrap();
 
-    // get a Stack buffer from per cpu heap
-    if let Some(buf_ptr) = unsafe { STACK_BUF.get_ptr_mut(0) } {
-        let st: &mut Stack = unsafe { &mut *buf_ptr };
-        // st.python_stack = None;
+    let st: &mut Stack = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
+    st.clear();
+    // st.python_stack = None;
 
-        st.kernel_stack_id = sample_kernel(&ctx);
+    st.kernel_stack_id = sample_kernel(&ctx);
 
-        st.user_stack = Some(Default::default());
-        sample_user(&ctx, st.user_stack.as_mut().unwrap());
+    st.user_stack = Some(NativeStack::uninit());
+    sample_user(&ctx, st.user_stack.as_mut().unwrap());
 
-        unsafe {
-            STACKS.output(&ctx, st, 0);
-            incr_sent_stacks();
-        }
+    unsafe {
+        STACKS.output(&ctx, st, 0);
+        incr_sent_stacks();
     }
-    0
+
+    Some(0)
 }
 
 #[perf_event(name="capture_stack")]
-fn capture_stack(ctx: PerfEventContext) -> u32 {
-    // get a Stack buffer from per cpu heap
-    if let Some(buf_ptr) = unsafe { STACK_BUF.get_ptr_mut(0) } {
-        let st: &mut Stack = unsafe { &mut *buf_ptr };
-        st.kernel_stack_id = sample_kernel(&ctx);
+fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
+    let st: &mut Stack = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
+    st.clear();
+    st.kernel_stack_id = sample_kernel(&ctx);
 
-        st.user_stack = Some(Default::default());
-        sample_user(&ctx, st.user_stack.as_mut().unwrap());
+    st.user_stack = Some(NativeStack::uninit());
+    sample_user(&ctx, st.user_stack.as_mut().unwrap());
 
-        unsafe {
-            STACKS.output(&ctx, st, 0);
-            incr_sent_stacks();
-        }
+    unsafe {
+        STACKS.output(&ctx, st, 0);
+        incr_sent_stacks();
     }
-    0
+    Some(0)
 }
 
 #[perf_event(name="pyperf")]
 fn pyperf(ctx: PerfEventContext) -> Option<u32> {
-    let result = pyperf_inner(&ctx);
+    let st: &mut Stack = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
+    st.clear();
+    st.kernel_stack_id = sample_kernel(&ctx);
+
+    st.user_stack = Some(NativeStack::uninit());
+    sample_user(&ctx, st.user_stack.as_mut().unwrap());
+
+    st.python_stack = Some(PythonStack::uninit());
+    let result = sample_python(&ctx, st.python_stack.as_mut().unwrap());
+
     match result {
         Ok(v) => info!(&ctx, "ok: {}", v as usize),
         Err(e) => (), //info!(&ctx, "err: {}", e as usize),
+    }
+
+    unsafe {
+        STACKS.output(&ctx, st, 0);
+        incr_sent_stacks();
     }
 
     Some(0)

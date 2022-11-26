@@ -61,7 +61,10 @@ async fn main() -> Result<()> {
             init_logger(&mut bpf).await?;
 
             let program: &mut PerfEvent = bpf.program_mut("pyperf").unwrap().try_into().unwrap();
-            program.load().unwrap();
+            if let Err(e) = program.load() {
+                let s = e.to_string();
+                println!("{}", s);
+            }
             for cpu in online_cpus()? {
                 let scope = pid
                     .map(|pid| {

@@ -2,22 +2,23 @@ use core::{mem::{size_of, self, transmute}};
 
 use aya_bpf::{BpfContext, helpers::{bpf_probe_read_user}, cty::c_void, memset};
 use aya_log_ebpf::info;
-use tail2_common::python::{state::{PYTHON_STACK_FRAMES_PER_PROG, PythonSymbol, ErrorCode, CLASS_NAME_LEN, FILE_NAME_LEN, STACK_MAX_LEN}, offsets::PythonOffsets};
+use tail2_common::python::{state::{PYTHON_STACK_FRAMES_PER_PROG, PythonSymbol, ErrorCode, CLASS_NAME_LEN, FILE_NAME_LEN, FRAME_MAX_LEN, PythonStack}, offsets::PythonOffsets};
 
-use super::{SampleState, SYMBOLS, COUNTER_BITS, MAX_SYMBOLS};
+use super::pyperf::SampleState;
 
-pub unsafe fn read_python_stack<C: BpfContext>(ctx: &C, state: &mut SampleState, frame_ptr: usize) -> Result<(), ErrorCode> {
+#[inline(always)]
+pub fn read_python_stack<C: BpfContext>(ctx: &C, stack: &mut PythonStack, state: &mut SampleState, offsets: &PythonOffsets, frame_ptr: usize) -> Result<(), ErrorCode> {
     let mut cur_frame = frame_ptr;
-    state.event.frames_len = 0;
+    stack.frames_len = 0;
     for _ in 0..PYTHON_STACK_FRAMES_PER_PROG {
-        read_symbol(ctx, &state.offsets, cur_frame, &mut state.symbol)?;
-        if (state.event.frames_len < STACK_MAX_LEN) {
-            state.event.frames[state.event.frames_len] = state.symbol;
-            state.event.frames_len += 1;
+        unsafe { read_symbol(ctx, &offsets, cur_frame, &mut state.symbol)? };
+        if (stack.frames_len < FRAME_MAX_LEN) {
+            stack.frames[stack.frames_len].copy(&mut state.symbol);
+            stack.frames_len += 1;
         }
 
         // read next PyFrameObject pointer, update in place
-        cur_frame = read(cur_frame + state.offsets.py_frame_object.f_back)?;
+        cur_frame = unsafe { read(cur_frame + offsets.py_frame_object.f_back)? };
         if cur_frame == 0 {
             break;
         }
@@ -26,10 +27,12 @@ pub unsafe fn read_python_stack<C: BpfContext>(ctx: &C, state: &mut SampleState,
     Ok(())
 }
 
+#[inline(always)]
 unsafe fn read<T>(ptr: usize) -> Result<T, ErrorCode> {
     bpf_probe_read_user(ptr as *const T).map_err(|_| ErrorCode::ERROR_READ_FRAME)
 }
 
+#[inline(always)]
 /// read_symbol_names in the original source
 pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame: usize, sym: &mut PythonSymbol) -> Result<(), ErrorCode> {
     let code_ptr: usize = read(frame + offsets.py_frame_object.f_code).unwrap_or_default();
@@ -41,6 +44,7 @@ pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame
     // get_classname(&offsets, frame, code_ptr, &mut sym.classname)?;
     let pystr_ptr: usize = read(code_ptr + offsets.py_code_object.co_filename)?;
     // TODO: too big for stack
+    sym.file = [0; FILE_NAME_LEN];
     // sym.file = read(pystr_ptr + offsets.string.data)?;
     // aya_bpf::helpers::gen::bpf_probe_read_user(
     //     (&mut sym.file).as_mut_ptr() as *mut c_void,
@@ -54,6 +58,7 @@ pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame
     Ok(())
 }
 
+#[inline(always)]
 /// Read the name of the class wherein a code object is defined.
 /// For global functions, sets an empty string.
 unsafe fn get_classname(offsets: &PythonOffsets, cur_frame: usize, code_ptr: usize, class_name: &mut [u8; CLASS_NAME_LEN]) -> Result<(), ErrorCode> {
@@ -86,6 +91,7 @@ unsafe fn get_classname(offsets: &PythonOffsets, cur_frame: usize, code_ptr: usi
     Ok(())
 }
 
+#[inline(always)]
 /// Reads the name of the first argument of a PyCodeObject.
 unsafe fn get_first_arg_name(offsets: &PythonOffsets, code_ptr: usize) -> Result<[u8; 4], ErrorCode> {
     // gdb:  ((PyTupleObject*)$frame->f_code->co_varnames)->ob_item[0]

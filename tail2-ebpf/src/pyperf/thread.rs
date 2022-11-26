@@ -1,24 +1,25 @@
 use aya_bpf::{helpers::{bpf_probe_read_user, bpf_probe_read, bpf_get_smp_processor_id}, BpfContext};
 use aya_log_ebpf::{info, error};
-use tail2_common::python::state::{ErrorCode, pthreads_impl};
+use tail2_common::python::{state::{ErrorCode, pthreads_impl}, offsets::PythonOffsets};
 
 use crate::vmlinux::task_struct;
 
-use super::SampleState;
+use super::pyperf::SampleState;
 
 const THREAD_STATES_PER_PROG: usize = 32;
 const THREAD_STATES_PROG_CNT: usize = 8;
 
+#[inline(always)]
 /// Searches through all the PyThreadStates in the interpreter to find the one
 /// corresponding to the current task. Once found, call `read_python_stack`.
 /// 
 /// returns a frame_ptr
-pub fn get_thread_state<C: BpfContext>(ctx: &C, state: &mut SampleState) -> Result<usize, ErrorCode> {
+pub fn get_thread_state<C: BpfContext>(ctx: &C, state: &mut SampleState, offsets: &PythonOffsets) -> Result<usize, ErrorCode> {
     for i in 0..THREAD_STATES_PROG_CNT {
         let mut found = false;
         for i in 0..THREAD_STATES_PER_PROG {
             // Read the PyThreadState::thread_id to which this PyThreadState belongs:
-            let thread_id = unsafe { bpf_probe_read_user((state.thread_state + state.offsets.py_thread_state.thread) as *const u64) };
+            let thread_id = unsafe { bpf_probe_read_user((state.thread_state + offsets.py_thread_state.thread) as *const u64) };
             match thread_id {
                 Ok(id) => {
                     // info!(ctx, "{} ?= {}", id, state.current_thread_id);
@@ -28,7 +29,7 @@ pub fn get_thread_state<C: BpfContext>(ctx: &C, state: &mut SampleState) -> Resu
                         break;
                     } else {
                         // Read next thread state:
-                        state.thread_state = unsafe { bpf_probe_read_user((state.thread_state + state.offsets.py_thread_state.next) as *const _).unwrap_or_default() };
+                        state.thread_state = unsafe { bpf_probe_read_user((state.thread_state + offsets.py_thread_state.next) as *const _).unwrap_or_default() };
                         if (state.thread_state == 0) {
                             error!(ctx, "not found");
                             return Err(ErrorCode::ERROR_BAD_THREAD_STATE);
@@ -53,7 +54,7 @@ pub fn get_thread_state<C: BpfContext>(ctx: &C, state: &mut SampleState) -> Resu
     }
 
     // Get pointer to top frame from PyThreadState
-    let frame_ptr = unsafe { bpf_probe_read_user( (state.thread_state + state.offsets.py_thread_state.frame) as *const _) };
+    let frame_ptr = unsafe { bpf_probe_read_user( (state.thread_state + offsets.py_thread_state.frame) as *const _) };
     match frame_ptr {
         Ok(0) | Err(_) => Err(ErrorCode::ERROR_EMPTY_STACK),
         Ok(f) => Ok(f),

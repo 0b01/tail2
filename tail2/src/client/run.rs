@@ -39,7 +39,6 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, map_name: &str, tx: mpsc::Sender<
                         let events = evts.unwrap();
                         for buf in buffers.iter_mut().take(events.read) {
                             let st = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
-                            dbg!(&st);
                             if tx.try_send(st).is_err() {
                                 error!("slow");
                             }
