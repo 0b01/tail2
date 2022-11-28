@@ -26,7 +26,7 @@ pub(crate) static RUN_STATS: HashMap<u32, u64> = HashMap::with_max_entries(10, 0
 pub(crate) static KERNEL_STACKS: StackTrace = StackTrace::with_max_entries(10, 0);
 
 #[map(name="PIDS")]
-pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(256, 0);
+pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(512, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> Option<u32> {

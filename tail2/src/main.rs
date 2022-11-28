@@ -49,7 +49,7 @@ fn bump_memlock_rlimit() -> Result<()> {
 // TODO: use Tail2.toml for config
 #[tokio::main]
 async fn main() -> Result<()> {
-    bump_memlock_rlimit()?;
+    // bump_memlock_rlimit()?;
     let mut bpf = load_bpf()?;
     init_logger(&mut bpf).await?;
 
@@ -75,7 +75,6 @@ async fn main() -> Result<()> {
         Commands::Py { pid , period} => {
             ensure_root();
             let mut bpf = load_bpf()?;
-            init_logger(&mut bpf).await?;
 
             let program: &mut PerfEvent = bpf.program_mut("pyperf").unwrap().try_into().unwrap();
             if let Err(e) = program.load() {
@@ -112,7 +111,6 @@ async fn main() -> Result<()> {
         Commands::Sample { pid , period} => {
             ensure_root();
             let mut bpf = load_bpf()?;
-            init_logger(&mut bpf).await?;
             let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
             program.load().unwrap();
             for cpu in online_cpus()? {
@@ -145,7 +143,6 @@ async fn main() -> Result<()> {
         Commands::Alloc { pid } => {
             ensure_root();
             let mut bpf = load_bpf()?;
-            init_logger(&mut bpf).await?;
             let pid = pid.map(|pid| 
                 match pid {
                     0 => process::id() as i32,

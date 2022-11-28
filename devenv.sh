@@ -1,5 +1,5 @@
 sudo apt update
-sudo apt install build-essential
+sudo apt install build-essential pkg-config libssl-dev
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 rustup install stable
