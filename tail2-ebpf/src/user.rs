@@ -1,6 +1,7 @@
 use aya_bpf::{helpers::{bpf_probe_read_user, bpf_get_current_task, bpf_task_pt_regs, bpf_get_current_task_btf}, BpfContext, bindings::bpf_pidns_info};
 use aya_log_ebpf::error;
 use tail2_common::{NativeStack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, bpf_sample::BpfSample, native::unwinding::x86_64::unwindregs::UnwindRegsX86_64};
+use aya_bpf::bindings::pt_regs;
 
 use crate::{vmlinux::task_struct, helpers::get_pid_tgid};
 use crate::sample::PIDS;
