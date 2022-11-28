@@ -61,7 +61,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: Receiver<()>, module_cache: Arc<Mu
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            // dbg!(&st);
+            dbg!(&st);
 
             let cli2 = Arc::clone(&cli);
             tokio::spawn(async move {

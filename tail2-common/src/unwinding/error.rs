@@ -61,32 +61,32 @@ pub enum DwarfUnwinderError {
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ConversionError {
-    #[error("")]
+    #[error("CfaIsExpression")]
     CfaIsExpression,
-    #[error("")]
+    #[error("CfaIsOffsetFromUnknownRegister")]
     CfaIsOffsetFromUnknownRegister,
-    #[error("")]
+    #[error("ReturnAddressRuleWithUnexpectedOffset")]
     ReturnAddressRuleWithUnexpectedOffset,
-    #[error("")]
+    #[error("ReturnAddressRuleWasWeird")]
     ReturnAddressRuleWasWeird,
-    #[error("")]
+    #[error("SpOffsetDoesNotFit")]
     SpOffsetDoesNotFit,
-    #[error("")]
+    #[error("RegisterNotStoredRelativeToCfa")]
     RegisterNotStoredRelativeToCfa,
-    #[error("")]
+    #[error("RestoringFpButNotLr")]
     RestoringFpButNotLr,
-    #[error("")]
+    #[error("LrStorageOffsetDoesNotFit")]
     LrStorageOffsetDoesNotFit,
-    #[error("")]
+    #[error("FpStorageOffsetDoesNotFit")]
     FpStorageOffsetDoesNotFit,
-    #[error("")]
+    #[error("SpOffsetFromFpDoesNotFit")]
     SpOffsetFromFpDoesNotFit,
-    #[error("")]
+    #[error("FramePointerRuleDoesNotRestoreLr")]
     FramePointerRuleDoesNotRestoreLr,
-    #[error("")]
+    #[error("FramePointerRuleDoesNotRestoreFp")]
     FramePointerRuleDoesNotRestoreFp,
-    #[error("")]
+    #[error("FramePointerRuleDoesNotRestoreBp")]
     FramePointerRuleDoesNotRestoreBp,
-    #[error("")]
+    #[error("FramePointerRuleHasStrangeBpOffset")]
     FramePointerRuleHasStrangeBpOffset,
 }

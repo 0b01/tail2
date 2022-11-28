@@ -77,8 +77,9 @@ impl UnwindTable {
                     let encoding = fde.cie().encoding();
                     let mut table = fde.rows(&eh_frame, &bases, &mut ctx)?;
                     while let Some(row) = table.next_row()? {
-                        if let Ok(r) = UnwindTableRow::parse(row, encoding) {
-                            rows.push(r);
+                        match UnwindTableRow::parse(row, encoding) {
+                            Ok(r) => rows.push(r),
+                            Err(e) => eprintln!("err parsing: {}, error: {:?}", row.start_address(), e),
                         }
                     }
                 }

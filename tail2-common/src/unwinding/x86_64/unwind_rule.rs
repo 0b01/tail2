@@ -173,6 +173,16 @@ impl UnwindRuleX86_64 {
         regs.set_bp(new_bp);
         Some(Some(return_address))
     }
+
+    pub fn to_num(&self) -> i32 {
+        match self {
+            Self::JustReturn => 0,
+            Self::JustReturnIfFirstFrameOtherwiseFp => 1,
+            Self::OffsetSp { .. } => 2,
+            Self::OffsetSpAndRestoreBp { .. } => 3,
+            Self::UseFramePointer => 4,
+        }
+    }
 }
 
 

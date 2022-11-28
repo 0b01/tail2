@@ -44,6 +44,10 @@ async fn main() -> Result<()> {
 
     let opt = args::Opt::parse();
     match opt.command {
+        Commands::Table {pid} => {
+            let ret = Processes::detect_pid(pid, &mut *module_cache.lock().await);
+            // dbg!(ret);
+        }
         Commands::Processes { } => {
             let mut p = Processes::new(module_cache);
             p.refresh().await.unwrap();
@@ -87,7 +91,7 @@ async fn main() -> Result<()> {
             for t in ts { let _ = tokio::join!(t); }
             print_stats(&mut bpf).await?;
         },
-        Commands::Alloc { pid } => {
+        Commands::Attach { pid, uprobe } => {
             ensure_root();
             let pid = pid.map(|pid| 
                 match pid {
@@ -97,7 +101,10 @@ async fn main() -> Result<()> {
 
             let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
             program.load().unwrap();
-            program.attach(Some("malloc"), 0, "libc", pid).unwrap();
+            let mut uprobe = uprobe.split(":");
+            let src = uprobe.next().unwrap();
+            let func = uprobe.next().unwrap();
+            program.attach(Some(func), 0, src, pid).unwrap();
             info!("loaded");
 
             spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;

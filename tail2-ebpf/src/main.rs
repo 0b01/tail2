@@ -5,7 +5,7 @@
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
-    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task},
+    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read, bpf_probe_read_kernel, bpf_probe_read_user, bpf_get_current_task},
     maps::{HashMap, PerCpuArray, PerfEventArray},
     bindings::{bpf_pidns_info, pt_regs, task_struct}, BpfContext
 };
@@ -37,7 +37,7 @@ static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 static RUN_INFO: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
 #[map(name="PIDS")]
-static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(256, 0);
+static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(512, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> u32 {
@@ -86,7 +86,9 @@ fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs
     let proc_info = unsafe { PIDS.get(&st.pid())? };
 
     let mut read_stack = |addr: u64| {
-        unsafe { bpf_probe_read_user(addr as *const u64).map_err(|_|()) }
+        let ret = unsafe { bpf_probe_read_user(addr as *const u64) };
+        info!(ctx, "read_stack: {}, result: {}", addr, ret.unwrap_err());
+        ret.map_err(|_|())
     };
 
     let mut frame = pc;
@@ -95,6 +97,7 @@ fn unwind<C: BpfContext>(ctx: &C, st: &mut Stack, pc: u64, regs: &mut UnwindRegs
     for i in 1..MAX_USER_STACK {
         let idx = binary_search(proc_info.rows.as_slice(), frame, proc_info.rows_len)?;
         let rule = proc_info.rows[idx].1;
+        info!(ctx, "{}", rule.to_num());
 
         match rule.exec(is_first_frame, regs, &mut read_stack) {
             Some(Some(f)) => {

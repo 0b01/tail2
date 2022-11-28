@@ -8,6 +8,10 @@ pub struct Opt {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Print Unwind table
+    Table {
+        pid: i32,
+    },
     /// Print symbols
     Symbols {
         paths: Vec<String>,
@@ -22,9 +26,11 @@ pub enum Commands {
         period: Option<u64>,
     },
     /// Listen to alloc events
-    Alloc {
+    Attach {
         #[clap(short, long)]
         pid: Option<i32>,
+        #[clap(short, long)]
+        uprobe: String,
     },
     /// Print system information
     Processes {
