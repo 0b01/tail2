@@ -1,5 +1,4 @@
-#![allow(unused)]
-#![allow(non_camel_case_types, non_snake_case)]
+#![allow(unused, non_camel_case_types, non_snake_case)]
 #![cfg_attr(not(feature = "user"), no_std)]
 
 pub mod runtime_type;

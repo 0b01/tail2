@@ -33,9 +33,26 @@ fn ensure_root() {
     }
 }
 
+fn bump_memlock_rlimit() -> Result<()> {
+    let rlimit = libc::rlimit {
+        rlim_cur: 128 << 20,
+        rlim_max: 128 << 20,
+    };
+
+    if unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) } != 0 {
+        anyhow::bail!("Failed to increase rlimit");
+    }
+
+    Ok(())
+}
+
 // TODO: use Tail2.toml for config
 #[tokio::main]
 async fn main() -> Result<()> {
+    bump_memlock_rlimit()?;
+    let mut bpf = load_bpf()?;
+    init_logger(&mut bpf).await?;
+
     // for awaiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(());
 
