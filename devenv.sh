@@ -6,7 +6,6 @@ rustup install stable
 rustup install nightly
 rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
 cargo install bpf-linker
-cargo xtask build-ebpf
 
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
@@ -19,3 +18,5 @@ pushd speedscope
 npm i
 npm run build
 popd
+
+cargo xtask build-ebpf --release
