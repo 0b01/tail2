@@ -1,5 +1,5 @@
 use aya_bpf::{helpers::{bpf_probe_read_user, bpf_get_current_task, bpf_task_pt_regs, bpf_get_current_task_btf}, BpfContext, bindings::bpf_pidns_info};
-use aya_log_ebpf::error;
+use aya_log_ebpf::{error, info};
 use tail2_common::{NativeStack, ConfigMapKey, pidtgid::PidTgid, RunStatsKey, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, bpf_sample::BpfSample, native::unwinding::x86_64::unwindregs::UnwindRegsX86_64};
 use aya_bpf::bindings::pt_regs;
 
@@ -37,7 +37,9 @@ fn unwind<C: BpfContext>(
     let proc_info = unsafe { PIDS.get(&pid)? };
 
     let mut read_stack = |addr: u64| {
-        unsafe { bpf_probe_read_user(addr as *const u64).map_err(|_|()) }
+        let ret = unsafe { bpf_probe_read_user(addr as *const u64) };
+        info!(ctx, "read_stack: {}, result: {}", addr, ret.unwrap_err());
+        ret.map_err(|_|())
     };
 
     let mut frame = pc;
@@ -46,6 +48,7 @@ fn unwind<C: BpfContext>(
     for i in 1..MAX_USER_STACK {
         let idx = binary_search(proc_info.rows.as_slice(), frame, proc_info.rows_len)?;
         let rule = proc_info.rows[idx].1;
+        info!(ctx, "rule: {}", rule.to_num());
 
         match rule.exec(is_first_frame, regs, &mut read_stack) {
             Some(Some(f)) => {

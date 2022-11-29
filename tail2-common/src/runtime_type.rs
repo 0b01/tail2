@@ -53,7 +53,7 @@ impl RuntimeType {
 #[cfg(feature = "user")]
 pub mod user {
     use anyhow::Context;
-    use aya::Endianness;
+    use object::Endianness;
     use object::elf::{FileHeader64, ProgramHeader64, FileHeader32, PT_LOAD, PF_X};
     use object::read::elf::{ElfSegment, ElfFile, FileHeader, ProgramHeader};
     use object::{Object, ObjectSegment, File, Endian, LittleEndian, ObjectSymbol};
