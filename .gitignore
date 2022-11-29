@@ -26,3 +26,5 @@ Packages.gz
 *.gz
 *.deb
 tail2-server/flamegraph/
+a.out
+out

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use procfs::process::Process;
-use tail2_common::procinfo::ProcInfo;
+use tail2_common::procinfo::{ProcInfo, user::ProcMapRow};
 use tail2::symbolication::module_cache::ModuleCache;
 use tokio::sync::Mutex;
 
@@ -55,7 +55,7 @@ impl Processes {
                             }
                         };
 
-                        return Some((e.address.0, path, table));
+                        return Some(ProcMapRow {avma: e.address.0 as usize, mod_name: path, unwind_table: table});
                     }
                 }
                 None

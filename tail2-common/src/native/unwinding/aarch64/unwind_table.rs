@@ -1,17 +1,17 @@
 use anyhow::Result;
-use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection, X86_64};
+use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection};
 use object::{Object, ObjectSection};
-use super::unwind_rule::{UnwindRuleX86_64, translate_into_unwind_rule};
+use super::unwind_rule::{UnwindRuleAarch64, translate_into_unwind_rule};
 
 /// Row of a FDE.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub struct UnwindTableRow {
     /// Instruction pointer start range (inclusive).
-    pub start_address: u64,
+    pub start_address: usize,
     // /// Instruction pointer end range (exclusive).
     // pub end_address: u64,
     /// unwind rule
-    pub rule: UnwindRuleX86_64,
+    pub rule: UnwindRuleAarch64,
 }
 
 impl UnwindTableRow {
@@ -20,12 +20,11 @@ impl UnwindTableRow {
         _encoding: gimli::Encoding,
     ) -> Result<Self> {
         let cfa_rule = row.cfa();
-        let bp_rule = row.register(X86_64::RBP);
-        let ra_rule = row.register(X86_64::RA);
-        let rule = translate_into_unwind_rule(cfa_rule, &bp_rule, &ra_rule)?;
-
+        let fp_rule = row.register(gimli::AArch64::X29);
+        let lr_rule = row.register(gimli::AArch64::X30);
+        let rule = translate_into_unwind_rule(cfa_rule, &fp_rule, &lr_rule)?;
         Ok(Self {
-            start_address: row.start_address(),
+            start_address: row.start_address() as usize,
             // end_address: row.end_address(),
             rule,
         })
@@ -77,9 +76,8 @@ impl UnwindTable {
                     let encoding = fde.cie().encoding();
                     let mut table = fde.rows(&eh_frame, &bases, &mut ctx)?;
                     while let Some(row) = table.next_row()? {
-                        match UnwindTableRow::parse(row, encoding) {
-                            Ok(r) => rows.push(r),
-                            Err(e) => eprintln!("err parsing: {}, error: {:?}", row.start_address(), e),
+                        if let Ok(r) = UnwindTableRow::parse(row, encoding) {
+                            rows.push(r);
                         }
                     }
                 }

@@ -1,41 +1,43 @@
 structstruck::strike! {
-    struct StructOffsets {
-        PyObject: struct {
-            ob_type: i64
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
+    pub struct PythonOffsets {
+        pub py_object: #[derive(Clone, Copy, Debug)] struct {
+            pub ob_type: usize
         },
-        String: struct {
-            data: i64,
-            size: i64,
+        pub string: #[derive(Clone, Copy, Debug)] struct {
+            pub data: usize,
+            pub size: i64,
         },
-        PyTypeObject: struct {
-            tp_name: i64
+        pub py_type_object: #[derive(Clone, Copy, Debug)] struct {
+            pub tp_name: usize
         },
-        PyThreadState: struct {
-            next: i64,
-            interp: i64,
-            frame: i64,
-            thread: i64,
+        pub py_thread_state: #[derive(Clone, Copy, Debug)] struct {
+            pub next: usize,
+            pub interp: usize,
+            pub frame: usize,
+            pub thread: usize,
         },
-        PyInterpreterState: struct {
-            tstate_head: i64,
+        pub py_interpreter_state: #[derive(Clone, Copy, Debug)] struct {
+            pub tstate_head: usize,
         },
-        PyRuntimeState: struct {
-            interp_main: i64,
+        pub py_runtime_state: #[derive(Clone, Copy, Debug)] struct {
+            pub interp_main: usize,
         },
-        PyFrameObject: struct {
-            f_back: i64,
-            f_code: i64,
-            f_lineno: i64,
-            f_localsplus: i64,
+        pub py_frame_object: #[derive(Clone, Copy, Debug)] struct {
+            pub f_back: usize,
+            pub f_code: usize,
+            pub f_lineno: usize,
+            pub f_localsplus: usize,
         },
-        PyCodeObject: struct {
-            co_filename: i64,
-            co_name: i64,
-            co_varnames: i64,
-            co_firstlineno: i64,
+        pub py_code_object: #[derive(Clone, Copy, Debug)] struct {
+            pub co_filename: usize,
+            pub co_name: usize,
+            pub co_varnames: usize,
+            pub co_firstlineno: usize,
         },
-        PyTupleObject: struct {
-            ob_item: i64,
+        pub py_tuple_object: #[derive(Clone, Copy, Debug)] struct {
+            pub ob_item: usize,
         },
     }
 }
@@ -54,225 +56,202 @@ There are a couple of exceptions:
 3 PyThreadStatethread - this field's name is "thread_id" in some Python versions
 */
 
-const PY27_OFFSETS: StructOffsets = StructOffsets {
-    PyObject : PyObject {
+pub const PY27_OFFSETS: PythonOffsets = PythonOffsets {
+    py_object : PyObject {
         ob_type: 8
     },
-    String: String{
+    string: String{
         data: 36,                // offsetof(PyStringObject, ob_sval)
         size: 16,                // offsetof(PyVarObject, ob_size)
     },
-    PyTypeObject: PyTypeObject{
+    py_type_object: PyTypeObject{
         tp_name: 24
     },
-    PyThreadState: PyThreadState{
+    py_thread_state: PyThreadState{
         next: 0,
         interp: 8,
         frame: 16,
         thread: 144,
     },
-    PyInterpreterState: PyInterpreterState{
+    py_interpreter_state: PyInterpreterState{
         tstate_head: 8,
     },
-    PyRuntimeState: PyRuntimeState{
-        interp_main: -1, // N/A
+    py_runtime_state: PyRuntimeState{
+        interp_main: 0, // N/A
     },
-    PyFrameObject: PyFrameObject{
+    py_frame_object: PyFrameObject{
         f_back: 24,
         f_code: 32,
         f_lineno: 124,
         f_localsplus: 376,
     },
-    PyCodeObject: PyCodeObject{
+    py_code_object: PyCodeObject{
         co_filename: 80,
         co_name: 88,
         co_varnames: 56,
         co_firstlineno: 96,
     },
-    PyTupleObject: PyTupleObject{
+    py_tuple_object: PyTupleObject{
         ob_item: 24
     }
 };
 
-const PY36_OFFSETS: StructOffsets = StructOffsets {
-    PyObject: PyObject{
+pub const PY36_OFFSETS: PythonOffsets = PythonOffsets {
+    py_object: PyObject{
         ob_type: 8
     },
-    String: String{
+    string: String{
         data: 48,                // sizeof(PyASCIIObject)
         size: 16,                // offsetof(PyVarObject, ob_size)
     },
-    PyTypeObject: PyTypeObject{
+    py_type_object: PyTypeObject{
         tp_name: 24
     },
-    PyThreadState: PyThreadState{
+    py_thread_state: PyThreadState{
         next: 8,
         interp: 16,
         frame: 24,
         thread: 152,
     },
-    PyInterpreterState: PyInterpreterState{
+    py_interpreter_state: PyInterpreterState{
         tstate_head: 8,
     },
-    PyRuntimeState: PyRuntimeState{
-        interp_main: -1, // N/A
+    py_runtime_state: PyRuntimeState{
+        interp_main: 0, // N/A
     },
-    PyFrameObject: PyFrameObject{
+    py_frame_object: PyFrameObject{
         f_back: 24,
         f_code: 32,
         f_lineno: 124,
         f_localsplus: 376,
     },
-    PyCodeObject: PyCodeObject{
+    py_code_object: PyCodeObject{
         co_filename: 96,
         co_name: 104,
         co_varnames: 64,
         co_firstlineno: 36,
     },
-    PyTupleObject: PyTupleObject{
+    py_tuple_object: PyTupleObject{
         ob_item: 24,
     }
 };
 
-const PY37_OFFSETS: StructOffsets = StructOffsets {
-    PyObject: PyObject {
+pub const PY37_OFFSETS: PythonOffsets = PythonOffsets {
+    py_object: PyObject {
         ob_type: 8
     },
-    String: String {
+    string: String {
         data: 48,                // sizeof(PyASCIIObject)
         size: 16,                // offsetof(PyVarObject, ob_size)
     },
-    PyTypeObject: PyTypeObject {
+    py_type_object: PyTypeObject {
         tp_name: 24
     },
-    PyThreadState: PyThreadState {
+    py_thread_state: PyThreadState {
         next: 8,
         interp: 16,
         frame: 24,
         thread: 176,
     },
-    PyInterpreterState: PyInterpreterState {
+    py_interpreter_state: PyInterpreterState {
         tstate_head: 8,
     },
-    PyRuntimeState: PyRuntimeState {
-        interp_main: 32,
-    },
-    PyFrameObject: PyFrameObject {
-        f_back: 24,
-        f_code: 32,
-        f_lineno: 108,
-        f_localsplus: 360,
-    },
-    PyCodeObject: PyCodeObject {
-        co_filename: 96,
-        co_name: 104,
-        co_varnames: 64,
-        co_firstlineno: 36,
-    },
-    PyTupleObject: PyTupleObject {
-        ob_item: 24,
-    }
-};
-
-const PY38_OFFSETS: StructOffsets = StructOffsets {
-    PyObject: PyObject {
-        ob_type: 8
-    },
-    String: String {
-        data: 48,                // sizeof(PyASCIIObject)
-        size: 16,                // offsetof(PyVarObject, ob_size)
-    },
-    PyTypeObject: PyTypeObject {
-        tp_name: 24
-    },
-    PyThreadState: PyThreadState {
-        next: 8,
-        interp: 16,
-        frame: 24,
-        thread: 176,
-    },
-    PyInterpreterState: PyInterpreterState {
-        tstate_head: 8,
-    },
-    PyRuntimeState: PyRuntimeState {
+    py_runtime_state: PyRuntimeState {
         interp_main: 40,
     },
-    PyFrameObject: PyFrameObject {
+    py_frame_object: PyFrameObject {
         f_back: 24,
         f_code: 32,
         f_lineno: 108,
         f_localsplus: 360,
     },
-    PyCodeObject: PyCodeObject {
+    py_code_object: PyCodeObject {
+        co_filename: 96,
+        co_name: 104,
+        co_varnames: 64,
+        co_firstlineno: 36,
+    },
+    py_tuple_object: PyTupleObject {
+        ob_item: 24,
+    }
+};
+
+pub const PY38_OFFSETS: PythonOffsets = PythonOffsets {
+    py_object: PyObject {
+        ob_type: 8
+    },
+    string: String {
+        data: 48,                // sizeof(PyASCIIObject)
+        size: 16,                // offsetof(PyVarObject, ob_size)
+    },
+    py_type_object: PyTypeObject {
+        tp_name: 24
+    },
+    py_thread_state: PyThreadState {
+        next: 8,
+        interp: 16,
+        frame: 24,
+        thread: 176,
+    },
+    py_interpreter_state: PyInterpreterState {
+        tstate_head: 8,
+    },
+    py_runtime_state: PyRuntimeState {
+        interp_main: 40,
+    },
+    py_frame_object: PyFrameObject {
+        f_back: 24,
+        f_code: 32,
+        f_lineno: 108,
+        f_localsplus: 360,
+    },
+    py_code_object: PyCodeObject {
         co_filename: 104,
         co_name: 112,
         co_varnames: 72,
         co_firstlineno: 40,
     },
-    PyTupleObject: PyTupleObject {
+    py_tuple_object: PyTupleObject {
         ob_item: 24,
     }
 };
 
-const PY310_OFFSETS: StructOffsets = StructOffsets {
-    PyObject: PyObject{
+pub const PY310_OFFSETS: PythonOffsets = PythonOffsets {
+    py_object: PyObject{
         ob_type: 8
     },
-    String: String{
+    string: String{
         data: 48,                // offsetof(PyStringObject, ob_sval)
         size: -1,                // offsetof(PyVarObject, ob_size)
     },
-    PyTypeObject: PyTypeObject{
+    py_type_object: PyTypeObject{
         tp_name: 24
     },
-    PyThreadState: PyThreadState{
+    py_thread_state: PyThreadState{
         next: 8,
         interp: 16,
         frame: 24,
         thread: 176,
     },
-    PyInterpreterState: PyInterpreterState{
+    py_interpreter_state: PyInterpreterState{
         tstate_head: 8,
     },
-    PyRuntimeState: PyRuntimeState{
+    py_runtime_state: PyRuntimeState{
         interp_main: 40, // N/A
     },
-    PyFrameObject: PyFrameObject {
+    py_frame_object: PyFrameObject {
         f_back: 24,
         f_code: 32,
         f_lineno: 100,
         f_localsplus: 352,
     },
-    PyCodeObject: PyCodeObject {
+    py_code_object: PyCodeObject {
         co_filename: 104,
         co_name: 112,
         co_varnames: 72,
         co_firstlineno: 40,
     },
-    PyTupleObject: PyTupleObject {
+    py_tuple_object: PyTupleObject {
         ob_item: 24
     },
 };
-
-// // List of mappings from Python 3 minor versions to offsets `get_offsets` depends on this list
-// // being sorted in ascending order when it searches through it
-// const std::vector<std::pair<version, struct_offsets>> python3Versions = {
-//     {{3,6,0}, kPy36OffsetConfig},
-//     {{3,7,0}, kPy37OffsetConfig},
-//     {{3,8,0}, kPy38OffsetConfig},
-//     // 39 is same as 38
-//     {{3,10,0}, kPy310OffsetConfig},
-// };
-
-// const struct_offsets& get_offsets(version& version) {
-//   if (versionmajor == 2) {
-//     return kPy27OffsetConfig;
-//   }
-//   else {
-//     // Find offsets for Python 3 version:
-//     auto it = std::find_if(python3Versionscrbegin(), python3Versionscrend(), [&](auto item){
-//       return itemfirst <= version;
-//     });
-//     return it->second;
-//   }
-// }

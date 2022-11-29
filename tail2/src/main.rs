@@ -15,7 +15,8 @@ use tokio::signal;
 use anyhow::Result;
 
 use crate::args::Commands;
-use crate::client::{spawn_proc_refresh, run_bpf, print_stats};
+use crate::client::run::run_bpf;
+use crate::client::{print_stats, spawn_proc_refresh};
 use crate::processes::Processes;
 
 pub mod args;
@@ -32,8 +33,23 @@ fn ensure_root() {
     }
 }
 
+fn bump_memlock_rlimit() -> Result<()> {
+    let rlimit = libc::rlimit {
+        rlim_cur: 128 << 20,
+        rlim_max: 128 << 20,
+    };
+
+    if unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) } != 0 {
+        anyhow::bail!("Failed to increase rlimit");
+    }
+
+    Ok(())
+}
+
+// TODO: use Tail2.toml for config
 #[tokio::main]
 async fn main() -> Result<()> {
+    // bump_memlock_rlimit()?;
     let mut bpf = load_bpf()?;
     init_logger(&mut bpf).await?;
 
@@ -55,13 +71,50 @@ async fn main() -> Result<()> {
             return Ok(());
         },
         Commands::Symbols { paths } => {
-            for p in &paths {
+            for _p in &paths {
                 // dump_elf(p)?;
             }
             return Ok(());
         },
+        Commands::Py { pid , period} => {
+            ensure_root();
+            let mut bpf = load_bpf()?;
+
+            let program: &mut PerfEvent = bpf.program_mut("pyperf").unwrap().try_into().unwrap();
+            if let Err(e) = program.load() {
+                let s = e.to_string();
+                println!("{}", s);
+            }
+            for cpu in online_cpus()? {
+                let scope = pid
+                    .map(|pid| {
+                        let pid = match pid {
+                            0 => process::id(),
+                            _ => pid,
+                        };
+                        PerfEventScope::OneProcessOneCpu { cpu, pid }
+                    })
+                    .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
+                program.attach(
+                    PerfTypeId::Software,
+                    perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
+                    scope,
+                    SamplePolicy::Period(period.unwrap_or(40_000)),
+                )?;
+            }
+
+            spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
+            let tasks = run_bpf(&mut bpf, stop_rx, module_cache)?;
+
+            signal::ctrl_c().await.expect("failed to listen for event");
+            info!("exiting");
+            stop_tx.send(())?;
+            for t in tasks { let _ = tokio::join!(t); }
+            print_stats(&mut bpf).await?;
+        },
         Commands::Sample { pid , period} => {
             ensure_root();
+            let mut bpf = load_bpf()?;
             let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
             program.load().unwrap();
             for cpu in online_cpus()? {
@@ -83,16 +136,17 @@ async fn main() -> Result<()> {
             }
 
             spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
-            let ts = run_bpf(&mut bpf, stop_rx, module_cache)?;
+            let tasks = run_bpf(&mut bpf, stop_rx, module_cache)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
             stop_tx.send(())?;
-            for t in ts { let _ = tokio::join!(t); }
+            for t in tasks { let _ = tokio::join!(t); }
             print_stats(&mut bpf).await?;
         },
         Commands::Attach { pid, uprobe } => {
             ensure_root();
+            let mut bpf = load_bpf()?;
             let pid = pid.map(|pid| 
                 match pid {
                     0 => process::id() as i32,
@@ -108,12 +162,12 @@ async fn main() -> Result<()> {
             info!("loaded");
 
             spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
-            let ts = run_bpf(&mut bpf, stop_rx, module_cache)?;
+            let tasks = run_bpf(&mut bpf, stop_rx, module_cache)?;
 
             signal::ctrl_c().await.expect("failed to listen for event");
             info!("exiting");
             stop_tx.send(())?;
-            for t in ts { let _ = tokio::join!(t); }
+            for t in tasks { let _ = tokio::join!(t); }
             print_stats(&mut bpf).await?;
         }
     }

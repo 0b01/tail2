@@ -1,7 +1,7 @@
 use gimli::{CfaRule, RegisterRule};
 
 #[cfg(feature="user")]
-use crate::unwinding::error::ConversionError;
+use crate::native::unwinding::error::ConversionError;
 
 use super::unwindregs::UnwindRegsAarch64;
 

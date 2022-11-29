@@ -184,18 +184,8 @@ export class Application extends StatelessComponent<ApplicationProps> {
   }
 
   loadFromApi() {
-    interface ICallTree<T> {
-      item: T,
-      total_samples: number,
-      self_samples: number,
-      children: ICallTree<T>[] | null,
-    }
-
-    type CallTree = ICallTree<{
-      name: string,
-    } | null>
-
     function convert(root: CallTree): Profile {
+      console.log(root);
       if (!root.children) {
         return new Profile(0);
       }
@@ -208,7 +198,8 @@ export class Application extends StatelessComponent<ApplicationProps> {
 
       function aux(curr: CallTreeNode, curr_node: CallTree): CallTreeNode {
         curr.frame = Frame.getOrInsert(prof.frames, {
-          key: curr_node.item?.name ?? "(unk)",
+          color_key: curr_node.item?.code_type ?? "",
+          key: curr_node.item?.name ?? "",
           name: curr_node.item?.name ?? "(unk)",
         });
         curr.frame.addToSelfWeight(curr_node.self_samples);

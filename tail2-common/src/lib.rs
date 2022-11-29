@@ -1,19 +1,20 @@
-#![allow(unused)]
+#![allow(unused, non_camel_case_types, non_snake_case)]
 #![cfg_attr(not(feature = "user"), no_std)]
 
 pub mod runtime_type;
 pub mod pidtgid;
 pub mod procinfo;
 
-pub mod stack;
-pub mod unwinding;
+pub mod bpf_sample;
 pub mod python;
-pub use stack::Stack;
+pub mod native;
+
+pub use native::native_stack::NativeStack;
 
 /// Maximum number of frames to unwind 
 pub const MAX_USER_STACK: usize = 40;
 
-pub enum InfoMapKey {
+pub enum RunStatsKey {
     SentStackCount = 0,
 }
 
