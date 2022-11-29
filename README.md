@@ -33,3 +33,8 @@ cargo xtask run -- sample --pid $(pidof parade)
 
 Error: `"failed to create map"`
 Solution: ```ulimit -l unlimited```
+
+print type sizes:
+```bash
+cargo rustc --features aarch64 -- -Zprint-type-sizes
+```

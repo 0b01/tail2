@@ -4,6 +4,8 @@ import {FileFormat} from './file-format-spec'
 const demangleCppModule = import('./demangle-cpp')
 
 export interface FrameInfo {
+  color_key: string | number
+
   key: string | number
 
   // Name of the frame. May be a method name, e.g.
@@ -48,6 +50,8 @@ export class HasWeights {
 }
 
 export class Frame extends HasWeights {
+  color_key: string | number
+
   key: string | number
 
   // Name of the frame. May be a method name, e.g.
@@ -66,6 +70,7 @@ export class Frame extends HasWeights {
 
   public constructor(info: FrameInfo) {
     super()
+    this.color_key = info.color_key
     this.key = info.key
     this.name = info.name
     this.file = info.file
@@ -74,6 +79,7 @@ export class Frame extends HasWeights {
   }
 
   static root = new Frame({
+    color_key: "Root",
     key: '(speedscope root)',
     name: '(speedscope root)',
   })

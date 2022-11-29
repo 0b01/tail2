@@ -59,7 +59,7 @@ impl ElfCache {
 
 #[derive(Debug)]
 pub struct ElfSymbols {
-    pub map: BTreeMap<u64, String>,
+    pub map: BTreeMap<usize, String>,
 }
 
 impl ElfSymbols {
@@ -72,7 +72,7 @@ impl ElfSymbols {
                 let section = obj_file.section_by_index(idx).unwrap();
                 let section_name = section.name().unwrap_or("");
                 if section_name == ".text" {
-                    map.insert(sym.address(), sym.name().unwrap().to_owned());
+                    map.insert(sym.address() as usize, sym.name().unwrap().to_owned());
                 }
             }
         }
@@ -82,7 +82,7 @@ impl ElfSymbols {
         }
     }
 
-    pub fn find(&self, addr: u64) -> Option<String> {
+    pub fn find(&self, addr: usize) -> Option<String> {
         self.map
             .range(..=addr)
             .next_back()

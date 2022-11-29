@@ -135,8 +135,8 @@ struct event {
   int32_t stack[STACK_MAX_LEN];
   uintptr_t user_ip;
   uintptr_t user_sp;
-  uint32_t user_stack_len;
-  uint8_t raw_user_stack[__USER_STACKS_PAGES__ * PAGE_SIZE];
+  uint32_t native_stack_len;
+  uint8_t raw_native_stack[__USER_STACKS_PAGES__ * PAGE_SIZE];
 #define FRAME_CODE_IS_NULL 0x80000001
 };
 struct sample_state {
@@ -256,7 +256,7 @@ on_event(struct pt_regs* ctx) {
   event->stack_status = STACK_STATUS_ERROR;
   event->error_code = ERROR_NONE;
   struct task_struct const *const task = (struct task_struct *)bpf_get_current_task();
-  if (sizeof(event->raw_user_stack) > 0) {
+  if (sizeof(event->raw_native_stack) > 0) {
     // Get raw native user stack
     struct pt_regs user_regs;
     // ebpf doesn't allow direct access to ctx->cs, so we need to copy it
@@ -282,19 +282,19 @@ on_event(struct pt_regs* ctx) {
     }
     event->user_sp = user_regs.sp;
     event->user_ip = user_regs.ip;
-    event->user_stack_len = 0;
+    event->native_stack_len = 0;
     // Subtract 128 from sp for x86-ABI red zone
     uintptr_t top_of_stack = user_regs.sp - 128;
     // Copy one page at the time - if one fails we don't want to lose the others
     int i;
     #pragma unroll
-    for (i = 0; i < sizeof(event->raw_user_stack) / PAGE_SIZE; ++i) {
+    for (i = 0; i < sizeof(event->raw_native_stack) / PAGE_SIZE; ++i) {
       if (bpf_probe_read_user(
-              event->raw_user_stack + i * PAGE_SIZE, PAGE_SIZE,
+              event->raw_native_stack + i * PAGE_SIZE, PAGE_SIZE,
               (void *)((top_of_stack & PAGE_MASK) + (i * PAGE_SIZE))) < 0) {
         break;
       }
-      event->user_stack_len = (i + 1) * PAGE_SIZE;
+      event->native_stack_len = (i + 1) * PAGE_SIZE;
     }
   }
   if (pid_data->interp == 0) {
@@ -432,6 +432,7 @@ clear_symbol(const struct sample_state *state, struct symbol *sym) {
   // classname is not always read, so it must be cleared explicitly
   sym->classname[0] = '\0';
 }
+
 /**
 Reads the name of the first argument of a PyCodeObject.
 */
@@ -466,6 +467,7 @@ get_first_arg_name(
   }
   return result;
 }
+
 /**
 Read the name of the class wherein a code object is defined.
 For global functions, sets an empty string.
@@ -475,7 +477,8 @@ get_classname(
   const struct struct_offsets *offsets,
   const void *cur_frame,
   const void *code_ptr,
-  struct symbol *symbol) {
+  struct symbol *symbol)
+{
   int result = 0;
   // Figure out if we want to parse class name, basically checking the name of
   // the first argument. If it's 'self', we get the type and its name, if it's
@@ -507,6 +510,7 @@ get_classname(
   result |= bpf_probe_read_user_str(&symbol->classname, sizeof(symbol->classname), tmp);
   return (result < 0) ? result : 0;
 }
+
 static __always_inline int
 read_symbol_names(
     const struct struct_offsets *offsets,
@@ -530,6 +534,7 @@ read_symbol_names(
   result |= bpf_probe_read_user_str(&symbol->name, sizeof(symbol->name), pystr_ptr + offsets->String.data);
   return (result < 0) ? result : 0;
 }
+
 /**
 Gets the key in the symbols map for a symbol.
 If the symbol is not in the map a new key is generated and the symbol is inserted.
@@ -552,6 +557,7 @@ get_symbol_id(struct sample_state* state, struct symbol* sym) {
   int update_result = symbols.update(sym, &id);
   return (update_result < 0) ? update_result : id;
 }
+
 /**
 Reads the symbol for the current frame and returns its id in the symbols map (or a negative error
 code in case of failure).
@@ -617,4 +623,3 @@ submit:
   events.perf_submit(ctx, &state->event, sizeof(struct event));
   return 0;
 }
-)

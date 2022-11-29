@@ -1,7 +1,7 @@
 use gimli::{CfaRule, RegisterRule, X86_64};
 
 #[cfg(feature="user")]
-use crate::unwinding::error::ConversionError;
+use crate::native::unwinding::error::ConversionError;
 use super::unwindregs::UnwindRegsX86_64;
 
 /// For all of these: return address is *(new_sp - 8)

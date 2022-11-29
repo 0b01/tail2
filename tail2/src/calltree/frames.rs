@@ -84,8 +84,9 @@ pub mod serialize {
     impl<'a, T: Serialize> Node<'a, T> {
         pub fn new(id: NodeId, arena: &'a Arena<T>) -> Self {
             let node = &arena[id];
+            let data = &node.get();
             Node {
-                data: &node.get(),
+                data,
                 children: node
                     .first_child()
                     .map(|first| SiblingNodes::new(first, arena)),
