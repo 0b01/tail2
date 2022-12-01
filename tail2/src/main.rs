@@ -9,6 +9,9 @@ use clap::Parser;
 use client::{load_bpf, init_logger};
 use libc::getuid;
 use log::{info, error};
+use nix::sys::signal::Signal::{SIGSTOP, SIGCONT};
+use nix::sys::signal::kill;
+use nix::unistd::Pid;
 use tail2::symbolication::module_cache::{ModuleCache};
 use tokio::sync::{watch, Mutex};
 use tokio::signal;
@@ -52,7 +55,11 @@ fn get_pid<'a>(pid: Option<u32>, command: Option<&'a String>) -> Result<Option<i
         (None, Some(cmd)) => {
             info!("Launching child process: `{}`", cmd);
             match Command::new(cmd).spawn() {
-                Ok(child) => Err(child),
+                Ok(child) => {
+                    let pid = child.id();
+                    kill(Pid::from_raw(pid as i32), SIGSTOP).unwrap();
+                    Err(child)
+                }
                 Err(e) => panic!("{}", e.to_string()),
             }
         },
@@ -132,6 +139,7 @@ async fn main() -> Result<()> {
 
             match child {
                 Some(mut c) => {
+                    kill(Pid::from_raw(c.id() as i32), SIGCONT).unwrap();
                     c.wait().expect("unable to execute child");
                 }
                 None => {
@@ -144,7 +152,7 @@ async fn main() -> Result<()> {
             for t in tasks { let _ = tokio::join!(t); }
             print_stats(&mut bpf).await?;
         },
-        Commands::Attach { pid, uprobe, command } => {
+        Commands::Uprobe { pid, uprobe, command } => {
             ensure_root();
             let mut bpf = load_bpf()?;
             let mut child = None;
@@ -177,6 +185,7 @@ async fn main() -> Result<()> {
 
             match child {
                 Some(mut c) => {
+                    kill(Pid::from_raw(c.id() as i32), SIGCONT).unwrap();
                     c.wait().expect("unable to execute child");
                 }
                 None => {

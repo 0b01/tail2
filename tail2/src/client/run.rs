@@ -83,7 +83,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            dbg!(&st);
+            // dbg!(&st);
 
             let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
 

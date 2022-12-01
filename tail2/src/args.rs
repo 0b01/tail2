@@ -32,8 +32,8 @@ pub enum Commands {
         #[clap(long)]
         period: Option<u64>,
     },
-    /// Attach to a function, e.g. "libc:malloc"
-    Attach {
+    /// Attach to a userspace function, e.g. "libc:malloc"
+    Uprobe {
         /// attach to pid
         #[clap(short, long)]
         pid: Option<u32>,
