@@ -50,9 +50,9 @@ pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> 
     let ns = get_pid_tgid();
     let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(ErrorCode::NO_PID)? };
 
-    // if !proc_info.runtime_type.is_python() {
-    //     return Err(ErrorCode::NOT_PYTHON);
-    // }
+    if !proc_info.runtime_type.is_python() {
+        return Err(ErrorCode::NOT_PYTHON);
+    }
 
     let pid_data = &mut proc_info.runtime_type.python_pid_data();
 

@@ -1,26 +1,43 @@
 use anyhow::Result;
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
+use aya::programs::{PerfEvent, PerfEventScope, PerfTypeId, SamplePolicy, UProbe, perf_event};
 use aya::util::online_cpus;
 use bytes::BytesMut;
 use log::{error, info};
+use nix::sys::signal::Signal::{SIGSTOP, SIGCONT};
+use nix::sys::signal::kill;
+use nix::unistd::{getuid, Pid};
 use tail2::dto::resolved_bpf_sample::ResolvedBpfSample;
 use tail2_common::bpf_sample::BpfSample;
 use tail2_common::{ConfigMapKey, NativeStack};
+use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use std::process::{exit, Command, Child};
 use std::{mem::size_of, sync::Arc};
 use std::os::unix::prelude::MetadataExt;
-use tokio::sync::{Mutex};
-use std::time::{Duration, SystemTime};
-use tail2::symbolication::module_cache::ModuleCache;
+use std::time::{SystemTime};
 use tokio::sync::watch;
-use aya::Bpf;
 
-use super::api_client::ApiStackEndpointClient;
+use std::time::Duration;
 
-pub(crate) fn open_and_subcribe(bpf: &mut Bpf, map_name: &str, tx: mpsc::Sender<BpfSample>, stop_rx: watch::Receiver<()>, ts: &mut Vec<JoinHandle<()>>) {
+use aya::maps::{MapData};
+use aya::{include_bytes_aligned, Bpf};
+use aya_log::BpfLogger;
+use tail2::symbolication::module_cache::ModuleCache;
+use tail2_common::procinfo::ProcInfo;
+use tokio::sync::watch::Receiver;
+use tokio::sync::Mutex;
+use tail2_common::RunStatsKey;
+use anyhow::{Context};
+
+use crate::processes::Processes;
+
+use crate::client::api_client::ApiStackEndpointClient;
+
+pub(crate) fn open_and_subcribe(bpf: &mut Bpf, tx: mpsc::Sender<BpfSample>, stop_rx: watch::Receiver<()>, ts: &mut Vec<JoinHandle<()>>) {
     // open bpf maps
-    let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map(map_name).unwrap()).unwrap();
+    let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map("STACKS").unwrap()).unwrap();
 
     // listen to bpf perf buf, send stacks to tx
     for cpu_id in online_cpus().unwrap() {
@@ -57,7 +74,7 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, map_name: &str, tx: mpsc::Sender<
 
 }
 
-pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) -> Result<Vec<JoinHandle<()>>> {
+pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>, output_tx: Option<mpsc::Sender<BpfSample>>) -> Result<Vec<JoinHandle<()>>> {
     // send device info
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
@@ -83,6 +100,10 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
+            if let Some(ref output_tx) = output_tx {
+                output_tx.send(st).await.unwrap();
+            }
+
             // dbg!(&st);
 
             let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
@@ -106,7 +127,204 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
     });
     ts.push(t);
 
-    open_and_subcribe(bpf, "STACKS", tx, stop_rx, &mut ts);
+    open_and_subcribe(bpf, tx, stop_rx, &mut ts);
 
     Ok(ts)
+}
+
+/// make sure we are running with root privileges
+fn ensure_root() {
+    let uid = getuid().as_raw();
+    if uid != 0 {
+        error!("tail2 be be run with root privileges!");
+        exit(-1);
+    }
+}
+
+fn bump_memlock_rlimit() -> Result<()> {
+    let rlimit = libc::rlimit {
+        rlim_cur: 128 << 20,
+        rlim_max: 128 << 20,
+    };
+
+    if unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) } != 0 {
+        anyhow::bail!("Failed to increase rlimit");
+    }
+
+    Ok(())
+}
+
+fn get_pid<'a>(pid: Option<u32>, command: Option<&'a String>) -> Result<Option<i32>, Child> {
+    match (pid, command) {
+        (None, None) => Ok(None),
+        (None, Some(cmd)) => {
+            info!("Launching child process: `{}`", cmd);
+            match Command::new(cmd).spawn() {
+                Ok(child) => {
+                    let pid = child.id();
+                    kill(Pid::from_raw(pid as i32), SIGSTOP).unwrap();
+                    Err(child)
+                }
+                Err(e) => panic!("{}", e.to_string()),
+            }
+        },
+        (Some(pid), None) => Ok(Some(pid as i32)),
+        (Some(_), Some(_)) => panic!("supply one of --pid, --command")
+    }
+}
+
+
+pub fn get_pid_child(pid: Option<u32>, command: Option<String>, child: &mut Option<Child>) -> Option<u32> {
+    match get_pid(pid, command.as_ref()) {
+        Err(c) => {
+            let ret = c.id() as u32;
+            *child = Some(c);
+            Some(ret)
+        }
+        Ok(Some(pid)) => Some(pid as u32),
+        Ok(None) => None
+    }
+}
+
+pub async fn bpf_init() -> Result<Bpf> {
+    ensure_root();
+    bump_memlock_rlimit()?;
+    let mut bpf = load_bpf()?;
+    init_logger(&mut bpf).await?;
+    Ok(bpf)
+}
+
+pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: Option<u64>) -> Result<()> {
+    let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
+    match program.load() {
+        Ok(_) => {},
+        Err(e) => {
+            error!("{}", e.to_string());
+            panic!();
+        }
+    }
+
+    for cpu in online_cpus()? {
+        let scope = match pid {
+            Some(pid) => PerfEventScope::OneProcessOneCpu { cpu, pid: pid as u32 },
+            None => PerfEventScope::AllProcessesOneCpu { cpu },
+        };
+        program.attach(
+            PerfTypeId::Software,
+            perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
+            scope,
+            SamplePolicy::Period(period.unwrap_or(40_000)),
+        )?;
+    }
+
+    Ok(())
+}
+
+
+pub async fn attach_uprobe(bpf: &mut Bpf, uprobe: String, pid: Option<u32>) -> Result<()> {
+    let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
+    match program.load() {
+        Ok(_) => {},
+        Err(e) => {
+            error!("{}", e.to_string());
+            panic!();
+        }
+    }
+
+    let mut uprobe = uprobe.split(":");
+    let src = uprobe.next().unwrap();
+    let func = uprobe.next().unwrap();
+    let _uprobe_link = program.attach(Some(func), 0, src, pid.map(|i| i as i32)).unwrap();
+    info!("loaded");
+    Ok(())
+}
+
+pub async fn run_until_exit(bpf: &mut aya::Bpf, module_cache: Arc<Mutex<ModuleCache>>, child: Option<Child>, output_tx: Option<mpsc::Sender<BpfSample>>) -> Result<()> {
+    // for awaiting Ctrl-C signal
+    let (stop_tx, stop_rx) = watch::channel(());
+    spawn_proc_refresh(bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
+
+    let tasks = run_bpf(bpf, stop_rx, module_cache, output_tx)?;
+
+    if let Some(mut c) = child {
+        kill(Pid::from_raw(c.id() as i32), SIGCONT).unwrap();
+        c.wait().expect("unable to execute child");
+        info!("child exited");
+    } else {
+        signal::ctrl_c().await.expect("failed to listen for event");
+    }
+
+    info!("exiting");
+    stop_tx.send(())?;
+    for t in tasks { let _ = tokio::join!(t); }
+    print_stats(bpf).await?;
+
+    Ok(())
+}
+
+pub(crate) async fn init_logger(bpf: &mut Bpf) -> Result<()> {
+    // init logger
+    let env = env_logger::Env::default()
+        .filter_or("LOG_LEVEL", "info")
+        .write_style_or("LOG_STYLE", "always");
+    env_logger::init_from_env(env);
+
+    BpfLogger::init(bpf).unwrap();
+    Ok(())
+}
+
+
+
+pub async fn proc_refresh(pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>, module_cache: Arc<Mutex<ModuleCache>>) {
+    let module_cache = Arc::clone(&module_cache);
+    let mut processes = Processes::new(module_cache);
+    if let Ok(()) = processes.refresh().await {
+        dbg!(processes.processes.keys().len());
+        // copy to maps
+        for (pid, nfo) in &processes.processes {
+            let nfo = nfo.as_ref();
+            pid_info.insert(*pid as u32, nfo, 0).unwrap();
+        }
+    }
+}
+
+// TODO: don't refresh, listen to mmap and execve calls
+pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) {
+    let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    // HACK: extend lifetime to 'static
+    let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
+
+    proc_refresh(&mut pid_info, module_cache.clone()).await;
+
+    // // refresh pid info table
+    // tokio::spawn(async move {
+    //     loop {
+    //         proc_refresh(&mut pid_info, module_cache.clone()).await;
+
+    //         // sleep for 10 sec
+    //         tokio::select! {
+    //             _ = tokio::time::sleep(Duration::from_secs(10)) => (),
+    //             _ = stop_rx.changed() => break,
+    //         }
+    //     }
+    // });
+}
+
+pub(crate) fn load_bpf() -> Result<Bpf> {
+    #[cfg(debug_assertions)]
+    let bpf = Bpf::load(include_bytes_aligned!(
+        "../../../target/bpfel-unknown-none/debug/tail2"
+    ))?;
+
+    #[cfg(not(debug_assertions))]
+    let bpf = Bpf::load(include_bytes_aligned!(
+        "../../../target/bpfel-unknown-none/release/tail2"
+    ))?;
+    Ok(bpf)
+}
+
+pub(crate) async fn print_stats(bpf: &mut Bpf) -> Result<()> {
+    let info: HashMap<_, u32, u64> = HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
+    info!("Sent: {} stacks", info.get(&(RunStatsKey::SentStackCount as u32), 0)?);
+    Ok(())
 }
