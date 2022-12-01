@@ -30,6 +30,13 @@ impl UnwindTableRow {
             rule,
         })
     }
+
+    pub fn invalid(start_address: usize) -> Self {
+        Self {
+            start_address,
+            rule: UnwindRuleX86_64::Invalid,
+        }
+    }
 }
 
 /// Unwind table.
@@ -79,7 +86,10 @@ impl UnwindTable {
                     while let Some(row) = table.next_row()? {
                         match UnwindTableRow::parse(row, encoding) {
                             Ok(r) => rows.push(r),
-                            Err(e) => eprintln!("err parsing: {}, error: {:?}", row.start_address(), e),
+                            Err(e) => {
+                                eprintln!("err parsing: {}, error: {:?}", row.start_address(), e);
+                                rows.push(UnwindTableRow::invalid(row.start_address() as usize));
+                            }
                         }
                     }
                 }

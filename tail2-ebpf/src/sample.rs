@@ -8,7 +8,7 @@ use aya_bpf::{
 use tail2_common::{bpf_sample::BpfSample, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey, NativeStack, python::state::PythonStack, pidtgid::PidTgid};
 use aya_log_ebpf::{error, info};
 
-use crate::{pyperf::pyperf::sample_python, user::sample_user, helpers::get_pid_tgid};
+use crate::{pyperf::pyperf::sample_python, user::sample_user, helpers::get_pid_tgid, kernel::sample_kernel};
 
 #[map(name="STACKS")]
 pub(crate) static mut STACKS: PerfEventArray<BpfSample> = PerfEventArray::new(0);
@@ -41,6 +41,9 @@ fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
     st.native_stack = Some(NativeStack::uninit());
     sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
 
+    st.python_stack = Some(PythonStack::uninit());
+    sample_python(&ctx, st.python_stack.as_mut().unwrap());
+
     st.kernel_stack_id = sample_kernel(&ctx);
 
     unsafe {
@@ -61,6 +64,9 @@ fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
 
     st.native_stack = Some(NativeStack::uninit());
     sample_user(&ctx, st.native_stack.as_mut().unwrap(), ns.pid);
+
+    // st.python_stack = Some(PythonStack::uninit());
+    // sample_python(&ctx, st.python_stack.as_mut().unwrap());
 
     st.kernel_stack_id = sample_kernel(&ctx);
 
@@ -100,14 +106,6 @@ fn pyperf(ctx: PerfEventContext) -> Option<u32> {
     Some(0)
 }
 
-
-fn sample_kernel<C: BpfContext>(ctx: &C) -> i64 {
-    /* kernel stack */
-    match unsafe { KERNEL_STACKS.get_stackid(ctx, BPF_F_REUSE_STACKID as u64) } {
-        Ok(i) => i,
-        Err(i) => i,
-    }
-}
 
 pub fn incr_sent_stacks() {
     let cnt = unsafe { RUN_STATS.get(&(RunStatsKey::SentStackCount as u32)) }.copied().unwrap_or(0);

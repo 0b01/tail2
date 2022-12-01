@@ -16,32 +16,32 @@ pub enum Commands {
     Symbols {
         paths: Vec<String>,
     },
-    /// Sample
-    Py {
-        /// Pid to listen to, if not supplied, listen for events system wide
-        /// If it's 0, listen to the tail2 agent itself
-        #[clap(short, long)]
-        pid: Option<u32>,
-        #[clap(long)]
-        period: Option<u64>,
+    /// Print system information
+    Processes {
     },
-    /// Sample
+    /// Sample callstacks based on elapsed CPU time
     Sample {
         /// Pid to listen to, if not supplied, listen for events system wide
         /// If it's 0, listen to the tail2 agent itself
         #[clap(short, long)]
         pid: Option<u32>,
+        /// launch child process with the command and attach to its pid
+        #[clap(short, long)]
+        command: Option<String>,
+        /// sample period
         #[clap(long)]
         period: Option<u64>,
     },
-    /// Listen to alloc events
+    /// Attach to a function, e.g. "libc:malloc"
     Attach {
+        /// attach to pid
         #[clap(short, long)]
-        pid: Option<i32>,
+        pid: Option<u32>,
+        /// launch child process with the command and attach to its pid
+        #[clap(short, long)]
+        command: Option<String>,
+        /// uprobe string in the form of "module:function", e.g. "libc:malloc"
         #[clap(short, long)]
         uprobe: String,
-    },
-    /// Print system information
-    Processes {
     },
 }

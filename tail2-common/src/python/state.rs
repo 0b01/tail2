@@ -53,7 +53,9 @@ pub enum ErrorCode {
     ///
     ERROR_READ_FRAME = 15,
     ERROR_GET_FIRST_ARG = 16,
-    FIRST_ARG_NOT_FOUND,
+    FIRST_ARG_NOT_FOUND = 17,
+    /// not a python process
+    NOT_PYTHON = 18,
 }
 
 #[derive(Copy, Clone, Debug)]

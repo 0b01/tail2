@@ -8,6 +8,8 @@ use super::unwindregs::UnwindRegsAarch64;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnwindRuleAarch64 {
+    /// Invalid rule, born because of an error
+    Invalid,
     /// (sp, fp, lr) = (sp, fp, lr)
     /// Only possible for the first frame. Subsequent frames must get the
     /// return address from somewhere other than the lr register to avoid
@@ -68,6 +70,9 @@ impl UnwindRuleAarch64 {
         let fp = regs.fp();
 
         let (new_lr, new_sp, new_fp) = match self {
+            UnwindRuleAarch64::Invalid => {
+                return None;
+            }
             UnwindRuleAarch64::NoOp => {
                 if !is_first_frame {
                     return None;
@@ -231,8 +236,9 @@ impl UnwindRuleAarch64 {
         Some(Some(return_address))
     }
 
-    pub fn as_num(&self) -> u32 {
+    pub fn to_num(&self) -> i32 {
         match &self {
+            UnwindRuleAarch64::Invalid => -1,
             UnwindRuleAarch64::NoOp => 0,
             UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp => 1,
             UnwindRuleAarch64::OffsetSp { sp_offset_by_16 } => 2,

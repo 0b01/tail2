@@ -48,7 +48,7 @@ fn unwind<C: BpfContext>(
     for i in 1..MAX_USER_STACK {
         let idx = binary_search(proc_info.rows.as_slice(), frame, proc_info.rows_len)?;
         let rule = proc_info.rows[idx].1;
-        info!(ctx, "rule: {}", rule.to_num());
+        info!(ctx, "rule: {}", rule.as_num());
 
         match rule.exec(is_first_frame, regs, &mut read_stack) {
             Some(Some(f)) => {

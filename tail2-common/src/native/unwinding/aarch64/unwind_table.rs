@@ -29,6 +29,13 @@ impl UnwindTableRow {
             rule,
         })
     }
+
+    pub fn invalid(start_address: usize) -> Self {
+        Self {
+            start_address,
+            rule: UnwindRuleAarch64::Invalid,
+        }
+    }
 }
 
 /// Unwind table.
@@ -76,8 +83,12 @@ impl UnwindTable {
                     let encoding = fde.cie().encoding();
                     let mut table = fde.rows(&eh_frame, &bases, &mut ctx)?;
                     while let Some(row) = table.next_row()? {
-                        if let Ok(r) = UnwindTableRow::parse(row, encoding) {
-                            rows.push(r);
+                        match UnwindTableRow::parse(row, encoding) {
+                            Ok(r) => rows.push(r),
+                            Err(e) => {
+                                eprintln!("err parsing: {}, error: {:?}", row.start_address(), e);
+                                rows.push(UnwindTableRow::invalid(row.start_address() as usize));
+                            }
                         }
                     }
                 }

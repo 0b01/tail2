@@ -44,10 +44,16 @@ static STATE_HEAP: PerCpuArray<SampleState> = PerCpuArray::with_max_entries(1, 0
 #[map]
 static EVENTS: PerfEventArray<PythonStack> = PerfEventArray::new(0);
 
+#[inline(always)]
 pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> Result<u32, ErrorCode> {
     let task: *const task_struct = unsafe { bpf_get_current_task() as *const _ };
     let ns = get_pid_tgid();
     let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(ErrorCode::NO_PID)? };
+
+    // if !proc_info.runtime_type.is_python() {
+    //     return Err(ErrorCode::NOT_PYTHON);
+    // }
+
     let pid_data = &mut proc_info.runtime_type.python_pid_data();
 
     let Some(buf_ptr) = STATE_HEAP.get_ptr_mut(0) else { return Err(ErrorCode::CANT_ALLOC); };

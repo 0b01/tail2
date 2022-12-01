@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::process::{self, exit};
+use std::process::{self, exit, Command, Child};
 use std::sync::Arc;
 
 use aya::util::online_cpus;
@@ -46,6 +46,21 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
+fn get_pid<'a>(pid: Option<u32>, command: Option<&'a String>) -> Result<Option<i32>, Child> {
+    match (pid, command) {
+        (None, None) => Ok(None),
+        (None, Some(cmd)) => {
+            info!("Launching child process: `{}`", cmd);
+            match Command::new(cmd).spawn() {
+                Ok(child) => Err(child),
+                Err(e) => panic!("{}", e.to_string()),
+            }
+        },
+        (Some(pid), None) => Ok(Some(pid as i32)),
+        (Some(_), Some(_)) => panic!("supply one of --pid, --command")
+    }
+}
+
 // TODO: use Tail2.toml for config
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -76,57 +91,34 @@ async fn main() -> Result<()> {
             }
             return Ok(());
         },
-        Commands::Py { pid , period} => {
-            ensure_root();
-            let mut bpf = load_bpf()?;
-
-            let program: &mut PerfEvent = bpf.program_mut("pyperf").unwrap().try_into().unwrap();
-            if let Err(e) = program.load() {
-                let s = e.to_string();
-                println!("{}", s);
-            }
-            for cpu in online_cpus()? {
-                let scope = pid
-                    .map(|pid| {
-                        let pid = match pid {
-                            0 => process::id(),
-                            _ => pid,
-                        };
-                        PerfEventScope::OneProcessOneCpu { cpu, pid }
-                    })
-                    .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
-                program.attach(
-                    PerfTypeId::Software,
-                    perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
-                    scope,
-                    SamplePolicy::Period(period.unwrap_or(40_000)),
-                )?;
-            }
-
-            spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
-            let tasks = run_bpf(&mut bpf, stop_rx, module_cache)?;
-
-            signal::ctrl_c().await.expect("failed to listen for event");
-            info!("exiting");
-            stop_tx.send(())?;
-            for t in tasks { let _ = tokio::join!(t); }
-            print_stats(&mut bpf).await?;
-        },
-        Commands::Sample { pid , period} => {
+        Commands::Sample { pid , period, command} => {
             ensure_root();
             let mut bpf = load_bpf()?;
             let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
-            program.load().unwrap();
+            match program.load() {
+                Ok(_) => {},
+                Err(e) => {
+                    error!("{}", e.to_string());
+                    panic!();
+                }
+            }
+
+            let mut child = None;
+            let pid = match get_pid(pid, command.as_ref()) {
+                Err(c) => {
+                    let ret = c.id() as u32;
+                    child = Some(c);
+                    Some(ret)
+                }
+                Ok(Some(pid)) => Some(pid as u32),
+                Ok(None) => None
+            };
+            info!("{}", pid.unwrap());
             for cpu in online_cpus()? {
-                let scope = pid
-                    .map(|pid| {
-                        let pid = match pid {
-                            0 => process::id(),
-                            _ => pid,
-                        };
-                        PerfEventScope::OneProcessOneCpu { cpu, pid }
-                    })
-                    .unwrap_or_else(|| PerfEventScope::AllProcessesOneCpu { cpu });
+                let scope = match pid {
+                    Some(pid) => PerfEventScope::OneProcessOneCpu { cpu, pid: pid as u32 },
+                    None => PerfEventScope::AllProcessesOneCpu { cpu },
+                };
                 program.attach(
                     PerfTypeId::Software,
                     perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
@@ -138,33 +130,60 @@ async fn main() -> Result<()> {
             spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
             let tasks = run_bpf(&mut bpf, stop_rx, module_cache)?;
 
-            signal::ctrl_c().await.expect("failed to listen for event");
+            match child {
+                Some(mut c) => {
+                    c.wait().expect("unable to execute child");
+                }
+                None => {
+                    signal::ctrl_c().await.expect("failed to listen for event");
+                }
+            }
+
             info!("exiting");
             stop_tx.send(())?;
             for t in tasks { let _ = tokio::join!(t); }
             print_stats(&mut bpf).await?;
         },
-        Commands::Attach { pid, uprobe } => {
+        Commands::Attach { pid, uprobe, command } => {
             ensure_root();
             let mut bpf = load_bpf()?;
-            let pid = pid.map(|pid| 
-                match pid {
-                    0 => process::id() as i32,
-                    _ => pid as i32,
-                });
+            let mut child = None;
+            let pid = match get_pid(pid, command.as_ref()) {
+                Ok(i) => i,
+                Err(c) => {
+                    let ret = Some(c.id() as i32);
+                    child = Some(c);
+                    ret
+                }
+            };
 
             let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
-            program.load().unwrap();
+            match program.load() {
+                Ok(_) => {},
+                Err(e) => {
+                    error!("{}", e.to_string());
+                    panic!();
+                }
+            }
+
             let mut uprobe = uprobe.split(":");
             let src = uprobe.next().unwrap();
             let func = uprobe.next().unwrap();
-            program.attach(Some(func), 0, src, pid).unwrap();
+            let _uprobe_link = program.attach(Some(func), 0, src, pid).unwrap();
             info!("loaded");
 
             spawn_proc_refresh(&mut bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
             let tasks = run_bpf(&mut bpf, stop_rx, module_cache)?;
 
-            signal::ctrl_c().await.expect("failed to listen for event");
+            match child {
+                Some(mut c) => {
+                    c.wait().expect("unable to execute child");
+                }
+                None => {
+                    signal::ctrl_c().await.expect("failed to listen for event");
+                }
+            }
+
             info!("exiting");
             stop_tx.send(())?;
             for t in tasks { let _ = tokio::join!(t); }
