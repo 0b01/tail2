@@ -1,21 +1,10 @@
-[package]
-name = "xtask"
-version = "0.1.0"
-edition = "2021"
-[[bin]]
-name = "xtask"
-path = "xtask/src/main.rs"
-
-[dependencies]
-anyhow = "1.0.42"
-clap = { version = "3.1", features = ["derive"] }
-ctrlc = "3.2.3"
-
 [workspace]
 members = [
+    "xtask",
     "tail2",
     "tail2-common",
     "tail2-db",
     "tail2-server",
     "testapp/parade",
+    "tests",
 ]

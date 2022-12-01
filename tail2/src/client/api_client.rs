@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
-use tail2::{symbolication::module_cache::ModuleCache, dto::{stack_dto::StackBatchDto, resolved_bpf_sample::ResolvedBpfSample}};
+use crate::{symbolication::module_cache::ModuleCache, dto::{stack_dto::StackBatchDto, resolved_bpf_sample::ResolvedBpfSample}};
 use tokio::sync::Mutex;
 
 pub struct ApiStackEndpointClient {

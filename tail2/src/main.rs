@@ -7,19 +7,17 @@ use aya::Bpf;
 use aya::util::online_cpus;
 use aya::programs::{UProbe, PerfEvent, SamplePolicy, PerfTypeId, PerfEventScope, perf_event};
 use clap::Parser;
-use client::run::{get_pid_child, attach_perf_event, run_until_exit, bpf_init, attach_uprobe};
+use tail2::client::run::{get_pid_child, attach_perf_event, run_until_exit, bpf_init, attach_uprobe};
 use log::{info};
 use tail2::symbolication::module_cache::ModuleCache;
 use tokio::sync::{Mutex};
 use anyhow::Result;
 
 use crate::args::Commands;
-use crate::processes::Processes;
+use tail2::processes::Processes;
 
 pub mod args;
-pub mod processes;
 pub mod utils;
-mod client;
 
 // TODO: use Tail2.toml for config
 #[tokio::main]

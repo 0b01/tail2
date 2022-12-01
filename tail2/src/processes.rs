@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::Result;
 use procfs::process::Process;
 use tail2_common::procinfo::{ProcInfo, user::ProcMapRow};
-use tail2::symbolication::module_cache::ModuleCache;
+use crate::symbolication::module_cache::ModuleCache;
 use tokio::sync::Mutex;
 
 #[derive(Debug)]

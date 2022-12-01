@@ -7,7 +7,7 @@ use log::{error, info};
 use nix::sys::signal::Signal::{SIGSTOP, SIGCONT};
 use nix::sys::signal::kill;
 use nix::unistd::{getuid, Pid};
-use tail2::dto::resolved_bpf_sample::ResolvedBpfSample;
+use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
 use tail2_common::bpf_sample::BpfSample;
 use tail2_common::{ConfigMapKey, NativeStack};
 use tokio::signal;
@@ -24,7 +24,7 @@ use std::time::Duration;
 use aya::maps::{MapData};
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
-use tail2::symbolication::module_cache::ModuleCache;
+use crate::symbolication::module_cache::ModuleCache;
 use tail2_common::procinfo::ProcInfo;
 use tokio::sync::watch::Receiver;
 use tokio::sync::Mutex;
@@ -242,7 +242,11 @@ pub async fn attach_uprobe(bpf: &mut Bpf, uprobe: String, pid: Option<u32>) -> R
 pub async fn run_until_exit(bpf: &mut aya::Bpf, module_cache: Arc<Mutex<ModuleCache>>, child: Option<Child>, output_tx: Option<mpsc::Sender<BpfSample>>) -> Result<()> {
     // for awaiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(());
-    spawn_proc_refresh(bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
+    if child.is_some() {
+        proc_refresh_once(bpf, Arc::clone(&module_cache)).await;
+    } else {
+        spawn_proc_refresh(bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
+    }
 
     let tasks = run_bpf(bpf, stop_rx, module_cache, output_tx)?;
 
@@ -275,7 +279,7 @@ pub(crate) async fn init_logger(bpf: &mut Bpf) -> Result<()> {
 
 
 
-pub async fn proc_refresh(pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>, module_cache: Arc<Mutex<ModuleCache>>) {
+async fn proc_refresh_inner(pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>, module_cache: Arc<Mutex<ModuleCache>>) {
     let module_cache = Arc::clone(&module_cache);
     let mut processes = Processes::new(module_cache);
     if let Ok(()) = processes.refresh().await {
@@ -288,26 +292,35 @@ pub async fn proc_refresh(pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>, m
     }
 }
 
+pub async fn proc_refresh_once(bpf: &mut Bpf, module_cache: Arc<Mutex<ModuleCache>>) -> Result<()> {
+    let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    // HACK: extend lifetime to 'static
+    let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
+
+    proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
+    Ok(())
+}
+
 // TODO: don't refresh, listen to mmap and execve calls
 pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) {
     let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
     let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
 
-    proc_refresh(&mut pid_info, module_cache.clone()).await;
+    proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
 
-    // // refresh pid info table
-    // tokio::spawn(async move {
-    //     loop {
-    //         proc_refresh(&mut pid_info, module_cache.clone()).await;
+    // refresh pid info table
+    tokio::spawn(async move {
+        loop {
+            proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
 
-    //         // sleep for 10 sec
-    //         tokio::select! {
-    //             _ = tokio::time::sleep(Duration::from_secs(10)) => (),
-    //             _ = stop_rx.changed() => break,
-    //         }
-    //     }
-    // });
+            // sleep for 10 sec
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(10)) => (),
+                _ = stop_rx.changed() => break,
+            }
+        }
+    });
 }
 
 pub(crate) fn load_bpf() -> Result<Bpf> {
