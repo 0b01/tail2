@@ -8,6 +8,8 @@ use super::unwindregs::UnwindRegsX86_64;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnwindRuleX86_64 {
+    /// Invalid rule, born because of an error
+    Invalid,
     /// (sp, bp) = (sp + 8, bp)
     JustReturn,
     /// (sp, bp) = if is_first_frame (sp + 8, bp) else (bp + 16, *bp)
@@ -51,6 +53,9 @@ impl UnwindRuleX86_64 {
     {
         let sp = regs.sp();
         let (new_sp, new_bp) = match self {
+            UnwindRuleX86_64::Invalid => {
+                return None;
+            }
             UnwindRuleX86_64::JustReturn => {
                 let new_sp = sp.checked_add(8)?;
                 (new_sp, regs.bp())
@@ -172,6 +177,17 @@ impl UnwindRuleX86_64 {
         regs.set_sp(new_sp);
         regs.set_bp(new_bp);
         Some(Some(return_address))
+    }
+
+    pub fn to_num(&self) -> i32 {
+        match self {
+            Self::Invalid => -1,
+            Self::JustReturn => 0,
+            Self::JustReturnIfFirstFrameOtherwiseFp => 1,
+            Self::OffsetSp { .. } => 2,
+            Self::OffsetSpAndRestoreBp { .. } => 3,
+            Self::UseFramePointer => 4,
+        }
     }
 }
 

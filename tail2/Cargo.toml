@@ -42,7 +42,9 @@ lazy_static = "1.4.0"
 itertools = "0.10.5"
 indextree = "4.5.0"
 indexmap = "1.9.1"
-toml = "0.5"
+
+toml = "0.5" 
+nix = { version = "0.26.1", features = ["process"] }
 
 [features]
 server = ["rocket"]

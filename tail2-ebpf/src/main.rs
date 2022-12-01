@@ -7,3 +7,4 @@ mod pyperf;
 mod helpers;
 mod vmlinux;
 mod sample;
+mod kernel;

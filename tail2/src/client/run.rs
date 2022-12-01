@@ -84,6 +84,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
             let start_time = SystemTime::now();
 
             // dbg!(&st);
+
             let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
 
             let cli2 = Arc::clone(&cli);
