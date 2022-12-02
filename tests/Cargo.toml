@@ -5,8 +5,17 @@ edition = "2021"
 publish = false
 
 [dev-dependencies]
+assert_cmd = "2.0"
+predicates = "2.1"
+
+[dependencies]
 tail2 = { version = "0.1.0", path = "../tail2", features = ["aarch64"]}
 tokio = { version = "1.18", features = ["macros", "rt", "rt-multi-thread", "net", "signal", "sync", "time"] }
+anyhow = "*"
+
+[[bin]]
+name = "tail2-tests"
+path = "src/main.rs"
 
 [[test]]
 name = "integration"

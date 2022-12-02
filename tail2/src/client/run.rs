@@ -108,7 +108,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
 
             // dbg!(&st);
             if let Some(ref output_tx) = output_tx {
-                // dbg!(&st);
+                dbg!(&st);
                 output_tx.send(st).await.unwrap();
             }
 
@@ -126,7 +126,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
             c += 1;
         }
 
-        cli.lock().await.flush().await.unwrap();
+        let _ = cli.lock().await.flush().await;
 
         let avg_t = total_time / c;
         info!("Processed: {c} stacks. {avg_t:?}/st");
@@ -160,7 +160,7 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-fn get_pid<'a>(pid: Option<u32>, command: Option<&'a String>) -> Result<Option<i32>, Child> {
+fn get_pid<'a>(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Child> {
     match (pid, command) {
         (None, None) => Ok(None),
         (None, Some(cmd)) => {
@@ -191,7 +191,7 @@ fn get_pid<'a>(pid: Option<u32>, command: Option<&'a String>) -> Result<Option<i
 
 
 pub fn get_pid_child(pid: Option<u32>, command: Option<String>, child: &mut Option<Child>) -> Option<u32> {
-    match get_pid(pid, command.as_ref()) {
+    match get_pid(pid, command) {
         Err(c) => {
             let ret = c.id() as u32;
             *child = Some(c);
@@ -203,14 +203,22 @@ pub fn get_pid_child(pid: Option<u32>, command: Option<String>, child: &mut Opti
 }
 
 pub async fn bpf_init() -> Result<Bpf> {
+    // init logger
+    let env = env_logger::Env::default()
+        .filter_or("LOG_LEVEL", "info")
+        .write_style_or("LOG_STYLE", "always");
+
+    env_logger::init_from_env(env);
     ensure_root();
     bump_memlock_rlimit()?;
     let mut bpf = load_bpf()?;
-    init_logger(&mut bpf).await?;
+
+    BpfLogger::init(&mut bpf).unwrap();
+
     Ok(bpf)
 }
 
-pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: Option<u64>) -> Result<()> {
+pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: u64) -> Result<()> {
     let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
     match program.load() {
         Ok(_) => {},
@@ -229,7 +237,7 @@ pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: Option<u
             PerfTypeId::Software,
             perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
             scope,
-            SamplePolicy::Period(period.unwrap_or(40_000)),
+            SamplePolicy::Period(period),
         )?;
     }
 
@@ -237,7 +245,7 @@ pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: Option<u
 }
 
 
-pub async fn attach_uprobe(bpf: &mut Bpf, uprobe: String, pid: Option<u32>) -> Result<()> {
+pub async fn attach_uprobe(bpf: &mut Bpf, uprobe: &str, pid: Option<u32>) -> Result<()> {
     let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
     match program.load() {
         Ok(_) => {},
@@ -259,7 +267,7 @@ pub async fn run_until_exit(bpf: &mut aya::Bpf, module_cache: Arc<Mutex<ModuleCa
     // for awaiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(());
     if child.is_some() {
-        proc_refresh_once(bpf, Arc::clone(&module_cache)).await;
+        proc_refresh_once(bpf, Arc::clone(&module_cache)).await.unwrap();
     } else {
         spawn_proc_refresh(bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
     }
@@ -284,19 +292,6 @@ pub async fn run_until_exit(bpf: &mut aya::Bpf, module_cache: Arc<Mutex<ModuleCa
 
     Ok(())
 }
-
-pub(crate) async fn init_logger(bpf: &mut Bpf) -> Result<()> {
-    // init logger
-    let env = env_logger::Env::default()
-        .filter_or("LOG_LEVEL", "info")
-        .write_style_or("LOG_STYLE", "always");
-    env_logger::init_from_env(env);
-
-    BpfLogger::init(bpf).unwrap();
-    Ok(())
-}
-
-
 
 async fn proc_refresh_inner(pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>, module_cache: Arc<Mutex<ModuleCache>>) {
     let module_cache = Arc::clone(&module_cache);

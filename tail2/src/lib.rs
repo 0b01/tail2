@@ -5,3 +5,4 @@ pub mod symbolication;
 pub mod calltree;
 pub mod client;
 pub mod processes;
+pub mod args;
