@@ -1,5 +1,6 @@
 use anyhow::Result;
 use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection, X86_64};
+use log::error;
 use object::{Object, ObjectSection};
 use super::unwind_rule::{UnwindRuleX86_64, translate_into_unwind_rule};
 
@@ -87,7 +88,7 @@ impl UnwindTable {
                         match UnwindTableRow::parse(row, encoding) {
                             Ok(r) => rows.push(r),
                             Err(e) => {
-                                eprintln!("err parsing: {}, error: {:?}", row.start_address(), e);
+                                error!("err parsing: {}, error: {:?}", row.start_address(), e);
                                 rows.push(UnwindTableRow::invalid(row.start_address() as usize));
                             }
                         }

@@ -4,9 +4,11 @@ use aya::programs::{PerfEvent, PerfEventScope, PerfTypeId, SamplePolicy, UProbe,
 use aya::util::online_cpus;
 use bytes::BytesMut;
 use log::{error, info};
+use nix::sys::ptrace;
 use nix::sys::signal::Signal::{SIGSTOP, SIGCONT};
 use nix::sys::signal::kill;
-use nix::unistd::{getuid, Pid};
+use nix::unistd::{getuid, Pid, getpid};
+use tokio::time::sleep;
 use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
 use tail2_common::bpf_sample::BpfSample;
 use tail2_common::{ConfigMapKey, NativeStack};
@@ -14,6 +16,7 @@ use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use std::fs;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Child};
 use std::{mem::size_of, sync::Arc};
@@ -48,8 +51,8 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, tx: mpsc::Sender<BpfSample>, stop
         let tx = tx.clone();
         let mut stop_rx2 = stop_rx.clone();
         let t = tokio::spawn(async move {
-            let mut buffers = (0..10)
-                .map(|_| BytesMut::with_capacity(size_of::<NativeStack>()))
+            let mut buffers = (0..1)
+                .map(|_| BytesMut::with_capacity(size_of::<BpfSample>()))
                 .collect::<Vec<_>>();
 
             loop {
@@ -59,6 +62,7 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, tx: mpsc::Sender<BpfSample>, stop
                         let events = evts.unwrap();
                         for buf in buffers.iter_mut().take(events.read) {
                             let st: BpfSample = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
+                            // dbg!(&st);
 
                             if tx.try_send(st).is_err() {
                                 error!("slow");
@@ -102,12 +106,11 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            dbg!(&st);
+            // dbg!(&st);
             if let Some(ref output_tx) = output_tx {
+                // dbg!(&st);
                 output_tx.send(st).await.unwrap();
             }
-
-            // dbg!(&st);
 
             let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
 
@@ -164,10 +167,18 @@ fn get_pid<'a>(pid: Option<u32>, command: Option<&'a String>) -> Result<Option<i
             let path = PathBuf::from(cmd);
             let path = fs::canonicalize(path).expect("cannot canonicalize path");
             info!("Launching child process: `{:?}`", path);
-            match Command::new(path).spawn() {
+            let mut cmd = Command::new(path);
+            unsafe {
+                cmd.pre_exec(|| {
+                    ptrace::traceme().or(Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "ptrace TRACEME failed",
+                    )))
+                });
+            }
+            match cmd.spawn() {
                 Ok(child) => {
                     let pid = child.id();
-                    kill(Pid::from_raw(pid as i32), SIGSTOP).unwrap();
                     Err(child)
                 }
                 Err(e) => panic!("{}", e.to_string()),
@@ -256,7 +267,10 @@ pub async fn run_until_exit(bpf: &mut aya::Bpf, module_cache: Arc<Mutex<ModuleCa
     let tasks = run_bpf(bpf, stop_rx, module_cache, output_tx)?;
 
     if let Some(mut c) = child {
-        kill(Pid::from_raw(c.id() as i32), SIGCONT).unwrap();
+        info!("resuming child");
+        let pid = Pid::from_raw(c.id() as i32);
+        // nix::sys::wait::waitpid(pid, None).unwrap();
+        ptrace::cont(pid, None).unwrap();
         c.wait().expect("unable to execute child");
         info!("child exited");
     } else {

@@ -18,6 +18,8 @@ pub fn test(opts: Options) -> Result<()> {
     if opts.release {
         args.push("--release")
     }
+    args.push("--");
+    args.push("--nocapture");
     let status = Command::new("cargo")
         .env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER", "sudo -E")
         .args(&args)
