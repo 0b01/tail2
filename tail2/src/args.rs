@@ -35,7 +35,7 @@ pub enum Commands {
         #[clap(short, long)]
         command: Option<String>,
         /// sample period
-        #[clap(default_value="400_000", long)]
+        #[clap(default_value="400000", long)]
         period: u64,
     },
     /// Attach to a userspace function, e.g. "libc:malloc"

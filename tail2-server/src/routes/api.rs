@@ -6,8 +6,8 @@ use tail2::{calltree::frames::{serialize::Node, CallTreeFrame}, dto::FrameDto, s
 use crate::state::{CurrentCallTree, ResolvedFrame, CodeType};
 
 #[get("/current")]
-pub fn current<'a>(ct: &State<CurrentCallTree>) -> String {
-    let ct = ct.inner().ct.lock().unwrap();
+pub async fn current<'a>(ct: &State<CurrentCallTree>) -> String {
+    let ct = ct.inner().ct.lock().await;
     let node = Node::new(
         ct.root,
         &ct.arena,

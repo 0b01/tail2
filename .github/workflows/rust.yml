@@ -19,7 +19,7 @@ jobs:
     - name: info
       run: uname -a
     - name: +nightly
-      run: rustup install nightly
+      run: rustup install nightly && rustup default nightly
     - name: add src
       run: rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
     - name: install bpf-linker

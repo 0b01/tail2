@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use tokio::sync::Mutex;
 
 use log::info;
 use rocket::{post, http::Status, Route, tokio, State};
@@ -6,7 +7,7 @@ use tail2::{dto::{StackBatchDto, FrameDto, StackDto}, calltree::frames::CallTree
 use crate::{error::Result, state::{CurrentCallTree, ResolvedFrame, CodeType}};
 
 #[post("/stack", data = "<var>")]
-fn stack<'a>(var: StackBatchDto, st: &'a State<CurrentCallTree>) -> Result<Status> {
+async fn stack<'a>(var: StackBatchDto, st: &'a State<CurrentCallTree>) -> Result<Status> {
     // info!("{:#?}", var);
     let changed = Arc::clone(&st.changed);
 
@@ -15,18 +16,18 @@ fn stack<'a>(var: StackBatchDto, st: &'a State<CurrentCallTree>) -> Result<Statu
     tokio::spawn(async move {
         let mut ct = CallTree::new();
         for stack in var.stacks {
-            let stack = build_stack(stack, &syms, &var.modules);
+            let stack = build_stack(stack, &syms, &var.modules).await;
             ct.merge(&CallTree::from_stack(&stack));
         }
         // info!("{:#?}", ct.root.debug_pretty_print(&ct.arena));
-        ct_.lock().unwrap().merge(&ct);
+        (*ct_).lock().await.merge(&ct);
         changed.notify_one();
     });
 
     Ok(Status::Ok)
 }
 
-fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Arc<Module>]) -> Vec<Option<ResolvedFrame>> {
+async fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Arc<Module>]) -> Vec<Option<ResolvedFrame>> {
     let mut ret = vec![];
     let mut python_frames = stack.python_frames.into_iter();
 
@@ -34,7 +35,7 @@ fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Arc<Modu
         match f {
             FrameDto::Native { module_idx, offset } => {
                 let module = &modules[module_idx];
-                let mut syms = syms.lock().unwrap();
+                let mut syms = syms.lock().await;
                 match syms.entry(&module.path) {
                     Some((module_idx, elf)) => {
                         let name = elf.find(offset);
@@ -68,6 +69,13 @@ fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Arc<Modu
             _ => { unreachable!() }
         }
     }
+
+    // ret.append(&mut python_frames.map(|f| Some(ResolvedFrame {
+    //     module_idx: 0,
+    //     offset: 0,
+    //     code_type: CodeType::Python,
+    //     name: f.python_name(),
+    // })).collect());
 
     for kernel_frame in stack.kernel_frames {
         ret.push(Some(

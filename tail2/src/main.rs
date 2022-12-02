@@ -7,7 +7,7 @@ use aya::Bpf;
 use aya::util::online_cpus;
 use clap::Parser;
 use tail2::symbolication::module_cache::ModuleCache;
-use tokio::sync::{Mutex};
+use tokio::sync::Mutex;
 use anyhow::Result;
 
 pub mod utils;

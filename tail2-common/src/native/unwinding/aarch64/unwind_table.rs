@@ -1,6 +1,6 @@
 use anyhow::Result;
 use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection};
-use log::error;
+use log::{error, debug};
 use object::{Object, ObjectSection};
 use super::unwind_rule::{UnwindRuleAarch64, translate_into_unwind_rule};
 

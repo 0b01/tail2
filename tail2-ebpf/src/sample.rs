@@ -40,7 +40,6 @@ fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
 }
 
 fn sample<C: BpfContext>(ctx: &C) -> Option<u32> {
-    info!(ctx, "sample");
     let st: &mut BpfSample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
     st.clear();
 

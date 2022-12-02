@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use rocket::tokio::sync::Mutex;
 
 use rocket::tokio::sync::Notify;
 use serde::Serialize;

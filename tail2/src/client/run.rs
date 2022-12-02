@@ -3,7 +3,7 @@ use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::programs::{PerfEvent, PerfEventScope, PerfTypeId, SamplePolicy, UProbe, perf_event};
 use aya::util::online_cpus;
 use bytes::BytesMut;
-use log::{error, info};
+use log::{error, info, debug};
 use nix::sys::ptrace;
 use nix::sys::signal::Signal::{SIGSTOP, SIGCONT};
 use nix::sys::signal::kill;
@@ -80,7 +80,12 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, tx: mpsc::Sender<BpfSample>, stop
 
 }
 
-pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>, output_tx: Option<mpsc::Sender<BpfSample>>) -> Result<Vec<JoinHandle<()>>> {
+pub(crate) fn run_bpf(
+    bpf: &mut Bpf,
+    stop_rx: watch::Receiver<()>,
+    module_cache: Arc<Mutex<ModuleCache>>,
+    output_tx: Option<mpsc::Sender<BpfSample>>
+) -> Result<Vec<JoinHandle<()>>> {
     // send device info
     let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
     let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
@@ -108,7 +113,6 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
 
             // dbg!(&st);
             if let Some(ref output_tx) = output_tx {
-                dbg!(&st);
                 output_tx.send(st).await.unwrap();
             }
 
@@ -165,6 +169,8 @@ fn get_pid<'a>(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>,
         (None, None) => Ok(None),
         (None, Some(cmd)) => {
             let path = PathBuf::from(cmd);
+            let current_dir = std::env::current_dir().expect("unable to get current dir");
+            debug!("Current directory: {}", current_dir.display());
             let path = fs::canonicalize(path).expect("cannot canonicalize path");
             info!("Launching child process: `{:?}`", path);
             let mut cmd = Command::new(path);

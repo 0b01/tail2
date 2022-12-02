@@ -3,6 +3,7 @@ use std::fs;
 use std::sync::Arc;
 use indexmap::IndexMap;
 use object::*;
+use symbolic::demangle::demangle;
 
 #[derive(Debug)]
 pub struct ElfCache {
@@ -72,7 +73,9 @@ impl ElfSymbols {
                 let section = obj_file.section_by_index(idx).unwrap();
                 let section_name = section.name().unwrap_or("");
                 if section_name == ".text" {
-                    map.insert(sym.address() as usize, sym.name().unwrap().to_owned());
+                    let name = sym.name().unwrap().to_owned();
+                    let name = demangle(&name).to_string();
+                    map.insert(sym.address() as usize, name);
                 }
             }
         }
