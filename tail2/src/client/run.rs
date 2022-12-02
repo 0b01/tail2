@@ -13,6 +13,8 @@ use tail2_common::{ConfigMapKey, NativeStack};
 use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::{exit, Command, Child};
 use std::{mem::size_of, sync::Arc};
 use std::os::unix::prelude::MetadataExt;
@@ -100,6 +102,7 @@ pub(crate) fn run_bpf(bpf: &mut Bpf, stop_rx: watch::Receiver<()>, module_cache:
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
+            dbg!(&st);
             if let Some(ref output_tx) = output_tx {
                 output_tx.send(st).await.unwrap();
             }
@@ -158,8 +161,10 @@ fn get_pid<'a>(pid: Option<u32>, command: Option<&'a String>) -> Result<Option<i
     match (pid, command) {
         (None, None) => Ok(None),
         (None, Some(cmd)) => {
-            info!("Launching child process: `{}`", cmd);
-            match Command::new(cmd).spawn() {
+            let path = PathBuf::from(cmd);
+            let path = fs::canonicalize(path).expect("cannot canonicalize path");
+            info!("Launching child process: `{:?}`", path);
+            match Command::new(path).spawn() {
                 Ok(child) => {
                     let pid = child.id();
                     kill(Pid::from_raw(pid as i32), SIGSTOP).unwrap();
