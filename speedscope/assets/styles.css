@@ -4,7 +4,7 @@
 
     body {
         font-family: 'Fira Sans', sans-serif;
-        background-color: #00C853;
+        @apply bg-gray-200;
         height: 100vh;
     }
     header {
