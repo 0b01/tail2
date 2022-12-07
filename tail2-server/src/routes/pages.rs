@@ -1,4 +1,5 @@
-use rocket::{Route, get};
+use rocket::{Route, get, fs::NamedFile};
+use rocket::fs::relative;
 use rocket_dyn_templates::Template;
 use serde::{Serialize, Deserialize};
 
@@ -8,14 +9,31 @@ struct LoginState {
     username: String,
 }
 
-// #[get("/")]
-// fn index() -> Template {
-//     let context = LoginState::default();
-//     Template::render("index", context)
-// }
+#[get("/sample.json")]
+async fn sample_json() -> Option<NamedFile> {
+    NamedFile::open(relative!("./flamegraph/data/sample.txt")).await.ok()
+}
+
+#[get("/sample")]
+async fn sample() -> Option<NamedFile> {
+    NamedFile::open(relative!("./flamegraph/sample.html")).await.ok()
+}
+
+#[get("/app")]
+async fn app() -> Option<NamedFile> {
+    NamedFile::open(relative!("./flamegraph/app.html")).await.ok()
+}
+
+#[get("/")]
+async fn index() -> Option<NamedFile> {
+    NamedFile::open(relative!("./flamegraph/index.html")).await.ok()
+}
 
 pub fn routes() -> Vec<Route> {
     rocket::routes![
-        // index,
+        index,
+        app,
+        sample,
+        sample_json,
     ]
 }

@@ -1,172 +1,108 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
+  <head>
+    <title>tail2 - Continuous Profiling SaaS</title>
+    <link rel="stylesheet" href="styles.css">
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>speedscope</title>
-  <link href="https://fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet">
-  <script>
-    // https://github.com/evanw/webgl-recorder
-    false && (function () {
-      var getContext = HTMLCanvasElement.prototype.getContext;
-      var requestAnimationFrame = window.requestAnimationFrame;
-      var frameSincePageLoad = 0;
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Fira+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+    </style>
 
-      function countFrames() {
-        frameSincePageLoad++;
-        requestAnimationFrame(countFrames);
-      }
+  </head>
+  <body class="bg-orange-100 h-screen">
+    <div class="flex justify-between items-center bg-orange-400 p-4">
 
-      window.requestAnimationFrame = function () {
-        return requestAnimationFrame.apply(window, arguments);
-      };
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" height="80" width="200">
+        <rect x="10" y="10" width="80" height="80" fill="#000" />
+        <text x="120" y="55" font-size="24" text-anchor="middle" fill="#000">tail2</text>
+      </svg>
+      
+      <div class="hidden md:flex">
+        <a href="#" class="mr-4 font-semibold text-orange-800 hover:text-gray-900">Features</a>
+        <a href="#" class="mr-4 font-semibold text-orange-800 hover:text-gray-900">Pricing</a>
+        <a href="#" class="mr-4 font-semibold text-orange-800 hover:text-gray-900">Blog</a>
+        <a href="#" class="mr-4 font-semibold text-orange-800 hover:text-gray-900">About</a>
+      </div>
+    </div>
 
-      HTMLCanvasElement.prototype.getContext = function (type) {
-        var canvas = this;
-        var context = getContext.apply(canvas, arguments);
+    <section class="hero py-20 bg-gray-200">
+      <div class="container mx-auto flex">
+        <div class="w-2/3 pr-8">
+          <h1 class="text-3xl font-bold">Continuous profiling Made Easy</h1>
+          <p class="mt-4 text-xl">Sign up for our private beta and see how tail2 can help you understand the runtime behavior of your app, optimize performance and resolve performance issues quickly and easily.</p>
+          <!-- <button class="mt-8 px-4 py-2 bg-orange-800 text-white font-bold rounded-full hover:bg-orange-900 focus:outline-none focus:shadow-outline">Sign Up for Free Trial</button> -->
+          <form class="py-10">
+            <div class="flex mb-4">
+              <input type="email" placeholder="Enter your email address" class="px-4 py-2 w-56 rounded-l-full border border-gray-400 focus:border-orange-600 focus:outline-none" />
+              <button type="submit" class="px-4 py-2 rounded-r-full bg-orange-800 text-white font-bold hover:bg-orange-900 focus:outline-none focus:shadow-outline">Sign Up</button>
+            </div>
+            <p class="text-gray-600 text-sm">We respect your privacy and will never share your email address with third parties.</p>
+          </form>
+        </div>
+        <div class="w-1/3">
+          <img src="https://via.placeholder.com/400x300" alt="placeholder graphic">
+        </div>
+      </div>
 
-        if (type === 'webgl' || type === 'experimental-webgl') {
-          var oldWidth = canvas.width;
-          var oldHeight = canvas.height;
-          var oldFrameCount = frameSincePageLoad;
-          var trace = [];
-          var variables = {};
-          var fakeContext = {
-            trace: trace,
-            compileTrace: compileTrace,
-            downloadTrace: downloadTrace,
-          };
+      <div class="container mx-auto flex py-10">
+        <div class="w-full pr-8 h-96">
+          <iframe src="sample" style="width:100%;height:100%;" frameborder="0"></iframe>
+        </div>
+      </div>
+    </section>
 
-          trace.push('  gl.canvas.width = ' + oldWidth + ';');
-          trace.push('  gl.canvas.height = ' + oldHeight + ';');
-
-          function compileTrace() {
-            var text = 'function* render(gl) {\n';
-            text += '  // Recorded using https://github.com/evanw/webgl-recorder\n';
-            for (var key in variables) {
-              text += '  var ' + key + 's = [];\n';
-            }
-            text += trace.join('\n');
-            text += '\n}\n';
-            return text;
-          }
-
-          function downloadTrace() {
-            var text = compileTrace();
-            var link = document.createElement('a');
-            link.href = URL.createObjectURL(new Blob([text], { type: 'application/javascript' }));
-            link.download = 'trace.js';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          }
-
-          function getVariable(value) {
-            if (value instanceof WebGLActiveInfo ||
-              value instanceof WebGLBuffer ||
-              value instanceof WebGLFramebuffer ||
-              value instanceof WebGLProgram ||
-              value instanceof WebGLRenderbuffer ||
-              value instanceof WebGLShader ||
-              value instanceof WebGLShaderPrecisionFormat ||
-              value instanceof WebGLTexture ||
-              value instanceof WebGLUniformLocation) {
-              var name = value.constructor.name;
-              var list = variables[name] || (variables[name] = []);
-              var index = list.indexOf(value);
-
-              if (index === -1) {
-                index = list.length;
-                list.push(value);
-              }
-
-              return name + 's[' + index + ']';
-            }
-
-            return null;
-          }
-
-          console.timeStamp('start')
-          var start = performance.now()
-          for (var key in context) {
-            var value = context[key];
-
-            if (typeof value === 'function') {
-              fakeContext[key] = function (key, value) {
-                return function () {
-                  trace.push(`// ${performance.now() - start}`)
-                  var result = value.apply(context, arguments);
-                  var args = [];
-
-                  if (frameSincePageLoad !== oldFrameCount) {
-                    oldFrameCount = frameSincePageLoad;
-                    trace.push('  yield;');
-                  }
-
-                  if (canvas.width !== oldWidth || canvas.height !== oldHeight) {
-                    oldWidth = canvas.width;
-                    oldHeight = canvas.height;
-                    trace.push('  gl.canvas.width = ' + oldWidth + ';');
-                    trace.push('  gl.canvas.height = ' + oldHeight + ';');
-                  }
-
-                  for (var i = 0; i < arguments.length; i++) {
-                    var arg = arguments[i];
-
-                    if (typeof arg === 'number' || typeof arg === 'boolean' || typeof arg === 'string' || arg === null) {
-                      args.push(JSON.stringify(arg));
-                    }
-
-                    else if (ArrayBuffer.isView(arg)) {
-                      args.push('new ' + arg.constructor.name + '([' + Array.prototype.slice.call(arg) + '])');
-                    }
-
-                    else {
-                      var variable = getVariable(arg);
-                      if (variable !== null) {
-                        args.push(variable);
-                      }
-
-                      else {
-                        console.log('unsupported value:', arg);
-                        args.push('null');
-                      }
-                    }
-                  }
-
-                  var text = 'gl.' + key + '(' + args.join(', ') + ');';
-                  var variable = getVariable(result);
-                  if (variable !== null) text = variable + ' = ' + text;
-                  trace.push('  ' + text);
-
-                  return result;
-                };
-              }(key, value);
-            }
-
-            else {
-              fakeContext[key] = value;
-            }
-          }
-
-          return fakeContext;
-        }
-
-        return context;
-      };
-
-      countFrames();
-    })();
-  </script>
-  <link rel="stylesheet" href="reset.css">
-  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-</head>
-
-<body>
-  <script src="../src/speedscope.tsx"></script>
-</body>
-
+    <main class="bg-orange-100 py-8 px-4">
+      <div class="container mx-auto">
+        <section>
+          <h2 class="text-2xl font-bold text-orange-800">Whole-system Profiling with No Code Change</h2>
+          <div class="flex mt-4">
+            <img class="mx-auto mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Screenshot of the tail2 interface, showing real-time monitoring and analysis features">
+            <div class="py-10">
+              <p class="py-1 text-orange-600 leading-relaxed">tail2 uses BPF in the Linux kernel to unwind your running applications stacks, no code changes needed.</p>
+              <p class="py-1 text-orange-600 leading-relaxed">It can profile C, C++, Rust, Go and kernel stacks. More languages coming soon!</p>
+            </div>
+          </div>
+        </section>
+        <section class="mt-12">
+          <h2 class="text-2xl font-bold text-orange-800">Easy-to-Use Platform with Detailed Insights</h2>
+          <div class="flex mt-4">
+            <img class="mx-auto mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Screenshot of a tail2 report, showing detailed and actionable insights">
+            <div>
+              <p class="text-orange-600 leading-relaxed">Our platform is easy to use and provides detailed, actionable insights that will help you improve your application's performance. Quickly and easily identify and troubleshoot issues, reducing downtime and maximizing productivity.</p>
+            </div>
+          </div>
+        </section>
+        <!-- <section class="mt-12">
+          <h2 class="text-2xl font-bold text-orange-800">Trusted by Leading Companies</h2>
+          <div class="flex mt-4">
+            <img class="mx-auto mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Logos of notable companies using tail2, along with short customer testimonials">
+            <div>
+              <p class="text-orange-600 leading-relaxed">Our satisfied customers have experienced the benefits of continuous profiling for themselves. Trusted by leading companies across a range of industries. See what they have to say about tail2.</p>
+            </div>
+          </div>
+        </section> -->
+        <section class="mt-12">
+          <h2 class="text-2xl font-bold text-orange-800 mb-4">Sign Up for Our Email List</h2>
+          <p class="text-orange-600 mb-4">Stay up to date with the latest news and tips from tail2. Sign up for our email list and get exclusive access to valuable resources and information.</p>
+          <form>
+            <div class="flex mb-4">
+              <input type="email" placeholder="Enter your email address" class="px-4 py-2 w-56 rounded-l-full border border-gray-400 focus:border-orange-600 focus:outline-none" />
+              <button type="submit" class="px-4 py-2 rounded-r-full bg-orange-800 text-white font-bold hover:bg-orange-900 focus:outline-none focus:shadow-outline">Sign Up</button>
+            </div>
+            <p class="text-gray-600 text-sm">We respect your privacy and will never share your email address with third parties.</p>
+          </form>
+        </section>
+      </div>
+    </main>
+    <footer class="bg-orange-500 py-8 px-4">
+      <div class="container mx-auto text-center text-white">
+        <p class="mb-4">Copyright tail2 2022. All Rights Reserved.</p>
+        <ul class="inline-flex">
+          <li><a class="px-3 py-2 font-bold text-white hover:text-orange-200" href="#">Terms of Service</a></li>
+          <li><a class="px-3 py-2 font-bold text-white hover:text-orange-200" href="#">Privacy Policy</a></li>
+          <li><a class="px-3 py-2 font-bold text-white hover:text-orange-200" href="#">Contact Us</a></li>
+        </ul>
+      </div>
+    </footer>
+  </body>
 </html>

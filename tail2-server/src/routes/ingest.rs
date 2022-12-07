@@ -1,4 +1,4 @@
-use std::sync::{Arc};
+use std::{sync::{Arc}, path::PathBuf};
 use tokio::sync::Mutex;
 
 use log::info;
@@ -51,12 +51,15 @@ async fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Ar
                                 ));
                             }
                             _ => {
+                                let module_name = PathBuf::from(&module.path);
+                                let module_name = module_name.file_name().map(|i|i.to_string_lossy().to_string()).unwrap_or_default();
+                                let fn_name = name.unwrap_or_default();
                                 ret.push(Some(
                                     ResolvedFrame {
                                         module_idx,
                                         offset,
                                         code_type: CodeType::Native,
-                                        name,
+                                        name: Some(format!("{}: {}", module_name, fn_name)),
                                     }));
                             }
                         }
@@ -76,15 +79,16 @@ async fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Ar
     //     code_type: CodeType::Python,
     //     name: f.python_name(),
     // })).collect());
-
-    for kernel_frame in stack.kernel_frames {
-        ret.push(Some(
-            ResolvedFrame {
-                module_idx: 0,
-                offset: 0,
-                code_type: crate::state::CodeType::Kernel,
-                name: kernel_frame.kernel_name(),
-            }));
+    if !ret.is_empty() {
+        for kernel_frame in stack.kernel_frames {
+            ret.push(Some(
+                ResolvedFrame {
+                    module_idx: 0,
+                    offset: 0,
+                    code_type: crate::state::CodeType::Kernel,
+                    name: kernel_frame.kernel_name(),
+                }));
+        }
     }
 
     ret
