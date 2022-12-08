@@ -248,9 +248,9 @@ export class Application extends StatelessComponent<ApplicationProps> {
   }
 
 
-  loadFromApi() {
+  loadFromApi(url?: string) {
     var load = async () => {
-      let f = await fetch("/current");
+      let f = await fetch(url ?? "/current");
       let j: CallTree = await f.json();
       let profile = convert(j);
       console.log(profile);
@@ -311,7 +311,14 @@ export class Application extends StatelessComponent<ApplicationProps> {
       this.loadSample();
     } 
     else {
-      this.loadFromApi();
+      const queryString = window.location.search;
+      const urlParams = new URLSearchParams(queryString);
+      const profileURL = urlParams.get("profileURL");
+      if (profileURL !== null) {
+        return this.loadFromApi(profileURL);
+      }
+
+      return this.loadFromApi();
     }
   }
 

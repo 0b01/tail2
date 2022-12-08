@@ -44,6 +44,7 @@ pub struct StackDto {
     pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
     pub python_frames: Vec<FrameDto>,
+    pub err: Option<()>,
 }
 
 impl StackDto {
@@ -52,6 +53,7 @@ impl StackDto {
             kernel_frames: vec![],
             native_frames: vec![],
             python_frames: vec![],
+            err: todo!(),
         }
     }
 }

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Application Profiling Tool</title>
+    <link rel="stylesheet" href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css">
+  </head>
+  <body class="bg-gray-100">
+    <div class="container mx-auto px-4">
+      <h1 class="text-4xl font-bold mb-4">Application Profiling Tool</h1>
+      <div class="container flex">
+          <div class="w-1/4 h-screen">
+          <div class="mb-4">
+              <h3 class="text-lg font-bold mb-2">Applications</h3>
+              <ul>
+              <li>Application 1</li>
+              <li>Application 2</li>
+              <li>Application 3</li>
+              </ul>
+      
+              <h3 class="text-lg font-bold mt-4 mb-2">Time Period</h3>
+              <ul>
+              <li>Last 24 hours</li>
+              <li>Last 7 days</li>
+              <li>Last 30 days</li>
+              </ul>
+          </div>
+          <div class="mb-4">
+              <h3 class="text-lg font-bold mb-2">Processes</h3>
+              <ul>
+              <li>
+                  <input type="checkbox" id="process-1" checked>
+                  <label for="process-1">Process 1</label>
+              </li>
+              <li>
+                  <input type="checkbox" id="process-2" checked>
+                  <label for="process-2">Process 2</label>
+              </li>
+              <li>
+                  <input type="checkbox" id="process-3" checked>
+                  <label for="process-3">Process 3</label>
+              </li>
+              </ul>
+          </div>
+          </div>
+          <div class="w-3/4 h-screen">
+          <div class="h-full overflow-y-scroll">
+              <img src="https://via.placeholder.com/800x600" alt="Flamegraph placeholder image">
+          </div>
+          </div>
+      </div>
+    </div>
+  </body>
+</html>

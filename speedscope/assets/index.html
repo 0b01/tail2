@@ -3,26 +3,21 @@
   <head>
     <title>tail2 - Continuous Profiling SaaS</title>
     <link rel="stylesheet" href="styles.css">
-
+    <link rel="icon" type="image/x-icon" href="./favicon.ico">
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Fira+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
     </style>
-
   </head>
   <body class="h-screen">
-    <div class="flex justify-between items-center bg-gray-800 p-4 text-green-100">
-        <div>tail2</div>
-<!-- 
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" height="80" width="200">
-        <rect x="10" y="10" width="80" height="80" fill="#000" />
-        <text x="120" y="55" font-size="24" text-anchor="middle" fill="#000">tail2</text>
-      </svg>
-       -->
+    <div class="flex justify-between items-center bg-gray-800 p-4 text-gray-100">
+      <div class="mx-24">
+        <img width="100" height="300" src="./logo_word.svg" alt="logo">
+      </div>
       <div class="hidden md:flex">
-        <a href="#" class="mr-4 font-semibold text-green-100 hover:text-gray-200">Features</a>
-        <a href="#" class="mr-4 font-semibold text-green-100 hover:text-gray-200">Pricing</a>
-        <a href="#" class="mr-4 font-semibold text-green-100 hover:text-gray-200">Blog</a>
-        <a href="#" class="mr-4 font-semibold text-green-100 hover:text-gray-200">About</a>
+        <a href="#" class="mr-4 font-semibold text-gray-100 hover:text-gray-200">Features</a>
+        <a href="#" class="mr-4 font-semibold text-gray-100 hover:text-gray-200">Pricing</a>
+        <a href="#" class="mr-4 font-semibold text-gray-100 hover:text-gray-200">Blog</a>
+        <a href="#" class="mr-4 font-semibold text-gray-100 hover:text-gray-200">About</a>
       </div>
     </div>
 
@@ -31,11 +26,11 @@
         <div class="w-2/3 pr-8">
           <h1 class="text-3xl font-bold">Continuous Profiling Made Easy</h1>
           <p class="mt-4 text-xl">Sign up for our private beta and see how tail2 can help you understand the runtime behavior of your app, optimize performance and resolve performance issues quickly and easily.</p>
-          <!-- <button class="mt-8 px-4 py-2 bg-green-800 text-white font-bold rounded-full hover:bg-green-900 focus:outline-none focus:shadow-outline">Sign Up for Free Trial</button> -->
+          <!-- <button class="mt-8 px-4 py-2 bg-gray-800 text-white font-bold rounded-full hover:bg-gray-900 focus:outline-none focus:shadow-outline">Sign Up for Free Trial</button> -->
           <form class="py-10">
             <div class="flex mb-4">
-              <input type="email" placeholder="Enter your email address" class="px-4 py-2 w-56 rounded-l-full border border-gray-400 focus:border-green-600 focus:outline-none" />
-              <button type="submit" class="px-4 py-2 rounded-r-full bg-green-800 text-white font-bold hover:bg-green-900 focus:outline-none focus:shadow-outline">Sign Up</button>
+              <input type="email" placeholder="Enter your email address" class="px-4 py-2 w-56 rounded-l-full border border-gray-400 focus:border-gray-600 focus:outline-none" />
+              <button type="submit" class="px-4 py-2 rounded-r-full bg-gray-800 text-white font-bold hover:bg-gray-900 focus:outline-none focus:shadow-outline">Sign Up</button>
             </div>
             <p class="text-gray-600 text-sm">We respect your privacy and will never share your email address with third parties.</p>
           </form>
@@ -47,48 +42,46 @@
 
       <div class="container mx-auto flex py-10">
         <div class="w-full pr-8 h-96">
-          <iframe src="sample" style="width:100%;height:100%;" frameborder="0"></iframe>
+          <iframe src="./app?profileURL=sample.json" style="width:100%;height:100%;" frameborder="0"></iframe>
         </div>
       </div>
     </section>
 
     <main class="bg-gray-300 py-8 px-4">
       <div class="container mx-auto">
-        <section>
-          <h2 class="text-2xl font-bold text-green-800">Whole-system Profiling with No Code Change</h2>
-          <div class="flex mt-4">
-            <img class="mx-auto mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Screenshot of the tail2 interface, showing real-time monitoring and analysis features">
-            <div class="py-10">
-              <p class="py-1 text-green-700 leading-relaxed">tail2 uses BPF in the Linux kernel to unwind your running applications stacks, no code changes needed.</p>
-              <p class="py-1 text-green-700 leading-relaxed">It can profile C, C++, Rust, Go and kernel stacks. More languages coming soon!</p>
-            </div>
+
+        <section class="mt-12 flex flex-col md:flex-row items-center">
+          <img class="mx-auto md:mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Screenshot of a tail2 report, showing detailed and actionable insights">
+          <div class="md:ml-4">
+            <h2 class="text-2xl font-bold text-gray-800">Whole-system Profiling with No Code Change</h2>
+            <p class="text-gray-700 leading-relaxed mt-4">tail2 uses BPF in the Linux kernel to unwind your running applications stacks, no code changes needed.</p>
+            <p class="text-gray-700 leading-relaxed mt-4">It can profile C, C++, Rust, Go and kernel stacks. More languages coming soon!</p>
           </div>
         </section>
-        <section class="mt-12">
-          <h2 class="text-2xl font-bold text-green-800">Easy-to-Use Platform with Detailed Insights</h2>
-          <div class="flex mt-4">
-            <img class="mx-auto mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Screenshot of a tail2 report, showing detailed and actionable insights">
-            <div>
-              <p class="text-green-700 leading-relaxed">Our platform is easy to use and provides detailed, actionable insights that will help you improve your application's performance. Quickly and easily identify and troubleshoot issues, reducing downtime and maximizing productivity.</p>
-            </div>
+
+        <section class="mt-12 flex flex-col md:flex-row items-center">
+          <div class="md:mr-4">
+            <h2 class="text-2xl font-bold text-gray-800">Easy-to-Use Platform with Detailed Insights</h2>
+            <p class="text-gray-700 leading-relaxed mt-4">Our platform is easy to use and provides detailed, actionable insights that will help you improve your application's performance. Quickly and easily identify and troubleshoot issues, reducing downtime and maximizing productivity.</p>
           </div>
+          <img class="mx-auto md:ml-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Screenshot of a tail2 report, showing detailed and actionable insights">
         </section>
         <!-- <section class="mt-12">
-          <h2 class="text-2xl font-bold text-green-800">Trusted by Leading Companies</h2>
+          <h2 class="text-2xl font-bold text-gray-800">Trusted by Leading Companies</h2>
           <div class="flex mt-4">
             <img class="mx-auto mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Logos of notable companies using tail2, along with short customer testimonials">
             <div>
-              <p class="text-green-700 leading-relaxed">Our satisfied customers have experienced the benefits of continuous profiling for themselves. Trusted by leading companies across a range of industries. See what they have to say about tail2.</p>
+              <p class="text-gray-700 leading-relaxed">Our satisfied customers have experienced the benefits of continuous profiling for themselves. Trusted by leading companies across a range of industries. See what they have to say about tail2.</p>
             </div>
           </div>
         </section> -->
         <section class="mt-12">
-          <h2 class="text-2xl font-bold text-green-800 mb-4">Sign Up for Our Email List</h2>
-          <p class="text-green-800 mb-4">Stay up to date with the latest news and tips from tail2. Sign up for our email list and get exclusive access to valuable resources and information.</p>
+          <h2 class="text-2xl font-bold text-gray-800 mb-4">Sign Up for Our Mailing List</h2>
+          <p class="text-gray-800 mb-4">Stay up to date with the latest news and tips from tail2. Sign up for our Mailing list and get exclusive access to valuable resources and information.</p>
           <form>
             <div class="flex mb-4">
-              <input type="email" placeholder="Enter your email address" class="px-4 py-2 w-56 rounded-l-full border border-gray-400 focus:border-green-600 focus:outline-none" />
-              <button type="submit" class="px-4 py-2 rounded-r-full bg-green-800 text-white font-bold hover:bg-green-900 focus:outline-none focus:shadow-outline">Sign Up</button>
+              <input type="email" placeholder="Enter your email address" class="px-4 py-2 w-56 rounded-l-full border border-gray-400 focus:border-gray-600 focus:outline-none" />
+              <button type="submit" class="px-4 py-2 rounded-r-full bg-gray-800 text-white font-bold hover:bg-gray-900 focus:outline-none focus:shadow-outline">Sign Up</button>
             </div>
             <p class="text-gray-600 text-sm">We respect your privacy and will never share your email address with third parties.</p>
           </form>
@@ -99,9 +92,9 @@
       <div class="container mx-auto text-center text-white">
         <p class="mb-4">Copyright tail2 2022. All Rights Reserved.</p>
         <ul class="inline-flex">
-          <li><a class="px-3 py-2 font-bold text-white hover:text-green-200" href="#">Terms of Service</a></li>
-          <li><a class="px-3 py-2 font-bold text-white hover:text-green-200" href="#">Privacy Policy</a></li>
-          <li><a class="px-3 py-2 font-bold text-white hover:text-green-200" href="#">Contact Us</a></li>
+          <li><a class="px-3 py-2 font-bold text-white hover:text-gray-200" href="#">Terms of Service</a></li>
+          <li><a class="px-3 py-2 font-bold text-white hover:text-gray-200" href="#">Privacy Policy</a></li>
+          <li><a class="px-3 py-2 font-bold text-white hover:text-gray-200" href="#">Contact Us</a></li>
         </ul>
       </div>
     </footer>
