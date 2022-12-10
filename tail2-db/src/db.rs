@@ -1,81 +1,64 @@
-use std::collections::HashMap;
+use std::fs::File;
+use std::sync::Arc;
 
-use anyhow::Result;
-use arrow_array::builder::StructBuilder;
-use arrow_schema::{Field, DataType};
+use arrow::array::*;
+use arrow::datatypes::*;
+use arrow::record_batch::RecordBatch;
+use parquet::arrow::ArrowReader;
+use parquet::arrow::ArrowWriter;
+use parquet::arrow::ParquetFileArrowReader;
+use parquet::arrow::arrow_to_parquet_schema;
+use parquet::file::properties::WriterProperties;
+use parquet::file::reader::{FileReader, SerializedFileReader};
+use parquet::file::writer::SerializedFileWriter;
 
-const S: u64 = 1_000;
-const S10: u64 = 10 * S;
-const M: u64 = 60 * S;
-const M10: u64 = 10 * S;
-const H: u64 = 60 * M;
-const HD: u64 = 12 * H;
-const D: u64 = 24 * H;
-const W: u64 = 7 * H;
-const MON: u64 = 4 * W;
-macro_rules! lit_and_ms {
-    ($lit:expr) => {
-        (stringify!($lit), $lit)
-    };
-}
-const SCALES: [(&'static str, u64); 10] = [
-    lit_and_ms!(0),
-    lit_and_ms!(S),
-    lit_and_ms!(S10),
-    lit_and_ms!(M),
-    lit_and_ms!(M10),
-    lit_and_ms!(H),
-    lit_and_ms!(HD),
-    lit_and_ms!(D),
-    lit_and_ms!(W),
-    lit_and_ms!(MON),
-];
+#[cfg(test)]
+mod tests {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-pub struct Database {
-    pub name: String,
-    builders: Vec<(u64, StructBuilder)>,
-    lasts: Vec<(u64, i32)>,
-}
+    use super::*;
 
-impl Database {
-    pub fn new(name: &str) -> Result<Self> {
-        // create a struct array for each scale
-        let builders = SCALES
-            .map(|(t, interval)| {
-                    let fields = vec![
-                        Field::new("ts", DataType::Date64, false),
-                        Field::new(&format!("ct_{}", t), DataType::Binary, true
-                    )];
-                    let builder = StructBuilder::from_fields(fields, 1024);
-                    (interval, builder)
-                })
-            .into_iter()
-            .collect();
+    #[test]
+    fn test_round_trip() {
+        // Define the schema for our data, which will consist of a
+        // timestamp field and a stack trace field
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("timestamp", DataType::Timestamp(TimeUnit::Millisecond, None), true),
+            Field::new("stack_trace", DataType::Binary, true),
+        ]));
 
-        let lasts = SCALES
-            .map(|(t, i)|(i, 0))
-            .into_iter()
-            .collect();
-        Ok(Self {
-            name: name.to_owned(),
-            lasts,
-            builders,
-        })
+        let ts_array = TimestampMillisecondArray::from(vec![1, 2]);
+        let values: Vec<&[u8]> = vec![b"0", b"1"];
+        let stack_array = BinaryArray::from(values);
+
+        // Create a new record batch with the specified schema
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(ts_array),
+                Arc::new(stack_array),
+            ],
+        ).unwrap();
+
+        // Flush the record batch to disk as a Parquet file
+        let props = Arc::new(WriterProperties::builder().build());
+        let mut file = File::create("data.parquet").unwrap();
+
+        let to_write = batch;
+
+        let mut writer = ArrowWriter::try_new(&mut file, to_write.schema(), None).unwrap();
+        writer.write(&to_write).unwrap();
+        writer.close().unwrap();
+        drop(file);
+
+        let file = File::open("data.parquet").unwrap();
+        let mut reader = ParquetRecordBatchReaderBuilder::try_new(file).unwrap()
+            .with_batch_size(1024)
+            .build()
+            .unwrap();
+        let read = reader.next().unwrap().unwrap();
+
+        dbg!(read);
+
     }
-
-    // pub fn insert(&mut self, ts: u64, call_tree: ()) {
-    //     // check each scale, if time has passed, we calculate last
-    //     for ((int, arr), (_, last)) in self.builders.iter().zip(self.lasts) {
-    //         // if last 
-    //     }
-    // }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     #[tokio::test]
-//     async fn test_db_new() {
-//         Database::new("default").await.unwrap();
-//     }
-// }
