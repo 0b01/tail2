@@ -22,10 +22,12 @@
     </div>
 
     <section class="hero py-20 bg-gray-200">
-      <div class="container mx-auto flex">
-        <div class="w-2/3 pr-8">
+      <div class="container mx-auto flex flex-col md:flex-row">
+        <div class="w-full md:w-2/3 pr-8 md:ml-4 mx-auto">
           <h1 class="text-3xl font-bold">Continuous Profiling Made Easy</h1>
-          <p class="mt-4 text-xl">Sign up for our private beta and see how tail2 can help you understand the runtime behavior of your app, optimize performance and resolve performance issues quickly and easily.</p>
+          <p class="mt-4 text-xl">Understand the runtime behavior of your app, optimize performance and resolve performance issues quickly and easily with no code change.</p>
+          <p class="mt-4 text-xl">Sign up here for our private beta:</p>
+    
           <!-- <button class="mt-8 px-4 py-2 bg-gray-800 text-white font-bold rounded-full hover:bg-gray-900 focus:outline-none focus:shadow-outline">Sign Up for Free Trial</button> -->
           <form class="py-10">
             <div class="flex mb-4">
@@ -35,13 +37,14 @@
             <p class="text-gray-600 text-sm">We respect your privacy and will never share your email address with third parties.</p>
           </form>
         </div>
-        <div class="w-1/3">
+        <div class="w-full md:w-1/3 md:mr-4 mx-auto">
           <img src="https://via.placeholder.com/400x300" alt="placeholder graphic">
         </div>
       </div>
-
+    
       <div class="container mx-auto flex py-10">
         <div class="w-full pr-8 h-96">
+          <p class="mt-4 text-xl py-4">Example flamegraph:</p>
           <iframe src="./app?profileURL=sample.json" style="width:100%;height:100%;" frameborder="0"></iframe>
         </div>
       </div>
@@ -53,9 +56,9 @@
         <section class="mt-12 flex flex-col md:flex-row items-center">
           <img class="mx-auto md:mr-4 rounded-lg" src="https://via.placeholder.com/640x360" alt="Screenshot of a tail2 report, showing detailed and actionable insights">
           <div class="md:ml-4">
-            <h2 class="text-2xl font-bold text-gray-800">Whole-system Profiling with No Code Change</h2>
-            <p class="text-gray-700 leading-relaxed mt-4">tail2 uses BPF in the Linux kernel to unwind your running applications stacks, no code changes needed.</p>
-            <p class="text-gray-700 leading-relaxed mt-4">It can profile C, C++, Rust, Go and kernel stacks. More languages coming soon!</p>
+            <h2 class="text-2xl font-bold text-gray-800">System-wide Continuous Profiling</h2>
+            <p class="text-gray-700 leading-relaxed mt-4">tail2 runs as a background agent that uses BPF in the Linux kernel to unwind your running applications stacks. You don't need to change your code.</p>
+            <p class="text-gray-700 leading-relaxed mt-4">It can profile applications written in <b>C, C++, Rust and Go</b>. More languages coming soon!</p>
           </div>
         </section>
 
@@ -75,11 +78,15 @@
             </div>
           </div>
         </section> -->
-        <section class="mt-12">
+      </div>
+    </main>
+    <main class="bg-gray-400 py-8 px-4">
+      <div class="container mx-auto">
+        <section class="my-16">
           <h2 class="text-2xl font-bold text-gray-800 mb-4">Sign Up for Our Mailing List</h2>
           <p class="text-gray-800 mb-4">Stay up to date with the latest news and tips from tail2. Sign up for our Mailing list and get exclusive access to valuable resources and information.</p>
           <form>
-            <div class="flex mb-4">
+            <div class="flex my-4">
               <input type="email" placeholder="Enter your email address" class="px-4 py-2 w-56 rounded-l-full border border-gray-400 focus:border-gray-600 focus:outline-none" />
               <button type="submit" class="px-4 py-2 rounded-r-full bg-gray-800 text-white font-bold hover:bg-gray-900 focus:outline-none focus:shadow-outline">Sign Up</button>
             </div>
@@ -88,6 +95,7 @@
         </section>
       </div>
     </main>
+
     <footer class="bg-gray-800 py-8 px-4">
       <div class="container mx-auto text-center text-white">
         <p class="mb-4">Copyright tail2 2022. All Rights Reserved.</p>
