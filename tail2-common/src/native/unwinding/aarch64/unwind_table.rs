@@ -15,6 +15,7 @@ pub struct UnwindTableRow {
     pub rule: UnwindRuleAarch64,
 }
 
+#[cfg(feature = "user")]
 impl UnwindTableRow {
     pub fn parse<R: Eq + Reader>(
         row: &gimli::UnwindTableRow<R>,
@@ -39,12 +40,14 @@ impl UnwindTableRow {
     }
 }
 
+#[cfg(feature = "user")]
 /// Unwind table.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnwindTable {
     pub rows: Vec<UnwindTableRow>,
 }
 
+#[cfg(feature = "user")]
 impl UnwindTable {
     pub fn from_path(p: &str) -> anyhow::Result<Self> {
         let file = std::fs::File::open(p)?;
@@ -99,3 +102,6 @@ impl UnwindTable {
         Ok(Self { rows })
     }
 }
+
+#[cfg(feature = "user")]
+unsafe impl aya::Pod for UnwindTableRow {}

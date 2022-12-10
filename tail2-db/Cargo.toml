@@ -9,5 +9,4 @@ path = "src/lib.rs"
 [dependencies]
 tokio = "1.0"
 anyhow = "*"
-arrow = "28.0.0"
-parquet = "28.0.0"
+duckdb = { version = "0.6.0", path = "../../duckdb-rs" }
