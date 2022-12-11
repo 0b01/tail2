@@ -1,7 +1,7 @@
 import {StyleSheet} from 'aphrodite'
 
 export enum FontFamily {
-  MONOSPACE = 'Source Code Pro',
+  MONOSPACE = 'Fira Mono',
 }
 
 export enum FontSize {

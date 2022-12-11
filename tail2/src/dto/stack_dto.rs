@@ -27,13 +27,13 @@ pub enum FrameDto {
 impl FrameDto {
     pub fn kernel_name(self) -> Option<String> {
         match self {
-            FrameDto::Kernel { name } => Some(format!("kernel: {}", name)),
+            FrameDto::Kernel { name } => Some(format!("kernel: {name}")),
             _ => None,
         }
     }
     pub fn python_name(self) -> Option<String> {
         match self {
-            FrameDto::Python { name } => Some(format!("python: {}", name)),
+            FrameDto::Python { name } => Some(format!("python: {name}")),
             _ => None,
         }
     }
@@ -44,6 +44,13 @@ pub struct StackDto {
     pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
     pub python_frames: Vec<FrameDto>,
+    pub err: Option<()>,
+}
+
+impl Default for StackDto {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StackDto {
@@ -52,6 +59,7 @@ impl StackDto {
             kernel_frames: vec![],
             native_frames: vec![],
             python_frames: vec![],
+            err: todo!(),
         }
     }
 }

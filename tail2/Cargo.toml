@@ -4,13 +4,9 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-[target.'cfg(target_arch = "aarch64")'.dependencies]
-tail2-common = { path = "../tail2-common", features=["user", "aarch64"], default-features = false }
-
-[target.'cfg(target_arch = "x86_64")'.dependencies]
-tail2-common = { path = "../tail2-common", features=["user", "x86_64"], default-features = false }
-
 [dependencies]
+tail2-common = { path = "../tail2-common", default-features = false }
+
 aya = { git = "https://github.com/aya-rs/aya", branch = "main", version = "0.11", features=["async_tokio"] }
 aya-log = { git = "https://github.com/aya-rs/aya", branch = "main" }
 # aya = { path = "../../aya/aya", version = "0.11", features=["async_tokio"] }
@@ -40,14 +36,17 @@ symbolic = { version = "10.1.1", features = [ "demangle" ] }
 lru = "0.8.1"
 lazy_static = "1.4.0"
 itertools = "0.10.5"
-indextree = "4.5.0"
+indextree = { version = "4.5.0", features = ["deser"]}
 indexmap = "1.9.1"
+parking_lot = "0.12.1"
 
 toml = "0.5" 
 nix = { version = "0.26.1", features = ["process"] }
 
 [features]
 server = ["rocket"]
+x86_64 = ["tail2-common/x86_64", "tail2-common/user"]
+aarch64 = ["tail2-common/aarch64", "tail2-common/user"]
 
 [[bin]]
 name = "tail2"

@@ -1,6 +1,10 @@
 [alias]
 xtask = "run --package xtask --"
 
+[target.aarch64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/mold"]
+
 [build]
 # rustflags = ["-C", "force-frame-pointers"]
 # rustc-wrapper = "/home/g/.cargo/bin/sccache"

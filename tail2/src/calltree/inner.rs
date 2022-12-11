@@ -1,19 +1,26 @@
 use indextree::{Arena, NodeId};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
 pub struct CallTreeFrame<T> where T: Clone + Default + Eq + Serialize {
     pub item: T,
     pub total_samples: usize,
     pub self_samples: usize,
 }
 
-pub struct CallTree<T: Clone + Default + Eq + Serialize> {
+#[derive(Serialize, Deserialize)]
+pub struct CallTreeInner<T: Clone + Default + Eq + Serialize> {
     pub arena: Arena<CallTreeFrame<T>>,
     pub root: NodeId,
 }
 
-impl<T: Clone + Default + Eq + Serialize> CallTree<T> {
+impl<T: Clone + Default + Eq + Serialize> Default for CallTreeInner<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
     pub fn new() -> Self {
         let mut arena = Arena::new();
         let root = arena.new_node(Default::default());
@@ -37,12 +44,12 @@ impl<T: Clone + Default + Eq + Serialize> CallTree<T> {
 
     /// merge two trees
     /// TODO: better perf
-    pub fn merge(&mut self, other: &CallTree<T>) {
+    pub fn merge(&mut self, other: &CallTreeInner<T>) {
         let mut stack = Vec::new();
         stack.push((self.root, other.root));
         while !stack.is_empty() {
             let Some((my_curr, other_curr)) = stack.pop() else { continue };
-            let my_children = my_curr.children(&mut self.arena).collect::<Vec<_>>();
+            let my_children = my_curr.children(&self.arena).collect::<Vec<_>>();
             let other_children = other_curr.children(&other.arena).collect::<Vec<_>>();
             for other_child in other_children {
                 let other_frame = other.arena.get(other_child).unwrap().get().clone();
@@ -109,8 +116,8 @@ pub mod serialize {
     impl<T: Serialize> Serialize for SiblingNodes<'_, T> {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             let mut seq = serializer.serialize_seq(None)?;
-            for node in self.first.following_siblings(&self.arena) {
-                seq.serialize_element(&Node::new(node, &self.arena))?;
+            for node in self.first.following_siblings(self.arena) {
+                seq.serialize_element(&Node::new(node, self.arena))?;
             }
             seq.end()
         }
@@ -124,8 +131,8 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let mut ct1 = CallTree::from_stack(&[0, 1, 2]);
-        let ct2 = CallTree::from_stack(&[5, 6]);
+        let mut ct1 = CallTreeInner::from_stack(&[0, 1, 2]);
+        let ct2 = CallTreeInner::from_stack(&[5, 6]);
         ct1.merge(&ct2);
         dbg!(ct1.root.debug_pretty_print(&ct1.arena));
     }

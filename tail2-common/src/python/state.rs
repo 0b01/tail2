@@ -2,9 +2,8 @@ use core::fmt::Debug;
 
 use super::offsets::PythonOffsets;
 
-pub const PYTHON_STACK_FRAMES_PER_PROG: usize = 16;
-pub const PYTHON_STACK_PROG_CNT: usize = 5;
-pub const FRAME_MAX_LEN: usize = (PYTHON_STACK_FRAMES_PER_PROG * PYTHON_STACK_PROG_CNT);
+pub const PYTHON_STACK_FRAMES_PER_PROG: usize = 80;
+pub const FRAME_MAX_LEN: usize = PYTHON_STACK_FRAMES_PER_PROG;
 pub const CLASS_NAME_LEN: usize = 32;
 pub const FUNCTION_NAME_LEN: usize = 64;
 pub const FILE_NAME_LEN: usize = 128;
@@ -143,7 +142,7 @@ pub struct PythonStack {
 impl PythonStack {
     pub fn uninit() -> Self {
         unsafe {
-            core::mem::MaybeUninit::uninit().assume_init()
+            core::mem::zeroed()
         }
     }
 }

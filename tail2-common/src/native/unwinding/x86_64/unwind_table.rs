@@ -1,5 +1,6 @@
 use anyhow::Result;
 use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection, X86_64};
+use log::{error, debug};
 use object::{Object, ObjectSection};
 use super::unwind_rule::{UnwindRuleX86_64, translate_into_unwind_rule};
 
@@ -14,6 +15,7 @@ pub struct UnwindTableRow {
     pub rule: UnwindRuleX86_64,
 }
 
+#[cfg(feature = "user")]
 impl UnwindTableRow {
     pub fn parse<R: Eq + Reader>(
         row: &gimli::UnwindTableRow<R>,
@@ -39,12 +41,14 @@ impl UnwindTableRow {
     }
 }
 
+#[cfg(feature = "user")]
 /// Unwind table.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnwindTable {
     pub rows: Vec<UnwindTableRow>,
 }
 
+#[cfg(feature = "user")]
 impl UnwindTable {
     pub fn from_path(p: &str) -> anyhow::Result<Self> {
         let file = std::fs::File::open(p)?;
@@ -87,7 +91,7 @@ impl UnwindTable {
                         match UnwindTableRow::parse(row, encoding) {
                             Ok(r) => rows.push(r),
                             Err(e) => {
-                                eprintln!("err parsing: {}, error: {:?}", row.start_address(), e);
+                                error!("err parsing: {}, error: {:?}", row.start_address(), e);
                                 rows.push(UnwindTableRow::invalid(row.start_address() as usize));
                             }
                         }
@@ -99,3 +103,6 @@ impl UnwindTable {
         Ok(Self { rows })
     }
 }
+
+#[cfg(feature = "user")]
+unsafe impl aya::Pod for UnwindTableRow {}

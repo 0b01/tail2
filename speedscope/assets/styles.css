@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+    body {
+        font-family: 'Fira Sans', sans-serif;
+        @apply bg-gray-200;
+        height: 100vh;
+    }
+    header {
+        padding: 24px;
+    }
+    .logo {
+        height: 48px;
+        width: 48px;
+        background-color: white;
+        display: inline-block;
+        vertical-align: middle;
+    }

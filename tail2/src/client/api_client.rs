@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
-use tail2::{symbolication::module_cache::ModuleCache, dto::{stack_dto::StackBatchDto, resolved_bpf_sample::ResolvedBpfSample}};
+use crate::{symbolication::module_cache::ModuleCache, dto::{stack_dto::StackBatchDto, resolved_bpf_sample::ResolvedBpfSample}};
 use tokio::sync::Mutex;
 
 pub struct ApiStackEndpointClient {
@@ -34,7 +34,7 @@ impl ApiStackEndpointClient {
     }
 
     pub async fn flush(&mut self) -> Result<StatusCode> {
-        let buf = std::mem::replace(&mut self.buf, Vec::new());
+        let buf = std::mem::take(&mut self.buf);
         self.post_stacks(buf).await
     }
 
@@ -54,7 +54,6 @@ impl ApiStackEndpointClient {
 
         let module_cache = &mut *self.module_cache.lock().await;
         let dto = StackBatchDto::from_stacks(stacks, module_cache)?;
-        drop(module_cache);
         let body = bincode::serialize(&dto).unwrap();
         self.post(&self.url, body).await
     }

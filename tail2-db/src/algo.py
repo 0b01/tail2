@@ -12,7 +12,6 @@ def find(t0, t1):
     stack = [(t0, t1)]
     while stack:
         (t0, t1) = stack.pop()
-        # print("start", t0, t1)
         if t0 == t1:
             continue
         for scale in avail:

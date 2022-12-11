@@ -12,6 +12,49 @@ import {ViewMode} from '../lib/view-mode'
 import {ProfileGroupState} from '../app-state/profile-group'
 import {HashParams} from '../lib/hash-params'
 import {StatelessComponent} from '../lib/preact-helpers'
+import { CallTree } from './app_types'
+
+declare global {
+  interface Window { sample: boolean; }
+}
+
+function convert(root: CallTree): Profile {
+  console.log(root);
+  if (!root.children) {
+    return new Profile(0);
+  }
+
+  const sum = root.children.reduce((n, i) => i.total_samples + n, 0);
+  const prof = new Profile(sum);
+  prof.setName("a");
+
+  let root_node = new CallTreeNode(Frame.root, null);
+
+  function aux(curr: CallTreeNode, curr_node: CallTree): CallTreeNode {
+    curr.frame = Frame.getOrInsert(prof.frames, {
+      color_key: curr_node.item?.code_type ?? "",
+      key: curr_node.item?.name ?? "",
+      name: curr_node.item?.name ?? "(unk)",
+    });
+    curr.frame.addToSelfWeight(curr_node.self_samples);
+    curr.frame.addToTotalWeight(curr_node.total_samples);
+
+    if (curr_node.total_samples > 0) {
+      prof.samples.push(curr);
+      prof.weights.push(curr_node.self_samples);
+    }
+
+    for (let child_node of curr_node.children ?? []) {
+      const child_ctn = new CallTreeNode(Frame.root, curr);
+      aux(child_ctn, child_node);
+    }
+    return curr;
+  }
+
+  aux(root_node, root);
+  return prof;
+}
+
 
 // Force eager loading of a few code-split modules.
 //
@@ -183,46 +226,31 @@ export class Application extends StatelessComponent<ApplicationProps> {
     return getStyle(this.props.theme)
   }
 
-  loadFromApi() {
-    function convert(root: CallTree): Profile {
-      console.log(root);
-      if (!root.children) {
-        return new Profile(0);
-      }
-
-      const sum = root.children.reduce((n, i) => i.total_samples + n, 0);
-      const prof = new Profile(sum);
-      prof.setName("a");
-
-      let root_node = new CallTreeNode(Frame.root, null);
-
-      function aux(curr: CallTreeNode, curr_node: CallTree): CallTreeNode {
-        curr.frame = Frame.getOrInsert(prof.frames, {
-          color_key: curr_node.item?.code_type ?? "",
-          key: curr_node.item?.name ?? "",
-          name: curr_node.item?.name ?? "(unk)",
-        });
-        curr.frame.addToSelfWeight(curr_node.self_samples);
-        curr.frame.addToTotalWeight(curr_node.total_samples);
-
-        if (curr_node.total_samples > 0) {
-          prof.samples.push(curr);
-          prof.weights.push(curr_node.self_samples);
-        }
-
-        for (let child_node of curr_node.children ?? []) {
-          const child_ctn = new CallTreeNode(Frame.root, curr);
-          aux(child_ctn, child_node);
-        }
-        return curr;
-      }
-
-      aux(root_node, root);
-      return prof;
-    }
-
+  loadSample() {
     var load = async () => {
-      let f = await fetch("/current");
+      let f = await fetch("/sample.json");
+      let j: CallTree = await f.json();
+      let profile = convert(j);
+      console.log(profile);
+      let ret: ProfileGroup = {
+        name: "default",
+        profile,
+      };
+      return ret;
+    };
+
+    const evtSource = new EventSource("/events");
+    console.log(evtSource);
+    evtSource.onmessage = (event) => {
+      console.log(event);
+      this.loadProfile(load);
+    };
+  }
+
+
+  loadFromApi(url?: string) {
+    var load = async () => {
+      let f = await fetch(url ?? "/current");
       let j: CallTree = await f.json();
       let profile = convert(j);
       console.log(profile);
@@ -269,11 +297,29 @@ export class Application extends StatelessComponent<ApplicationProps> {
   componentDidMount() {
     window.addEventListener('keydown', this.onWindowKeyDown)
     window.addEventListener('keypress', this.onWindowKeyPress)
+    this.load();
   }
 
   componentWillUnmount() {
     window.removeEventListener('keydown', this.onWindowKeyDown)
     window.removeEventListener('keypress', this.onWindowKeyPress)
+  }
+
+  load() {
+    if (window.sample) {
+      console.log(0);
+      this.loadSample();
+    } 
+    else {
+      const queryString = window.location.search;
+      const urlParams = new URLSearchParams(queryString);
+      const profileURL = urlParams.get("profileURL");
+      if (profileURL !== null) {
+        return this.loadFromApi(profileURL);
+      }
+
+      return this.loadFromApi();
+    }
   }
 
   renderLanding() {
@@ -282,9 +328,9 @@ export class Application extends StatelessComponent<ApplicationProps> {
     return (
       <div className={css(style.landingContainer)}>
         <div className={css(style.landingMessage)}>
-          <p className={css(style.landingP)}>
+          {/* <p className={css(style.landingP)}>
             <a onClick={() => this.loadFromApi()}>start</a>
-          </p>
+          </p> */}
 {/* 
           <p className={css(style.landingP)}>
             👋 Hi there! Welcome to 🔬speedscope, an interactive{' '}

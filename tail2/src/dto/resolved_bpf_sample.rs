@@ -45,7 +45,7 @@ impl ResolvedBpfSample {
         let stack_id = sample.kernel_stack_id;
         if stack_id > 0 {
             let mut kernel_stack = kernel_stacks.get(&(stack_id as u32), 0).unwrap();
-            let kfs: Vec<_> = kernel_stack.resolve(&ksyms).frames().into_iter().map(|i|i.symbol_name.clone()).collect();
+            let kfs: Vec<_> = kernel_stack.resolve(ksyms).frames().iter().map(|i|i.symbol_name.clone()).collect();
             kernel_frames = Some(kfs);
         }
 

@@ -26,12 +26,26 @@ pub struct Options {
 
 /// Build the project
 fn build(opts: &Options) -> Result<(), anyhow::Error> {
+    let target = (if cfg!(target_arch="aarch64")
+        {
+            "aarch64"
+        }
+        else if cfg!(target_arch="x86_64")
+        {
+            "x86_64"
+        }
+        else {
+            // compile_error!("unsupported target");
+            ""
+        }).to_string();
     let mut args = vec![
         "+nightly",
         "build",
         "-p", "tail2",
         "-p", "tail2-server",
+        "--features",
     ];
+    args.push(&target);
     if opts.release {
         args.push("--release")
     }
@@ -59,8 +73,8 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
 
     // profile we are building (release or debug)
     let profile = if opts.release { "release" } else { "debug" };
-    let bin_path = format!("target/{}/tail2", profile);
-    let server_path = format!("target/{}/tail2-server", profile);
+    let bin_path = format!("target/{profile}/tail2");
+    let server_path = format!("target/{profile}/tail2-server");
 
     // arguments to pass to the application
     let mut run_args: Vec<_> = opts.run_args.iter().map(String::as_str).collect();

@@ -28,3 +28,6 @@ Packages.gz
 tail2-server/flamegraph/
 a.out
 out
+__pycache__/
+*.t2db
+*.db

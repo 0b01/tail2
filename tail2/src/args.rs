@@ -1,4 +1,10 @@
+use std::{sync::Arc, process::Child};
+use anyhow::Result;
+
 use clap::{Parser, Subcommand};
+use log::info;
+use crate::{symbolication::module_cache::ModuleCache, client::run::{attach_uprobe, run_until_exit, get_pid_child, bpf_init, attach_perf_event}, processes::Processes};
+use tokio::sync::{Mutex};
 
 #[derive(Debug, Parser)]
 pub struct Opt {
@@ -29,8 +35,8 @@ pub enum Commands {
         #[clap(short, long)]
         command: Option<String>,
         /// sample period
-        #[clap(long)]
-        period: Option<u64>,
+        #[clap(default_value="400000", long)]
+        period: u64,
     },
     /// Attach to a userspace function, e.g. "libc:malloc"
     Uprobe {
@@ -44,4 +50,47 @@ pub enum Commands {
         #[clap(short, long)]
         uprobe: String,
     },
+}
+
+impl Commands {
+    pub async fn run(self, module_cache: Arc<Mutex<ModuleCache>>) -> Result<()> {
+        match self {
+            Commands::Table {pid} => {
+                let _ret = Processes::detect_pid(pid, &mut *module_cache.lock().await);
+                // dbg!(ret);
+            }
+            Commands::Processes { } => {
+                let mut p = Processes::new(module_cache);
+                p.refresh().await.unwrap();
+                info!("{:#?}", p);
+                return Ok(());
+            },
+            Commands::Symbols { paths } => {
+                for _p in paths {
+                    // dump_elf(p)?;
+                }
+                return Ok(());
+            },
+            Commands::Sample { pid , period, command} => {
+                let mut bpf = bpf_init().await?;
+
+                let mut child: Option<Child> = None;
+                let pid = get_pid_child(pid, command, &mut child);
+
+                attach_perf_event(&mut bpf, pid, period).await?;
+                run_until_exit(&mut bpf, module_cache, child, None).await?;
+            },
+            Commands::Uprobe { pid, uprobe, command } => {
+                let mut bpf = bpf_init().await?;
+
+                let mut child: Option<Child> = None;
+                let pid = get_pid_child(pid, command, &mut child);
+
+                attach_uprobe(&mut bpf, &uprobe, pid).await?;
+                run_until_exit(&mut bpf, module_cache, child, None).await?;
+            }
+        }
+
+        Ok(())
+    }
 }

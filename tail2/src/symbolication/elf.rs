@@ -3,10 +3,17 @@ use std::fs;
 use std::sync::Arc;
 use indexmap::IndexMap;
 use object::*;
+use symbolic::demangle::demangle;
 
 #[derive(Debug)]
 pub struct ElfCache {
     pub map: IndexMap<String, Arc<ElfSymbols>>,
+}
+
+impl Default for ElfCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ElfCache {
@@ -18,7 +25,7 @@ impl ElfCache {
 
     pub fn entry(&mut self, path: &str) -> Option<(usize, Arc<ElfSymbols>)> {
         if let Some((idx, _k, v)) = self.map.get_full(path) {
-            return Some((idx, Arc::clone(v)));
+            Some((idx, Arc::clone(v)))
         } else {
             self.add(&[path.to_owned()]);
             self.map.get_full(path)
@@ -72,7 +79,9 @@ impl ElfSymbols {
                 let section = obj_file.section_by_index(idx).unwrap();
                 let section_name = section.name().unwrap_or("");
                 if section_name == ".text" {
-                    map.insert(sym.address() as usize, sym.name().unwrap().to_owned());
+                    let name = sym.name().unwrap().to_owned();
+                    let name = demangle(&name).to_string();
+                    map.insert(sym.address() as usize, name);
                 }
             }
         }
