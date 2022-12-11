@@ -2,12 +2,12 @@ use std::{process::Child, sync::{Arc}, env::args};
 use tokio::sync::{mpsc};
 use tokio::sync::Mutex;
 
-use tail2::{client::run::{bpf_init, get_pid_child, attach_uprobe, run_until_exit}, symbolication::module_cache::ModuleCache, args::Commands};
+use tail2::{client::run::{bpf_init, get_pid_child, attach_uprobe, run_until_exit}, symbolication::module_cache::ModuleCache};
 use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let test = args().skip(1).next().expect("no input");
+    let test = args().nth(1).expect("no input");
     let module_cache = Arc::new(Mutex::new(ModuleCache::new()));
     match test.as_str() {
         "malloc" => {
@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
             println!("{:?}", rx.recv().await.unwrap());
         }
         _ => {
-
+            panic!();
         }
     }
 

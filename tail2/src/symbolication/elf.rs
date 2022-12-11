@@ -10,6 +10,12 @@ pub struct ElfCache {
     pub map: IndexMap<String, Arc<ElfSymbols>>,
 }
 
+impl Default for ElfCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ElfCache {
     pub fn new() -> Self {
         Self {
@@ -19,7 +25,7 @@ impl ElfCache {
 
     pub fn entry(&mut self, path: &str) -> Option<(usize, Arc<ElfSymbols>)> {
         if let Some((idx, _k, v)) = self.map.get_full(path) {
-            return Some((idx, Arc::clone(v)));
+            Some((idx, Arc::clone(v)))
         } else {
             self.add(&[path.to_owned()]);
             self.map.get_full(path)

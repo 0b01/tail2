@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use log::info;
 use crate::{symbolication::module_cache::ModuleCache, client::run::{attach_uprobe, run_until_exit, get_pid_child, bpf_init, attach_perf_event}, processes::Processes};
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex};
 
 #[derive(Debug, Parser)]
 pub struct Opt {
@@ -56,7 +56,7 @@ impl Commands {
     pub async fn run(self, module_cache: Arc<Mutex<ModuleCache>>) -> Result<()> {
         match self {
             Commands::Table {pid} => {
-                let ret = Processes::detect_pid(pid, &mut *module_cache.lock().await);
+                let _ret = Processes::detect_pid(pid, &mut *module_cache.lock().await);
                 // dbg!(ret);
             }
             Commands::Processes { } => {

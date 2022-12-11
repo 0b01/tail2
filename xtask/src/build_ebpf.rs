@@ -42,8 +42,7 @@ pub struct Options {
 
 pub fn build_ebpf(opts: Options) -> Result<(), anyhow::Error> {
     let dir = PathBuf::from("tail2-ebpf");
-    let target = format!("{}", 
-        if cfg!(target_arch="aarch64")
+    let target = (if cfg!(target_arch="aarch64")
         {
             "aarch64"
         }
@@ -54,8 +53,7 @@ pub fn build_ebpf(opts: Options) -> Result<(), anyhow::Error> {
         else {
             // compile_error!("unsupported target");
             ""
-        }
-    );
+        }).to_string();
     let mut args = vec![
         "+nightly",
         "build",

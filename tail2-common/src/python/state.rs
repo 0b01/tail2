@@ -142,7 +142,7 @@ pub struct PythonStack {
 impl PythonStack {
     pub fn uninit() -> Self {
         unsafe {
-            core::mem::MaybeUninit::uninit().assume_init()
+            core::mem::zeroed()
         }
     }
 }

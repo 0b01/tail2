@@ -3,7 +3,7 @@ use std::rc::Rc;
 use rocket::{serde::{json::Json, self}, State, Route, get, response::stream::{EventStream, Event}};
 use tail2::{calltree::inner::{serialize::Node, CallTreeFrame}, dto::FrameDto, symbolication::elf::ElfCache};
 
-use crate::state::{CurrentCallTree, ResolvedFrame, CodeType};
+use crate::state::{CurrentCallTree};
 
 #[get("/current")]
 pub async fn current<'a>(ct: &State<CurrentCallTree>) -> String {
@@ -13,8 +13,7 @@ pub async fn current<'a>(ct: &State<CurrentCallTree>) -> String {
         &ct.arena,
     );
 
-    let val = serde::json::to_string(&node).unwrap();
-    val
+    serde::json::to_string(&node).unwrap()
 }
 
 #[get("/events")]

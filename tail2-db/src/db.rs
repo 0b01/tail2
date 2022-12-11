@@ -20,7 +20,7 @@ pub struct Tail2DB {
 
 impl Tail2DB {
     pub fn new(db_name: &str) -> Self {
-        let path = format!("/home/g/tail2/db/{}.t2db", db_name);
+        let path = format!("/home/g/tail2/db/{db_name}.t2db");
         let config = Config::default()
             .access_mode(duckdb::AccessMode::ReadWrite)
             .unwrap();
@@ -87,9 +87,9 @@ impl Tail2DB {
         let merged = trees
             .iter()
             .fold((CallTreeInner::new(), 0),
-                |mut acc, x| (acc.0.merge(&x.0), acc.1 + x.1));
+                |mut acc, x| ({acc.0.merge(&x.0); acc.0}, acc.1 + x.1));
 
-        return Ok(merged);
+        Ok(merged)
     }
 
     fn refresh_range(&mut self, range: (i64, i64)) -> Result<()> {
@@ -110,7 +110,7 @@ impl Tail2DB {
             Timestamp::Millisecond(t0),
             Timestamp::Millisecond(t1)],
             |row| { Ok((row.get::<_, Vec<_>>(0)?, row.get(1)?))})?;
-        while let Some(row) = rows.next() {
+        for row in rows {
             let (ct_bytes, n) = row?;
             let ct = bincode::deserialize(&ct_bytes).unwrap();
             ret.push((ct, n));
@@ -122,7 +122,7 @@ impl Tail2DB {
     fn populate_rec(&mut self, scale: i64, start: i64) -> Result<(CallTree, i32)> {
         // dbg!((scale, start));
         let ret: Option<(Vec<u8>, i32)> = self.conn.query_row(
-            &format!("SELECT ct, n FROM samples_{} WHERE ts = epoch_ms((?))", scale),
+            &format!("SELECT ct, n FROM samples_{scale} WHERE ts = epoch_ms((?))"),
             [start + scale],
             |row| Ok((row.get(0)?, row.get(1)?)) ).optional()?;
 
@@ -144,12 +144,12 @@ impl Tail2DB {
         let merged = next_results
             .iter()
             .fold((CallTreeInner::new(), 0),
-                |mut acc, x| (acc.0.merge(&x.0), acc.1 + x.1));
+                |mut acc, x| ({acc.0.merge(&x.0); acc.0}, acc.1 + x.1));
 
-        let mut stmt = self.conn.prepare(&format!("INSERT INTO samples_{} VALUES (?, ?, ?)", scale))?;
+        let mut stmt = self.conn.prepare(&format!("INSERT INTO samples_{scale} VALUES (?, ?, ?)"))?;
         stmt.execute(params![Timestamp::Millisecond(start + scale), bincode::serialize(&merged.0).unwrap(), merged.1]).unwrap();
 
-        return Ok(merged);
+        Ok(merged)
     }
 
 }

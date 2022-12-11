@@ -24,3 +24,9 @@ impl CurrentCallTree {
         }
     }
 }
+
+impl Default for CurrentCallTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}

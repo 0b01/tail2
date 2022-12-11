@@ -2,6 +2,12 @@
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct PidTgid(u64);
 
+impl Default for PidTgid {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PidTgid {
     pub fn new() -> Self {
         Self(0)

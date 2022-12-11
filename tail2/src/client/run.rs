@@ -5,19 +5,19 @@ use aya::util::online_cpus;
 use bytes::BytesMut;
 use log::{error, info, debug};
 use nix::sys::ptrace;
-use nix::sys::signal::Signal::{SIGSTOP, SIGCONT};
-use nix::sys::signal::kill;
-use nix::unistd::{getuid, Pid, getpid};
-use tokio::time::sleep;
+
+
+use nix::unistd::{getuid, Pid};
+
 use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
 use tail2_common::bpf_sample::BpfSample;
-use tail2_common::{ConfigMapKey, NativeStack};
+use tail2_common::{ConfigMapKey};
 use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use std::fs;
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::process::{exit, Command, Child};
 use std::{mem::size_of, sync::Arc};
 use std::os::unix::prelude::MetadataExt;
@@ -164,7 +164,7 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-fn get_pid<'a>(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Child> {
+fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Child> {
     match (pid, command) {
         (None, None) => Ok(None),
         (None, Some(cmd)) => {
@@ -184,7 +184,7 @@ fn get_pid<'a>(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>,
             }
             match cmd.spawn() {
                 Ok(child) => {
-                    let pid = child.id();
+                    let _pid = child.id();
                     Err(child)
                 }
                 Err(e) => panic!("{}", e.to_string()),
@@ -199,7 +199,7 @@ fn get_pid<'a>(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>,
 pub fn get_pid_child(pid: Option<u32>, command: Option<String>, child: &mut Option<Child>) -> Option<u32> {
     match get_pid(pid, command) {
         Err(c) => {
-            let ret = c.id() as u32;
+            let ret = c.id();
             *child = Some(c);
             Some(ret)
         }
@@ -236,7 +236,7 @@ pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: u64) -> 
 
     for cpu in online_cpus()? {
         let scope = match pid {
-            Some(pid) => PerfEventScope::OneProcessOneCpu { cpu, pid: pid as u32 },
+            Some(pid) => PerfEventScope::OneProcessOneCpu { cpu, pid },
             None => PerfEventScope::AllProcessesOneCpu { cpu },
         };
         program.attach(
@@ -261,7 +261,7 @@ pub async fn attach_uprobe(bpf: &mut Bpf, uprobe: &str, pid: Option<u32>) -> Res
         }
     }
 
-    let mut uprobe = uprobe.split(":");
+    let mut uprobe = uprobe.split(':');
     let src = uprobe.next().unwrap();
     let func = uprobe.next().unwrap();
     let _uprobe_link = program.attach(Some(func), 0, src, pid.map(|i| i as i32)).unwrap();

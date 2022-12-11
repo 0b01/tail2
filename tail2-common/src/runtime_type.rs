@@ -70,7 +70,7 @@ pub mod user {
             let is_lib = base_name.starts_with("libpython");
             let mut version = PythonVersion { major: 0, minor: 0, patch: 0 };
             if let Some(v_str) = base_name.split("python").last() {
-                let mut segs = v_str.split(".");
+                let mut segs = v_str.split('.');
                 version.major = segs.next().unwrap().parse().unwrap();
                 version.minor = segs.next().unwrap().parse().unwrap();
                 // if let Ok(v) = to_python_version(&row.mod_name, v_str) {
@@ -83,7 +83,7 @@ pub mod user {
             // For the arbitrary constant buffer let's just use the start of the executable segment, which is
             // definitely constant.
             let py_info = PyInfo::new(&row.mod_name);
-            globals.constant_buffer = row.avma as usize + py_info.v_addr;
+            globals.constant_buffer = row.avma + py_info.v_addr;
 
             // one of _PyRuntime or _PyThreadState_Current is set, depending on Python version
             if py_info._PyRuntime != 0 {
@@ -97,7 +97,7 @@ pub mod user {
             }
 
             let pthreads_impl = if paths.iter().any(|i|i.mod_name.contains("musl")) { pthreads_impl::PTI_MUSL } else { pthreads_impl::PTI_GLIBC };
-            return RuntimeType::Python {
+            RuntimeType::Python {
                 is_lib,
                 version,
                 pid_data: pid_data {

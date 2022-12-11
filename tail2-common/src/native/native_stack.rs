@@ -18,7 +18,9 @@ impl NativeStack {
     }
 
     pub fn uninit() -> Self {
-        unsafe { MaybeUninit::uninit().assume_init() }
+        unsafe {
+            core::mem::zeroed()
+        }
     }
 }
 

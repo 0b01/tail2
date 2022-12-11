@@ -3,11 +3,11 @@ use tokio::sync::Mutex;
 
 use log::info;
 use rocket::{post, http::Status, Route, tokio, State};
-use tail2::{dto::{StackBatchDto, FrameDto, StackDto}, calltree::inner::CallTreeInner, symbolication::{elf::ElfCache, module::Module}};
-use crate::{error::Result, state::{CurrentCallTree, ResolvedFrame, CodeType}};
+use tail2::{dto::{StackBatchDto, FrameDto, StackDto}, calltree::{inner::CallTreeInner, ResolvedFrame, CodeType}, symbolication::{elf::ElfCache, module::Module}};
+use crate::{error::Result, state::{CurrentCallTree}};
 
 #[post("/stack", data = "<var>")]
-async fn stack<'a>(var: StackBatchDto, st: &'a State<CurrentCallTree>) -> Result<Status> {
+async fn stack(var: StackBatchDto, st: &State<CurrentCallTree>) -> Result<Status> {
     // info!("{:#?}", var);
     let changed = Arc::clone(&st.changed);
 
@@ -20,7 +20,7 @@ async fn stack<'a>(var: StackBatchDto, st: &'a State<CurrentCallTree>) -> Result
             ct.merge(&CallTreeInner::from_stack(&stack));
         }
         // info!("{:#?}", ct.root.debug_pretty_print(&ct.arena));
-        (*ct_).lock().await.merge(&ct);
+        ct_.lock().await.merge(&ct);
         changed.notify_one();
     });
 
@@ -39,7 +39,7 @@ async fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Ar
                 match syms.entry(&module.path) {
                     Some((module_idx, elf)) => {
                         let name = elf.find(offset);
-                        match name.as_ref().map(|i|i.as_str()) {
+                        match name.as_deref() {
                             Some("_PyEval_EvalFrameDefault") => {
                                 ret.push(python_frames.next().map(|i|
                                     ResolvedFrame {
@@ -59,7 +59,7 @@ async fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Ar
                                         module_idx,
                                         offset,
                                         code_type: CodeType::Native,
-                                        name: Some(format!("{}: {}", module_name, fn_name)),
+                                        name: Some(format!("{module_name}: {fn_name}")),
                                     }));
                             }
                         }
@@ -85,7 +85,7 @@ async fn build_stack(stack: StackDto, syms: &Arc<Mutex<ElfCache>>, modules: &[Ar
                 ResolvedFrame {
                     module_idx: 0,
                     offset: 0,
-                    code_type: crate::state::CodeType::Kernel,
+                    code_type: CodeType::Kernel,
                     name: kernel_frame.kernel_name(),
                 }));
         }
