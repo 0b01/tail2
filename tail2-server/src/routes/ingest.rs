@@ -3,7 +3,7 @@ use tokio::sync::Mutex;
 
 use log::info;
 use rocket::{post, http::Status, Route, tokio, State};
-use tail2::{dto::{StackBatchDto, FrameDto, StackDto}, calltree::frames::CallTree, symbolication::{elf::ElfCache, module::Module}};
+use tail2::{dto::{StackBatchDto, FrameDto, StackDto}, calltree::inner::CallTreeInner, symbolication::{elf::ElfCache, module::Module}};
 use crate::{error::Result, state::{CurrentCallTree, ResolvedFrame, CodeType}};
 
 #[post("/stack", data = "<var>")]
@@ -14,10 +14,10 @@ async fn stack<'a>(var: StackBatchDto, st: &'a State<CurrentCallTree>) -> Result
     let ct_ = Arc::clone(&st.ct);
     let syms = Arc::clone(&st.syms);
     tokio::spawn(async move {
-        let mut ct = CallTree::new();
+        let mut ct = CallTreeInner::new();
         for stack in var.stacks {
             let stack = build_stack(stack, &syms, &var.modules).await;
-            ct.merge(&CallTree::from_stack(&stack));
+            ct.merge(&CallTreeInner::from_stack(&stack));
         }
         // info!("{:#?}", ct.root.debug_pretty_print(&ct.arena));
         (*ct_).lock().await.merge(&ct);

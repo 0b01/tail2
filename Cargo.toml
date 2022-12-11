@@ -3,7 +3,7 @@ members = [
     "xtask",
     "tail2",
     "tail2-common",
-    #"tail2-db",
+    "tail2-db",
     "tail2-server",
     "testapp/parade",
     "tests",

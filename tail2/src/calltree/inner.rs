@@ -1,19 +1,20 @@
 use indextree::{Arena, NodeId};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
 pub struct CallTreeFrame<T> where T: Clone + Default + Eq + Serialize {
     pub item: T,
     pub total_samples: usize,
     pub self_samples: usize,
 }
 
-pub struct CallTree<T: Clone + Default + Eq + Serialize> {
+#[derive(Serialize, Deserialize)]
+pub struct CallTreeInner<T: Clone + Default + Eq + Serialize> {
     pub arena: Arena<CallTreeFrame<T>>,
     pub root: NodeId,
 }
 
-impl<T: Clone + Default + Eq + Serialize> CallTree<T> {
+impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
     pub fn new() -> Self {
         let mut arena = Arena::new();
         let root = arena.new_node(Default::default());
@@ -37,7 +38,7 @@ impl<T: Clone + Default + Eq + Serialize> CallTree<T> {
 
     /// merge two trees
     /// TODO: better perf
-    pub fn merge(&mut self, other: &CallTree<T>) {
+    pub fn merge(mut self, other: &CallTreeInner<T>) -> Self {
         let mut stack = Vec::new();
         stack.push((self.root, other.root));
         while !stack.is_empty() {
@@ -65,6 +66,8 @@ impl<T: Clone + Default + Eq + Serialize> CallTree<T> {
                 }
             }
         }
+
+        self
     }
 }
 
@@ -124,8 +127,8 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let mut ct1 = CallTree::from_stack(&[0, 1, 2]);
-        let ct2 = CallTree::from_stack(&[5, 6]);
+        let mut ct1 = CallTreeInner::from_stack(&[0, 1, 2]);
+        let ct2 = CallTreeInner::from_stack(&[5, 6]);
         ct1.merge(&ct2);
         dbg!(ct1.root.debug_pretty_print(&ct1.arena));
     }

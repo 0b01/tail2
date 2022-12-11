@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use rocket::{serde::{json::Json, self}, State, Route, get, response::stream::{EventStream, Event}};
-use tail2::{calltree::frames::{serialize::Node, CallTreeFrame}, dto::FrameDto, symbolication::elf::ElfCache};
+use tail2::{calltree::inner::{serialize::Node, CallTreeFrame}, dto::FrameDto, symbolication::elf::ElfCache};
 
 use crate::state::{CurrentCallTree, ResolvedFrame, CodeType};
 
