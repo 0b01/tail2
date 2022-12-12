@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+/// Tail2 DB implementation
 pub mod db;
-pub mod row;
+/// Algorithm for tiling
 pub mod tile;
