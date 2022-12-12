@@ -19,6 +19,11 @@ async fn app() -> Option<NamedFile> {
     NamedFile::open(relative!("./flamegraph/app.html")).await.ok()
 }
 
+#[get("/dashboard")]
+async fn dashboard() -> Option<NamedFile> {
+    NamedFile::open(relative!("./flamegraph/dashboard.html")).await.ok()
+}
+
 #[get("/")]
 async fn index() -> Option<NamedFile> {
     NamedFile::open(relative!("./flamegraph/index.html")).await.ok()
@@ -28,6 +33,7 @@ pub fn routes() -> Vec<Route> {
     rocket::routes![
         index,
         app,
+        dashboard,
         sample_json,
     ]
 }

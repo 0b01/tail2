@@ -1,0 +1,14 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Additional styles */
+/* @import 'additional-styles/utility-patterns.css';
+@import 'additional-styles/range-slider.css';
+@import 'additional-styles/toggle-switch.css';
+@import 'additional-styles/flatpickr.css';
+@import 'additional-styles/theme.css'; */
+
+body {
+    font-family: 'Fira Sans', sans-serif;
+}
