@@ -114,8 +114,12 @@ impl Tail2DB {
         Ok(())
     }
 
+    pub fn count_by_window(&mut self, range: (i64, i64), window: TimeWindow) {
+        todo!()
+    }
+
     /// Refresh the samples_XXXX augmentation tables
-    pub(crate) fn refresh_cache(&mut self) -> Result<()> {
+    pub fn refresh_cache(&mut self) -> Result<()> {
         let latest_ts: i64 = self
             .conn
             .query_row(

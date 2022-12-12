@@ -4,3 +4,6 @@
 pub mod db;
 /// Algorithm for tiling
 pub mod tile;
+/// time window
+pub mod window;
+
