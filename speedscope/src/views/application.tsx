@@ -242,7 +242,6 @@ export class Application extends StatelessComponent<ApplicationProps> {
     const evtSource = new EventSource("/events");
     console.log(evtSource);
     evtSource.onmessage = (event) => {
-      console.log(event);
       this.loadProfile(load);
     };
   }
