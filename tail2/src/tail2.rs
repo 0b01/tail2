@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use reqwest_eventsource::{EventSource, Event};
+use rocket::futures::StreamExt;
 use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
 use tokio::sync::Mutex;
 
@@ -26,5 +28,21 @@ impl Tail2 {
         )));
 
         Ok(Self { bpf, config, cli, module_cache })
+    }
+
+    pub async fn run(&mut self) -> Result<()> {
+        let mut es = EventSource::get(&format!("{}/connect", self.config.server.url));
+        while let Some(event) = es.next().await {
+            match event {
+                Ok(Event::Open) => println!("Connection Open!"),
+                Ok(Event::Message(message)) => println!("Message: {:#?}", message),
+                Err(err) => {
+                    println!("Error: {}", err);
+                    es.close();
+                }
+            }
+        }
+
+        Ok(())
     }
 }

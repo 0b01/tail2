@@ -1,6 +1,7 @@
 #![allow(unused)]
 use rocket::fs::{relative, FileServer};
 use rocket_dyn_templates::Template;
+use state::{Connections, CurrentCallTree};
 use tail2::symbolication::elf::ElfCache;
 
 extern crate rocket;
@@ -8,6 +9,7 @@ extern crate rocket;
 pub mod error;
 pub mod routes;
 pub mod state;
+pub use state::notifiable::Notifiable;
 
 fn setup_logger() -> Result<(), fern::InitError> {
     fern::Dispatch::new()
@@ -39,7 +41,8 @@ async fn main() {
     let r = rocket::build()
         .mount("/", routes::routes())
         .mount("/", FileServer::from(relative!("./flamegraph")))
-        .manage(state::CurrentCallTree::new())
+        .manage(Connections::new())
+        .manage(Notifiable::<CurrentCallTree>::new(CurrentCallTree::new()))
         .attach(Template::fairing());
 
     let _ = r.launch().await.unwrap();

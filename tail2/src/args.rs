@@ -12,7 +12,7 @@ use log::info;
 #[derive(Debug, Parser)]
 pub struct Opt {
     #[clap(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -51,14 +51,14 @@ pub enum Commands {
 }
 
 impl Commands {
-    pub async fn run(self, mut state: Tail2) -> Result<()> {
+    pub async fn run(self, mut t2: Tail2) -> Result<()> {
         match self {
             Commands::Table { pid } => {
-                let _ret = Processes::detect_pid(pid, &mut *state.module_cache.lock().await);
+                let _ret = Processes::detect_pid(pid, &mut *t2.module_cache.lock().await);
                 // dbg!(ret);
             }
             Commands::Processes {} => {
-                let mut p = Processes::new(state.module_cache);
+                let mut p = Processes::new(t2.module_cache);
                 p.refresh().await.unwrap();
                 info!("{:#?}", p);
                 return Ok(());
@@ -77,8 +77,8 @@ impl Commands {
                 let mut child: Option<Child> = None;
                 let pid = get_pid_child(pid, command, &mut child);
 
-                attach_perf_event(&mut state, pid, period).await?;
-                run_until_exit(&mut state, child, None).await?;
+                attach_perf_event(&mut t2, pid, period).await?;
+                run_until_exit(&mut t2, child, None).await?;
             }
             Commands::Uprobe {
                 pid,
@@ -88,8 +88,8 @@ impl Commands {
                 let mut child: Option<Child> = None;
                 let pid = get_pid_child(pid, command, &mut child);
 
-                attach_uprobe(&mut state, &uprobe, pid).await?;
-                run_until_exit(&mut state, child, None).await?;
+                attach_uprobe(&mut t2, &uprobe, pid).await?;
+                run_until_exit(&mut t2, child, None).await?;
             }
         }
 

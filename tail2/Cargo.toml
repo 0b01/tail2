@@ -42,8 +42,8 @@ parking_lot = "0.12.1"
 
 toml = "0.5" 
 nix = { version = "0.26.1", features = ["process"] }
-
 shlex = "1.1.0"
+reqwest-eventsource = "0.4.0"
 
 [features]
 server = ["rocket"]

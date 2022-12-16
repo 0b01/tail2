@@ -9,8 +9,11 @@ pub mod utils;
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = tail2::args::Opt::parse();
-    let state = tail2::Tail2::new().await?;
-    opt.command.run(state).await.unwrap();
+    let mut t2 = tail2::Tail2::new().await?;
+    match opt.command {
+        Some(cmd) => cmd.run(t2).await.unwrap(),
+        None => t2.run().await?,
+    }
 
     Ok(())
 }

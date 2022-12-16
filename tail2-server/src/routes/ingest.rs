@@ -1,8 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
-use crate::{error::Result, state::CurrentCallTree};
+use crate::{error::Result, state::{CurrentCallTree, AgentConfig, Connections}, Notifiable};
 use log::info;
+use rocket::{response::stream::{Event, EventStream}, get};
 use rocket::{http::Status, post, tokio, Route, State};
 use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
@@ -11,13 +12,29 @@ use tail2::{
     Mergeable,
 };
 
+#[get("/connect")]
+async fn connect(st: &State<Connections>) -> EventStream![] {
+    let config = Notifiable::<AgentConfig>::new(AgentConfig::new());
+    let changed = Arc::clone(&config.changed);
+    st.machines.lock().await.push(config);
+
+    let stream = EventStream!{
+        loop {
+            changed.notified().await;
+            yield Event::data("test");
+        }
+    };
+
+    stream.heartbeat(Duration::from_secs(30))
+}
+
 #[post("/stack", data = "<var>")]
-async fn stack(var: StackBatchDto, st: &State<CurrentCallTree>) -> Result<Status> {
+async fn stack(var: StackBatchDto, st: &State<Notifiable<CurrentCallTree>>) -> Result<Status> {
     // info!("{:#?}", var);
     let changed = Arc::clone(&st.changed);
 
-    let ct_ = Arc::clone(&st.ct);
-    let syms = Arc::clone(&st.syms);
+    let ct_ = Arc::clone(&st.inner.ct);
+    let syms = Arc::clone(&st.inner.syms);
     tokio::spawn(async move {
         let mut ct = CallTreeInner::new();
         for stack in var.stacks {
@@ -33,5 +50,8 @@ async fn stack(var: StackBatchDto, st: &State<CurrentCallTree>) -> Result<Status
 }
 
 pub fn routes() -> Vec<Route> {
-    rocket::routes![stack,]
+    rocket::routes![
+        stack,
+        connect,
+    ]
 }
