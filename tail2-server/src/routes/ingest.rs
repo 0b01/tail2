@@ -6,7 +6,7 @@ use log::info;
 use rocket::{http::Status, post, tokio, Route, State};
 use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
-    dto::{FrameDto, StackBatchDto, StackDto},
+    dto::{FrameDto, StackBatchDto, StackDto, build_stack},
     symbolication::{elf::ElfCache, module::Module},
     Mergeable,
 };
@@ -30,78 +30,6 @@ async fn stack(var: StackBatchDto, st: &State<CurrentCallTree>) -> Result<Status
     });
 
     Ok(Status::Ok)
-}
-
-async fn build_stack(
-    stack: StackDto,
-    syms: &Arc<Mutex<ElfCache>>,
-    modules: &[Arc<Module>],
-) -> Vec<Option<ResolvedFrame>> {
-    let mut ret = vec![];
-    let mut python_frames = stack.python_frames.into_iter();
-
-    for f in stack.native_frames {
-        match f {
-            FrameDto::Native { module_idx, offset } => {
-                let module = &modules[module_idx];
-                let mut syms = syms.lock().await;
-                match syms.entry(&module.path) {
-                    Some((module_idx, elf)) => {
-                        let name = elf.find(offset);
-                        match name.as_deref() {
-                            Some("_PyEval_EvalFrameDefault") => {
-                                ret.push(python_frames.next().map(|i| ResolvedFrame {
-                                    module_idx: 0,
-                                    offset: 0,
-                                    code_type: CodeType::Python,
-                                    name: i.python_name(),
-                                }));
-                            }
-                            _ => {
-                                let module_name = PathBuf::from(&module.path);
-                                let module_name = module_name
-                                    .file_name()
-                                    .map(|i| i.to_string_lossy().to_string())
-                                    .unwrap_or_default();
-                                let fn_name = name.unwrap_or_default();
-                                ret.push(Some(ResolvedFrame {
-                                    module_idx,
-                                    offset,
-                                    code_type: CodeType::Native,
-                                    name: Some(format!("{module_name}: {fn_name}")),
-                                }));
-                            }
-                        }
-                    }
-                    None => {
-                        ret.push(None);
-                    }
-                }
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-
-    // ret.append(&mut python_frames.map(|f| Some(ResolvedFrame {
-    //     module_idx: 0,
-    //     offset: 0,
-    //     code_type: CodeType::Python,
-    //     name: f.python_name(),
-    // })).collect());
-    if !ret.is_empty() {
-        for kernel_frame in stack.kernel_frames {
-            ret.push(Some(ResolvedFrame {
-                module_idx: 0,
-                offset: 0,
-                code_type: CodeType::Kernel,
-                name: kernel_frame.kernel_name(),
-            }));
-        }
-    }
-
-    ret
 }
 
 pub fn routes() -> Vec<Route> {
