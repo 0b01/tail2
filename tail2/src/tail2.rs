@@ -41,8 +41,8 @@ impl Tail2 {
             name: "Test".to_owned(),
         };
 
-        let payload = serde_json::to_string(&new_connection)?;
-        let mut es = EventSource::get(&format!("{}/connect?new_conn={}", self.config.server.url, payload));
+        let payload = serde_qs::to_string(&new_connection)?;
+        let mut es = EventSource::get(&format!("{}/connect?{}", self.config.server.url, payload));
         while let Some(event) = es.next().await {
             match event {
                 Ok(Event::Open) => println!("Connection Open!"),

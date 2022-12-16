@@ -2,7 +2,7 @@ use axum::{response::Result, debug_handler};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use axum::{Router, routing::post, body::Bytes, extract::State};
 use tokio::sync::Mutex;
-use crate::state::{CurrentCallTree, Connections};
+use crate::state::{CurrentCallTree, AppState};
 use log::info;
 use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
@@ -12,7 +12,7 @@ use tail2::{
 };
 
 #[debug_handler]
-pub(crate) async fn stack(State(st): State<Arc<Connections>>, var: Bytes) -> Result<()> {
+pub(crate) async fn stack(State(st): State<Arc<AppState>>, var: Bytes) -> Result<()> {
     // info!("{:#?}", var);
     let st = &st.calltree;
     let var: StackBatchDto = bincode::deserialize(&var).unwrap();

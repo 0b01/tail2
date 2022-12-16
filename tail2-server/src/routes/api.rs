@@ -17,9 +17,9 @@ use tokio_stream::StreamExt as _ ;
 use futures::stream::{self, Stream};
 
 
-use crate::{state::{CurrentCallTree, Connections}, Notifiable};
+use crate::{state::{CurrentCallTree, AppState}, Notifiable};
 
-pub(crate) async fn current<'a>(State(ct): State<Arc<Connections>>) -> String {
+pub(crate) async fn current<'a>(State(ct): State<Arc<AppState>>) -> String {
     let ct = ct.calltree.inner.ct.lock().await;
     let node = Node::new(ct.root, &ct.arena);
 
@@ -28,7 +28,7 @@ pub(crate) async fn current<'a>(State(ct): State<Arc<Connections>>) -> String {
 
 use async_stream::{stream, try_stream, AsyncStream};
 
-pub(crate) async fn events(State(ct): State<Arc<Connections>>) -> impl IntoResponse {
+pub(crate) async fn events(State(ct): State<Arc<AppState>>) -> impl IntoResponse {
     let changed = ct.calltree.changed.clone();
     changed.notify_one();
     let stream = try_stream! {

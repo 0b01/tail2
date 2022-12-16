@@ -17,10 +17,6 @@ impl<T> Notifiable<T> {
             inner,
         }
     }
-
-    pub fn notify(&self) {
-        self.changed.notify_one();
-    }
 }
 
 impl<T: Serialize> Serialize for Notifiable<T> {

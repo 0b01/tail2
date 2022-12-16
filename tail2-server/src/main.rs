@@ -15,7 +15,7 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,
 };
-use state::{Connections, CurrentCallTree};
+use state::{AppState, CurrentCallTree};
 use tail2::symbolication::elf::ElfCache;
 
 pub mod routes;
@@ -61,6 +61,7 @@ async fn main() {
         .route("/current", get(routes::api::current))
         .route("/stack", post(routes::ingest::stack))
         .route("/events", get(routes::api::events))
+        .route("/connect", get(routes::agents::connect))
 
         .route("/*path", get(static_path))
         .route("/app", get(|| static_path(Path("/app.html".to_owned()))))
@@ -69,7 +70,7 @@ async fn main() {
         .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()))))
 
         .layer(middleware)
-        .with_state(Arc::new(Connections::new()));
+        .with_state(Arc::new(AppState::new()));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     tracing::debug!("listening on {}", addr);
