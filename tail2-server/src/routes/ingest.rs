@@ -1,11 +1,9 @@
+use axum::{response::Result, debug_handler};
 use std::{path::PathBuf, sync::Arc, time::Duration};
+use axum::{Router, routing::post, body::Bytes, extract::State};
 use tokio::sync::Mutex;
-use rocket::serde::json::Json;
-
-use crate::{error::Result, state::{CurrentCallTree, Connections}, Notifiable};
+use crate::state::{CurrentCallTree, Connections};
 use log::info;
-use rocket::{response::stream::{Event, EventStream}, get};
-use rocket::{http::Status, post, tokio, Route, State};
 use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
     dto::{FrameDto, StackBatchDto, StackDto, build_stack},
@@ -13,9 +11,11 @@ use tail2::{
     Mergeable, client::agent_config::AgentConfig, tail2::NewConnection,
 };
 
-#[post("/stack", data = "<var>")]
-async fn stack(var: StackBatchDto, st: &State<Notifiable<CurrentCallTree>>) -> Result<Status> {
+#[debug_handler]
+pub(crate) async fn stack(State(st): State<Arc<Connections>>, var: Bytes) -> Result<()> {
     // info!("{:#?}", var);
+    let st = &st.calltree;
+    let var: StackBatchDto = bincode::deserialize(&var).unwrap();
     let changed = Arc::clone(&st.changed);
 
     let ct_ = Arc::clone(&st.inner.ct);
@@ -31,11 +31,5 @@ async fn stack(var: StackBatchDto, st: &State<Notifiable<CurrentCallTree>>) -> R
         changed.notify_one();
     });
 
-    Ok(Status::Ok)
-}
-
-pub fn routes() -> Vec<Route> {
-    rocket::routes![
-        stack,
-    ]
+    Ok(())
 }

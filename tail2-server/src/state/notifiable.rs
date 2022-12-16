@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rocket::tokio::sync::Notify;
+use tokio::sync::Notify;
 use serde::{Serialize, Deserialize};
 
 pub struct Notifiable<T> {

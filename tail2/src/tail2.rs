@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use reqwest_eventsource::{EventSource, Event};
-use rocket::futures::StreamExt;
+use tokio_stream::StreamExt;
 use serde::{Serialize, Deserialize};
 use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
 use tokio::sync::Mutex;

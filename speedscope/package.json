@@ -19,8 +19,8 @@
     "coverage": "npm run jest -- --coverage",
     "typecheck": "tsc --noEmit",
     "test": "./scripts/ci.sh",
-    "build": "parcel build assets/index.html assets/dashboard.html assets/app.html assets/data/**/* --no-autoinstall --dist-dir ../tail2-server/flamegraph",
-    "watch": "parcel watch assets/index.html assets/dashboard.html assets/app.html assets/data/**/* --no-autoinstall --dist-dir ../tail2-server/flamegraph"
+    "build": "parcel build assets/index.html assets/dashboard.html assets/app.html assets/data/**/* --no-autoinstall --dist-dir ../tail2-server/flamegraph --public-url ./",
+    "watch": "parcel watch assets/index.html assets/dashboard.html assets/app.html assets/data/**/* --no-autoinstall --dist-dir ../tail2-server/flamegraph --public-url ./"
   },
   "files": [
     "bin/cli.js",

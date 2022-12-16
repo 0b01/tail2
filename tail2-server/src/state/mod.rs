@@ -1,5 +1,5 @@
-use rocket::tokio::sync::{Mutex, Notify};
 use tail2::client::agent_config::AgentConfig;
+use tokio::sync::{Mutex, Notify};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -13,12 +13,14 @@ pub mod notifiable;
 
 pub struct Connections {
     pub agents: Arc<Mutex<HashMap<String, Notifiable<AgentConfig>>>>,
+    pub calltree: Notifiable<CurrentCallTree>,
 }
 
 impl Connections {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(Mutex::new(HashMap::new())),
+            calltree: Notifiable::<CurrentCallTree>::new(CurrentCallTree::new()),
         }
     }
 }
