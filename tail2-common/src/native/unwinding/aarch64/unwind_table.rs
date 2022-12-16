@@ -1,8 +1,8 @@
+use super::unwind_rule::{translate_into_unwind_rule, UnwindRuleAarch64};
 use anyhow::Result;
 use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection};
-use log::{error, debug};
+use log::{debug, error};
 use object::{Object, ObjectSection};
-use super::unwind_rule::{UnwindRuleAarch64, translate_into_unwind_rule};
 
 /// Row of a FDE.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]

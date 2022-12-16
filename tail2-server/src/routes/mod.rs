@@ -1,8 +1,8 @@
 use rocket::Route;
 
+pub mod api;
 pub mod ingest;
 pub mod pages;
-pub mod api;
 
 pub(crate) fn routes() -> Vec<Route> {
     let mut routes = vec![];

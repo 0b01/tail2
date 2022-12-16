@@ -1,17 +1,23 @@
 use std::rc::Rc;
 
-use rocket::{serde::{json::Json, self}, State, Route, get, response::stream::{EventStream, Event}};
-use tail2::{calltree::inner::{serialize::Node, CallTreeFrame}, dto::FrameDto, symbolication::elf::ElfCache};
+use rocket::{
+    get,
+    response::stream::{Event, EventStream},
+    serde::{self, json::Json},
+    Route, State,
+};
+use tail2::{
+    calltree::inner::{serialize::Node, CallTreeFrame},
+    dto::FrameDto,
+    symbolication::elf::ElfCache,
+};
 
-use crate::state::{CurrentCallTree};
+use crate::state::CurrentCallTree;
 
 #[get("/current")]
 pub async fn current<'a>(ct: &State<CurrentCallTree>) -> String {
     let ct = ct.inner().ct.lock().await;
-    let node = Node::new(
-        ct.root,
-        &ct.arena,
-    );
+    let node = Node::new(ct.root, &ct.arena);
 
     serde::json::to_string(&node).unwrap()
 }
@@ -28,8 +34,5 @@ fn events(ct: &State<CurrentCallTree>) -> EventStream![] {
 }
 
 pub fn routes() -> Vec<Route> {
-    rocket::routes![
-        current,
-        events,
-    ]
+    rocket::routes![current, events,]
 }

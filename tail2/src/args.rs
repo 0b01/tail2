@@ -1,10 +1,13 @@
-use std::{sync::Arc, process::Child};
 use anyhow::Result;
+use std::{process::Child};
 
+use crate::{
+    client::run::{attach_perf_event, attach_uprobe, get_pid_child, run_until_exit},
+    processes::Processes,
+    Tail2,
+};
 use clap::{Parser, Subcommand};
 use log::info;
-use crate::{symbolication::module_cache::ModuleCache, client::run::{attach_uprobe, run_until_exit, get_pid_child, bpf_init, attach_perf_event}, processes::Processes};
-use tokio::sync::{Mutex};
 
 #[derive(Debug, Parser)]
 pub struct Opt {
@@ -15,16 +18,11 @@ pub struct Opt {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Print Unwind table
-    Table {
-        pid: i32,
-    },
+    Table { pid: i32 },
     /// Print symbols
-    Symbols {
-        paths: Vec<String>,
-    },
+    Symbols { paths: Vec<String> },
     /// Print system information
-    Processes {
-    },
+    Processes {},
     /// Sample callstacks based on elapsed CPU time
     Sample {
         /// Pid to listen to, if not supplied, listen for events system wide
@@ -35,7 +33,7 @@ pub enum Commands {
         #[clap(short, long)]
         command: Option<String>,
         /// sample period
-        #[clap(default_value="400000", long)]
+        #[clap(default_value = "400000", long)]
         period: u64,
     },
     /// Attach to a userspace function, e.g. "libc:malloc"
@@ -53,41 +51,45 @@ pub enum Commands {
 }
 
 impl Commands {
-    pub async fn run(self, module_cache: Arc<Mutex<ModuleCache>>) -> Result<()> {
+    pub async fn run(self, mut state: Tail2) -> Result<()> {
         match self {
-            Commands::Table {pid} => {
-                let _ret = Processes::detect_pid(pid, &mut *module_cache.lock().await);
+            Commands::Table { pid } => {
+                let _ret = Processes::detect_pid(pid, &mut *state.module_cache.lock().await);
                 // dbg!(ret);
             }
-            Commands::Processes { } => {
-                let mut p = Processes::new(module_cache);
+            Commands::Processes {} => {
+                let mut p = Processes::new(state.module_cache);
                 p.refresh().await.unwrap();
                 info!("{:#?}", p);
                 return Ok(());
-            },
+            }
             Commands::Symbols { paths } => {
                 for _p in paths {
                     // dump_elf(p)?;
                 }
                 return Ok(());
-            },
-            Commands::Sample { pid , period, command} => {
-                let mut bpf = bpf_init().await?;
-
+            }
+            Commands::Sample {
+                pid,
+                period,
+                command,
+            } => {
                 let mut child: Option<Child> = None;
                 let pid = get_pid_child(pid, command, &mut child);
 
-                attach_perf_event(&mut bpf, pid, period).await?;
-                run_until_exit(&mut bpf, module_cache, child, None).await?;
-            },
-            Commands::Uprobe { pid, uprobe, command } => {
-                let mut bpf = bpf_init().await?;
-
+                attach_perf_event(&mut state, pid, period).await?;
+                run_until_exit(&mut state, child, None).await?;
+            }
+            Commands::Uprobe {
+                pid,
+                uprobe,
+                command,
+            } => {
                 let mut child: Option<Child> = None;
                 let pid = get_pid_child(pid, command, &mut child);
 
-                attach_uprobe(&mut bpf, &uprobe, pid).await?;
-                run_until_exit(&mut bpf, module_cache, child, None).await?;
+                attach_uprobe(&mut state, &uprobe, pid).await?;
+                run_until_exit(&mut state, child, None).await?;
             }
         }
 

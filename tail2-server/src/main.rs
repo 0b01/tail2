@@ -1,13 +1,13 @@
 #![allow(unused)]
-use rocket::fs::{FileServer, relative};
+use rocket::fs::{relative, FileServer};
 use rocket_dyn_templates::Template;
 use tail2::symbolication::elf::ElfCache;
 
 extern crate rocket;
 
-pub mod state;
-pub mod routes;
 pub mod error;
+pub mod routes;
+pub mod state;
 
 fn setup_logger() -> Result<(), fern::InitError> {
     fern::Dispatch::new()

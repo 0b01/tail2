@@ -1,8 +1,13 @@
 use indextree::{Arena, NodeId};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+
+use super::traits::Mergeable;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
-pub struct CallTreeFrame<T> where T: Clone + Default + Eq + Serialize {
+pub struct CallTreeFrame<T>
+where
+    T: Clone + Default + Eq + Serialize,
+{
     pub item: T,
     pub total_samples: usize,
     pub self_samples: usize,
@@ -34,17 +39,23 @@ impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
         for (i, f) in stack.iter().enumerate() {
             let is_last = i == (stack.len() - 1);
             let self_samples = if is_last { 1 } else { 0 };
-            let new_node = tree.arena.new_node(CallTreeFrame{ item: f.clone(), total_samples: 1, self_samples });
+            let new_node = tree.arena.new_node(CallTreeFrame {
+                item: f.clone(),
+                total_samples: 1,
+                self_samples,
+            });
             prev.append(new_node, &mut tree.arena);
             prev = new_node;
         }
 
         tree
     }
+}
 
+impl<T: Clone + Default + Eq + Serialize> Mergeable for CallTreeInner<T> {
     /// merge two trees
     /// TODO: better perf
-    pub fn merge(&mut self, other: &CallTreeInner<T>) {
+    fn merge(&mut self, other: &CallTreeInner<T>) {
         let mut stack = Vec::new();
         stack.push((self.root, other.root));
         while !stack.is_empty() {
@@ -77,7 +88,7 @@ impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
 
 pub mod serialize {
     use super::*;
-    use serde::{Serialize, Serializer, ser::SerializeSeq};
+    use serde::{ser::SerializeSeq, Serialize, Serializer};
 
     /// Convenience wrapper struct for serializing a node and its descendants.
     #[derive(Serialize)]

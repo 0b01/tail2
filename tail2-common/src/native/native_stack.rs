@@ -1,6 +1,6 @@
 use core::mem::MaybeUninit;
 
-use crate::{MAX_USER_STACK, pidtgid::PidTgid};
+use crate::{pidtgid::PidTgid, MAX_USER_STACK};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -18,9 +18,7 @@ impl NativeStack {
     }
 
     pub fn uninit() -> Self {
-        unsafe {
-            core::mem::zeroed()
-        }
+        unsafe { core::mem::zeroed() }
     }
 }
 

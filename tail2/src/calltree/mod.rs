@@ -1,8 +1,9 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use self::inner::CallTreeInner;
 
 pub mod inner;
+pub mod traits;
 
 pub type CallTree = CallTreeInner<Option<ResolvedFrame>>;
 

@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
+use crate::{
+    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto},
+    symbolication::module_cache::ModuleCache,
+};
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
-use crate::{symbolication::module_cache::ModuleCache, dto::{stack_dto::StackBatchDto, resolved_bpf_sample::ResolvedBpfSample}};
 use tokio::sync::Mutex;
 
 pub struct ApiStackEndpointClient {
@@ -25,10 +28,7 @@ impl ApiStackEndpointClient {
     }
 
     async fn post(&self, url: &str, body: Vec<u8>) -> Result<StatusCode> {
-        let res = self.client.post(url)
-            .body(body)
-            .send()
-            .await?;
+        let res = self.client.post(url).body(body).send().await?;
 
         Ok(res.status())
     }

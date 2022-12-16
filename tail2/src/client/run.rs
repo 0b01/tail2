@@ -1,53 +1,55 @@
 use anyhow::Result;
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
-use aya::programs::{PerfEvent, PerfEventScope, PerfTypeId, SamplePolicy, UProbe, perf_event};
+use aya::programs::{perf_event, PerfEvent, PerfEventScope, PerfTypeId, SamplePolicy, UProbe};
 use aya::util::online_cpus;
 use bytes::BytesMut;
-use log::{error, info, debug};
+use log::{error, info};
 use nix::sys::ptrace;
-
 
 use nix::unistd::{getuid, Pid};
 
 use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
+use crate::Tail2;
+use std::os::unix::prelude::MetadataExt;
+use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::process::{exit, Child, Command};
+use std::time::SystemTime;
+use std::{mem::size_of, sync::Arc};
 use tail2_common::bpf_sample::BpfSample;
-use tail2_common::{ConfigMapKey};
+use tail2_common::ConfigMapKey;
 use tokio::signal;
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
-use std::fs;
-use std::os::unix::process::CommandExt;
-use std::path::{PathBuf};
-use std::process::{exit, Command, Child};
-use std::{mem::size_of, sync::Arc};
-use std::os::unix::prelude::MetadataExt;
-use std::time::{SystemTime};
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 
 use std::time::Duration;
 
-use aya::maps::{MapData};
+use crate::symbolication::module_cache::ModuleCache;
+use anyhow::Context;
+use aya::maps::MapData;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
-use crate::symbolication::module_cache::ModuleCache;
 use tail2_common::procinfo::ProcInfo;
+use tail2_common::RunStatsKey;
 use tokio::sync::watch::Receiver;
 use tokio::sync::Mutex;
-use tail2_common::RunStatsKey;
-use anyhow::{Context};
 
 use crate::processes::Processes;
 
-use crate::client::api_client::ApiStackEndpointClient;
-
-pub(crate) fn open_and_subcribe(bpf: &mut Bpf, tx: mpsc::Sender<BpfSample>, stop_rx: watch::Receiver<()>, ts: &mut Vec<JoinHandle<()>>) {
+pub(crate) fn open_and_subcribe(
+    state: &mut Tail2,
+    tx: mpsc::Sender<BpfSample>,
+    stop_rx: watch::Receiver<()>,
+    ts: &mut Vec<JoinHandle<()>>,
+) {
     // open bpf maps
-    let mut stacks = AsyncPerfEventArray::try_from(bpf.take_map("STACKS").unwrap()).unwrap();
+    let mut stacks = AsyncPerfEventArray::try_from(state.bpf.take_map("STACKS").unwrap()).unwrap();
 
     // listen to bpf perf buf, send stacks to tx
     for cpu_id in online_cpus().unwrap() {
         let mut buf = stacks.open(cpu_id, Some(1024)).unwrap();
-        
+
         let tx = tx.clone();
         let mut stop_rx2 = stop_rx.clone();
         let t = tokio::spawn(async move {
@@ -77,35 +79,34 @@ pub(crate) fn open_and_subcribe(bpf: &mut Bpf, tx: mpsc::Sender<BpfSample>, stop
         });
         ts.push(t);
     }
-
 }
 
 pub(crate) fn run_bpf(
-    bpf: &mut Bpf,
+    state: &mut Tail2,
     stop_rx: watch::Receiver<()>,
-    module_cache: Arc<Mutex<ModuleCache>>,
-    output_tx: Option<mpsc::Sender<BpfSample>>
+    output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<Vec<JoinHandle<()>>> {
     // send device info
-    let mut config: HashMap<_, u32, u64> = HashMap::try_from(bpf.map_mut("CONFIG").unwrap()).unwrap();
+    let mut config: HashMap<_, u32, u64> =
+        HashMap::try_from(state.bpf.map_mut("CONFIG").unwrap()).unwrap();
     let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-    config.insert(ConfigMapKey::DEV as u32, stats.dev(), 0).unwrap();
-    config.insert(ConfigMapKey::INO as u32, stats.ino(), 0).unwrap();
+    config
+        .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
+        .unwrap();
+    config
+        .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
+        .unwrap();
 
     let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
 
-    let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
-        "http://0.0.0.0:8000/stack",
-        Arc::clone(&module_cache),
-        400,
-    )));
-
-    let kernel_stacks = StackTraceMap::try_from(bpf.take_map("KERNEL_STACKS").unwrap()).unwrap();
+    let kernel_stacks =
+        StackTraceMap::try_from(state.bpf.take_map("KERNEL_STACKS").unwrap()).unwrap();
     let ksyms = aya::util::kernel_symbols().unwrap();
 
     // receiver thread
     let mut ts = vec![];
     let mut total_time = Duration::new(0, 0);
+    let cli = Arc::clone(&state.cli);
     let t = tokio::spawn(async move {
         let mut c = 0;
         while let Some(st) = rx.recv().await {
@@ -137,7 +138,7 @@ pub(crate) fn run_bpf(
     });
     ts.push(t);
 
-    open_and_subcribe(bpf, tx, stop_rx, &mut ts);
+    open_and_subcribe(state, tx, stop_rx, &mut ts);
 
     Ok(ts)
 }
@@ -170,7 +171,6 @@ fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Chi
         (None, Some(cmd)) => {
             info!("Launching child process: `{:?}`", cmd);
             let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
-            dbg!(&cmd_split);
             let path = PathBuf::from(cmd_split.next().unwrap().to_owned());
             let mut cmd = Command::new(path);
             let cmd = cmd.args(cmd_split);
@@ -190,14 +190,17 @@ fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Chi
                 }
                 Err(e) => panic!("{}", e.to_string()),
             }
-        },
+        }
         (Some(pid), None) => Ok(Some(pid as i32)),
-        (Some(_), Some(_)) => panic!("supply one of --pid, --command")
+        (Some(_), Some(_)) => panic!("supply one of --pid, --command"),
     }
 }
 
-
-pub fn get_pid_child(pid: Option<u32>, command: Option<String>, child: &mut Option<Child>) -> Option<u32> {
+pub fn get_pid_child(
+    pid: Option<u32>,
+    command: Option<String>,
+    child: &mut Option<Child>,
+) -> Option<u32> {
     match get_pid(pid, command) {
         Err(c) => {
             let ret = c.id();
@@ -205,7 +208,7 @@ pub fn get_pid_child(pid: Option<u32>, command: Option<String>, child: &mut Opti
             Some(ret)
         }
         Ok(Some(pid)) => Some(pid as u32),
-        Ok(None) => None
+        Ok(None) => None,
     }
 }
 
@@ -225,10 +228,19 @@ pub async fn bpf_init() -> Result<Bpf> {
     Ok(bpf)
 }
 
-pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: u64) -> Result<()> {
-    let program: &mut PerfEvent = bpf.program_mut("capture_stack").unwrap().try_into().unwrap();
+pub(crate) async fn attach_perf_event(
+    state: &mut Tail2,
+    pid: Option<u32>,
+    period: u64,
+) -> Result<()> {
+    let program: &mut PerfEvent = state
+        .bpf
+        .program_mut("capture_stack")
+        .unwrap()
+        .try_into()
+        .unwrap();
     match program.load() {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             error!("{}", e.to_string());
             panic!();
@@ -251,11 +263,15 @@ pub async fn attach_perf_event(bpf: &mut Bpf, pid: Option<u32>, period: u64) -> 
     Ok(())
 }
 
-
-pub async fn attach_uprobe(bpf: &mut Bpf, uprobe: &str, pid: Option<u32>) -> Result<()> {
-    let program: &mut UProbe = bpf.program_mut("malloc_enter").unwrap().try_into().unwrap();
+pub async fn attach_uprobe(state: &mut Tail2, uprobe: &str, pid: Option<u32>) -> Result<()> {
+    let program: &mut UProbe = state
+        .bpf
+        .program_mut("malloc_enter")
+        .unwrap()
+        .try_into()
+        .unwrap();
     match program.load() {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             error!("{}", e.to_string());
             panic!();
@@ -265,21 +281,29 @@ pub async fn attach_uprobe(bpf: &mut Bpf, uprobe: &str, pid: Option<u32>) -> Res
     let mut uprobe = uprobe.split(':');
     let src = uprobe.next().unwrap();
     let func = uprobe.next().unwrap();
-    let _uprobe_link = program.attach(Some(func), 0, src, pid.map(|i| i as i32)).unwrap();
+    let _uprobe_link = program
+        .attach(Some(func), 0, src, pid.map(|i| i as i32))
+        .unwrap();
     info!("loaded");
     Ok(())
 }
 
-pub async fn run_until_exit(bpf: &mut aya::Bpf, module_cache: Arc<Mutex<ModuleCache>>, child: Option<Child>, output_tx: Option<mpsc::Sender<BpfSample>>) -> Result<()> {
+pub async fn run_until_exit(
+    state: &mut Tail2,
+    child: Option<Child>,
+    output_tx: Option<mpsc::Sender<BpfSample>>,
+) -> Result<()> {
     // for awaiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(());
     if child.is_some() {
-        proc_refresh_once(bpf, Arc::clone(&module_cache)).await.unwrap();
+        proc_refresh_once(state)
+            .await
+            .unwrap();
     } else {
-        spawn_proc_refresh(bpf, stop_rx.clone(), Arc::clone(&module_cache)).await;
+        spawn_proc_refresh(state, stop_rx.clone()).await;
     }
 
-    let tasks = run_bpf(bpf, stop_rx, module_cache, output_tx)?;
+    let tasks = run_bpf(state, stop_rx, output_tx)?;
 
     if let Some(mut c) = child {
         info!("resuming child");
@@ -294,13 +318,18 @@ pub async fn run_until_exit(bpf: &mut aya::Bpf, module_cache: Arc<Mutex<ModuleCa
 
     info!("exiting");
     stop_tx.send(())?;
-    for t in tasks { let _ = tokio::join!(t); }
-    print_stats(bpf).await?;
+    for t in tasks {
+        let _ = tokio::join!(t);
+    }
+    print_stats(state).await?;
 
     Ok(())
 }
 
-async fn proc_refresh_inner(pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>, module_cache: Arc<Mutex<ModuleCache>>) {
+async fn proc_refresh_inner(
+    pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>,
+    module_cache: Arc<Mutex<ModuleCache>>,
+) {
     let module_cache = Arc::clone(&module_cache);
     let mut processes = Processes::new(module_cache);
     if let Ok(()) = processes.refresh().await {
@@ -313,24 +342,37 @@ async fn proc_refresh_inner(pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>,
     }
 }
 
-pub async fn proc_refresh_once(bpf: &mut Bpf, module_cache: Arc<Mutex<ModuleCache>>) -> Result<()> {
-    let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+pub(crate) async fn proc_refresh_once(state: &mut Tail2) -> Result<()> {
+    let pid_info: HashMap<_, u32, ProcInfo> =
+        HashMap::try_from(state.bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
-    let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
+    let mut pid_info = unsafe {
+        std::mem::transmute::<
+            HashMap<&mut MapData, u32, ProcInfo>,
+            HashMap<&'static mut MapData, u32, ProcInfo>,
+        >(pid_info)
+    };
 
-    proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
+    proc_refresh_inner(&mut pid_info, state.module_cache.clone()).await;
     Ok(())
 }
 
 // TODO: don't refresh, listen to mmap and execve calls
-pub(crate) async fn spawn_proc_refresh(bpf: &mut Bpf, mut stop_rx: Receiver<()>, module_cache: Arc<Mutex<ModuleCache>>) {
-    let pid_info: HashMap<_, u32, ProcInfo> = HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+pub(crate) async fn spawn_proc_refresh(state: &mut Tail2, mut stop_rx: Receiver<()>) {
+    let pid_info: HashMap<_, u32, ProcInfo> =
+        HashMap::try_from(state.bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
-    let mut pid_info = unsafe { std::mem::transmute::<HashMap<&mut MapData, u32, ProcInfo>, HashMap<&'static mut MapData, u32, ProcInfo>>(pid_info) };
+    let mut pid_info = unsafe {
+        std::mem::transmute::<
+            HashMap<&mut MapData, u32, ProcInfo>,
+            HashMap<&'static mut MapData, u32, ProcInfo>,
+        >(pid_info)
+    };
 
-    proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
+    proc_refresh_inner(&mut pid_info, Arc::clone(&state.module_cache)).await;
 
     // refresh pid info table
+    let module_cache = Arc::clone(&state.module_cache);
     tokio::spawn(async move {
         loop {
             proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
@@ -357,8 +399,12 @@ pub(crate) fn load_bpf() -> Result<Bpf> {
     Ok(bpf)
 }
 
-pub(crate) async fn print_stats(bpf: &mut Bpf) -> Result<()> {
-    let info: HashMap<_, u32, u64> = HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
-    info!("Sent: {} stacks", info.get(&(RunStatsKey::SentStackCount as u32), 0)?);
+pub(crate) async fn print_stats(state: &mut Tail2) -> Result<()> {
+    let info: HashMap<_, u32, u64> =
+        HashMap::try_from(state.bpf.map("RUN_STATS").context("no such map")?)?;
+    info!(
+        "Sent: {} stacks",
+        info.get(&(RunStatsKey::SentStackCount as u32), 0)?
+    );
     Ok(())
 }

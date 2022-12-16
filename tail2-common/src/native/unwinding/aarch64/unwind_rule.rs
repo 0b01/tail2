@@ -1,6 +1,6 @@
 use gimli::{CfaRule, RegisterRule};
 
-#[cfg(feature="user")]
+#[cfg(feature = "user")]
 use crate::native::unwinding::error::ConversionError;
 
 use super::unwindregs::UnwindRegsAarch64;
@@ -85,8 +85,7 @@ impl UnwindRuleAarch64 {
                 } else {
                     let fp = regs.fp();
                     let new_sp = fp.checked_add(16)?;
-                    let new_lr =
-                        read_stack(fp + 8).ok()?;
+                    let new_lr = read_stack(fp + 8).ok()?;
                     let new_fp = read_stack(fp).ok()?;
                     if new_sp <= sp {
                         return None;
@@ -117,10 +116,8 @@ impl UnwindRuleAarch64 {
                 let sp_offset = u64::from(sp_offset_by_16) * 16;
                 let new_sp = sp.checked_add(sp_offset)?;
                 let lr_storage_offset = i64::from(lr_storage_offset_from_sp_by_8) * 8;
-                let lr_location =
-                    sp.checked_add_signed(lr_storage_offset)?;
-                let new_lr =
-                    read_stack(lr_location).ok()?;
+                let lr_location = sp.checked_add_signed(lr_storage_offset)?;
+                let new_lr = read_stack(lr_location).ok()?;
                 (new_lr, new_sp, fp)
             }
             UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
@@ -131,15 +128,11 @@ impl UnwindRuleAarch64 {
                 let sp_offset = u64::from(sp_offset_by_16) * 16;
                 let new_sp = sp.checked_add(sp_offset)?;
                 let lr_storage_offset = i64::from(lr_storage_offset_from_sp_by_8) * 8;
-                let lr_location =
-                    sp.checked_add_signed(lr_storage_offset)?;
-                let new_lr =
-                    read_stack(lr_location).ok()?;
+                let lr_location = sp.checked_add_signed(lr_storage_offset)?;
+                let new_lr = read_stack(lr_location).ok()?;
                 let fp_storage_offset = i64::from(fp_storage_offset_from_sp_by_8) * 8;
-                let fp_location =
-                    sp.checked_add_signed(fp_storage_offset)?;
-                let new_fp =
-                    read_stack(fp_location).ok()?;
+                let fp_location = sp.checked_add_signed(fp_storage_offset)?;
+                let new_fp = read_stack(fp_location).ok()?;
                 (new_lr, new_sp, new_fp)
             }
             UnwindRuleAarch64::UseFramePointer => {
@@ -199,19 +192,13 @@ impl UnwindRuleAarch64 {
                 lr_storage_offset_from_fp_by_8,
             } => {
                 let sp_offset_from_fp = u64::from(sp_offset_from_fp_by_8) * 8;
-                let new_sp = fp
-                    .checked_add(sp_offset_from_fp)
-                    ?;
+                let new_sp = fp.checked_add(sp_offset_from_fp)?;
                 let lr_storage_offset = i64::from(lr_storage_offset_from_fp_by_8) * 8;
-                let lr_location =
-                    fp.checked_add_signed(lr_storage_offset)?;
-                let new_lr =
-                    read_stack(lr_location).ok()?;
+                let lr_location = fp.checked_add_signed(lr_storage_offset)?;
+                let new_lr = read_stack(lr_location).ok()?;
                 let fp_storage_offset = i64::from(fp_storage_offset_from_fp_by_8) * 8;
-                let fp_location =
-                    fp.checked_add_signed(fp_storage_offset)?;
-                let new_fp =
-                    read_stack(fp_location).ok()?;
+                let fp_location = fp.checked_add_signed(fp_storage_offset)?;
+                let new_fp = read_stack(fp_location).ok()?;
 
                 if new_fp == 0 {
                     return Some(None);
@@ -243,15 +230,26 @@ impl UnwindRuleAarch64 {
             UnwindRuleAarch64::NoOpIfFirstFrameOtherwiseFp => 1,
             UnwindRuleAarch64::OffsetSp { sp_offset_by_16 } => 2,
             UnwindRuleAarch64::OffsetSpIfFirstFrameOtherwiseStackEndsHere { sp_offset_by_16 } => 3,
-            UnwindRuleAarch64::OffsetSpAndRestoreLr { sp_offset_by_16, lr_storage_offset_from_sp_by_8 } => 4,
-            UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr { sp_offset_by_16, fp_storage_offset_from_sp_by_8, lr_storage_offset_from_sp_by_8 } => 5,
+            UnwindRuleAarch64::OffsetSpAndRestoreLr {
+                sp_offset_by_16,
+                lr_storage_offset_from_sp_by_8,
+            } => 4,
+            UnwindRuleAarch64::OffsetSpAndRestoreFpAndLr {
+                sp_offset_by_16,
+                fp_storage_offset_from_sp_by_8,
+                lr_storage_offset_from_sp_by_8,
+            } => 5,
             UnwindRuleAarch64::UseFramePointer => 6,
-            UnwindRuleAarch64::UseFramepointerWithOffsets { sp_offset_from_fp_by_8, fp_storage_offset_from_fp_by_8, lr_storage_offset_from_fp_by_8 } => 7,
+            UnwindRuleAarch64::UseFramepointerWithOffsets {
+                sp_offset_from_fp_by_8,
+                fp_storage_offset_from_fp_by_8,
+                lr_storage_offset_from_fp_by_8,
+            } => 7,
         }
     }
 }
 
-#[cfg(feature="user")]
+#[cfg(feature = "user")]
 pub(crate) fn translate_into_unwind_rule<R: gimli::Reader>(
     cfa_rule: &CfaRule<R>,
     fp_rule: &RegisterRule<R>,
@@ -339,7 +337,7 @@ pub(crate) fn translate_into_unwind_rule<R: gimli::Reader>(
     }
 }
 
-#[cfg(feature="user")]
+#[cfg(feature = "user")]
 pub(crate) fn register_rule_to_cfa_offset<R: gimli::Reader>(
     rule: &RegisterRule<R>,
 ) -> Result<Option<i64>, ConversionError> {

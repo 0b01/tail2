@@ -1,4 +1,4 @@
 pub mod aarch64;
-pub mod x86_64;
-#[cfg(feature="user")]
+#[cfg(feature = "user")]
 pub mod error;
+pub mod x86_64;

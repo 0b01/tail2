@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use procfs::process::MMapPath;
+use std::path::PathBuf;
 
 pub trait MMapPathExt {
     fn unwrap(&self) -> &PathBuf;
@@ -14,8 +14,7 @@ impl MMapPathExt for MMapPath {
     fn path(&self) -> Option<&PathBuf> {
         if let MMapPath::Path(p) = self {
             Some(p)
-        }
-        else {
+        } else {
             None
         }
     }

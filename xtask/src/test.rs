@@ -1,7 +1,7 @@
 use std::process::Command;
 
-use clap::Parser;
 use anyhow::Result;
+use clap::Parser;
 
 #[derive(Debug, Parser)]
 pub struct Options {
@@ -11,10 +11,7 @@ pub struct Options {
 }
 
 pub fn test(opts: Options) -> Result<()> {
-    let mut args = vec![
-        "+nightly",
-        "test",
-    ];
+    let mut args = vec!["+nightly", "test"];
     if opts.release {
         args.push("--release")
     }

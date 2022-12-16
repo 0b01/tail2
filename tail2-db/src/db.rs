@@ -1,6 +1,7 @@
 #![warn(missing_docs)]
 use std::time::Duration;
 
+use anyhow::Context;
 use duckdb::params;
 use duckdb::Config;
 use duckdb::Connection;
@@ -9,16 +10,22 @@ use duckdb::Result;
 use tail2::calltree::inner::CallTreeFrame;
 use tail2::calltree::inner::CallTreeInner;
 use tail2::calltree::CallTree;
+use tail2::Mergeable;
 
 use crate::tile;
+use crate::window::TimeWindow;
 
+/// A row in the database
 pub struct DbRow {
+    /// timestamp
     pub ts: i64,
+    /// call tree
     pub ct: CallTree,
+    /// count
     pub n: i32,
 }
 
-impl Eq for DbRow { }
+impl Eq for DbRow {}
 
 impl PartialEq for DbRow {
     fn eq(&self, other: &Self) -> bool {
@@ -38,26 +45,34 @@ impl PartialOrd for DbRow {
     }
 }
 
+/// response from db
 #[derive(Default)]
 pub struct DbResponse {
+    /// start
     pub t0: i64,
+    /// end
     pub t1: i64,
+    /// call tree
     pub ct: CallTree,
+    /// count
     pub n: i32,
 }
 
-impl DbResponse {
-    pub fn merge(mut self, other: &Self) -> Self {
+impl tail2::Mergeable for DbResponse {
+    /// Merge two db response
+    fn merge(&mut self, other: &Self) {
         self.t0 = self.t0.min(other.t0);
         self.t1 = self.t0.max(other.t1);
         self.ct.merge(&other.ct);
         self.n += other.n;
-        self
     }
 }
 
+/// Tail2 database file
 pub struct Tail2DB {
+    /// path to the db file
     pub path: String,
+    /// db connection
     pub conn: Connection,
     last_ts: i64,
     /// order of magnitude augmented tree node for fast call tree merge
@@ -65,6 +80,7 @@ pub struct Tail2DB {
 }
 
 impl Tail2DB {
+    /// Create a file based new database with name
     pub fn new(db_name: &str) -> Self {
         let path = format!("/home/g/tail2/db/{db_name}.t2db");
         let config = Config::default()
@@ -114,9 +130,9 @@ impl Tail2DB {
         Ok(())
     }
 
-    pub fn count_by_window(&mut self, range: (i64, i64), window: TimeWindow) {
-        todo!()
-    }
+    // pub fn count_by_window(&mut self, range: (i64, i64), window: TimeWindow) {
+    //     todo!()
+    // }
 
     /// Refresh the samples_XXXX augmentation tables
     pub fn refresh_cache(&mut self) -> Result<()> {
@@ -137,7 +153,7 @@ impl Tail2DB {
 
     // TODO: batch tiles into multiple rows per timescale
     /// Get the [`DbResponse`] object associated with the given range
-    pub fn range_query(&mut self, range: (i64, i64)) -> Result<DbResponse> {
+    pub fn range_query(&mut self, range: (i64, i64)) -> Result<Option<DbResponse>> {
         let mut tiles = tile::tile(range, self.scales.as_slice());
 
         let mut trees = vec![];
@@ -150,7 +166,10 @@ impl Tail2DB {
             }
         }
 
-        let merged = trees.iter().fold(DbResponse::default(), DbResponse::merge);
+        let merged = trees.into_iter().reduce(|mut a, b| {
+            a.merge(&b);
+            a
+        });
 
         Ok(merged)
     }
@@ -177,15 +196,22 @@ impl Tail2DB {
                 Duration::from_millis(t0 as u64),
                 Duration::from_millis(t1 as u64),
             ],
-            |row| Ok(DbRow {
-                ts: row.get::<_, i64>(0)? / 1000,
-                ct: bincode::deserialize(&row.get::<_, Vec<_>>(1)?).unwrap(),
-                n: row.get(2)?
-            }),
+            |row| {
+                Ok(DbRow {
+                    ts: row.get::<_, i64>(0)? / 1000,
+                    ct: bincode::deserialize(&row.get::<_, Vec<_>>(1)?).unwrap(),
+                    n: row.get(2)?,
+                })
+            },
         )?;
         for row in rows {
             let row = row?;
-            ret.push(DbResponse { t0, t1, ct: row.ct, n: row.n });
+            ret.push(DbResponse {
+                t0,
+                t1,
+                ct: row.ct,
+                n: row.n,
+            });
         }
 
         Ok(ret)
@@ -204,7 +230,12 @@ impl Tail2DB {
 
         if let Some((ct_bytes, n)) = ret {
             let ct = bincode::deserialize(&ct_bytes).unwrap();
-            return Ok(DbResponse { t0: start, t1: start + scale, ct, n });
+            return Ok(DbResponse {
+                t0: start,
+                t1: start + scale,
+                ct,
+                n,
+            });
         }
 
         let mut next_results = vec![];
@@ -217,9 +248,11 @@ impl Tail2DB {
             }
         }
 
-        let merged = next_results
-            .iter()
-            .fold(DbResponse::default(), DbResponse::merge);
+        let merged = next_results.into_iter().reduce(|mut a, b| {
+            a.merge(&b);
+            a
+        }).unwrap_or_default();
+
 
         let mut stmt = self
             .conn
@@ -259,7 +292,7 @@ mod tests {
     fn test_db_0() -> Result<()> {
         let mut db = init_db();
 
-        let ret = db.range_query((0, 10_000)).unwrap();
+        let ret = db.range_query((0, 10_000)).unwrap().unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 10_000);
         assert_eq!(ret.n, 8);
@@ -269,7 +302,7 @@ mod tests {
     #[test]
     fn test_db_1() -> Result<()> {
         let mut db = init_db();
-        let ret = db.range_query((0, 1000)).unwrap();
+        let ret = db.range_query((0, 1000)).unwrap().unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 1_000);
         assert_eq!(ret.n, 3);
@@ -279,7 +312,7 @@ mod tests {
     #[test]
     fn test_db_2() -> Result<()> {
         let mut db = init_db();
-        let ret = db.range_query((0, 300)).unwrap();
+        let ret = db.range_query((0, 300)).unwrap().unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 300);
         assert_eq!(ret.n, 2);
@@ -289,7 +322,7 @@ mod tests {
     #[test]
     fn test_db_3() -> Result<()> {
         let mut db = init_db();
-        let ret = db.range_query((1000, 2000)).unwrap();
+        let ret = db.range_query((1000, 2000)).unwrap().unwrap();
         assert_eq!(ret.t0, 1000);
         assert_eq!(ret.t1, 2000);
         assert_eq!(ret.n, 3);
