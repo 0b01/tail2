@@ -1,4 +1,5 @@
 use rocket::tokio::sync::{Mutex, Notify};
+use tail2::client::agent_config::AgentConfig;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -8,8 +9,6 @@ use tail2::{calltree::inner::CallTreeInner, dto::FrameDto, symbolication::elf::E
 use crate::Notifiable;
 
 pub mod notifiable;
-pub mod agent_config;
-pub use agent_config::AgentConfig;
 
 pub struct Connections {
     pub machines: Arc<Mutex<Vec<Notifiable<AgentConfig>>>>,

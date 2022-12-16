@@ -7,6 +7,7 @@ pub mod processes;
 pub mod symbolication;
 pub mod utils;
 pub mod tail2;
+pub mod probes;
 
 pub use crate::tail2::Tail2;
 pub use calltree::traits::Mergeable;

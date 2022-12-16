@@ -17,4 +17,4 @@ parking_lot = "0.12.1"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_qs = "0.9.2"
 
-tail2 = { path = "../tail2", version = "0.1.0", features = [ "server" ], default-features = false}
+tail2 = { path = "../tail2", version = "0.1.0", features = [ "server" ], default-features = false }

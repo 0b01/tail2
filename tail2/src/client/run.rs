@@ -1,6 +1,5 @@
 use anyhow::Result;
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
-use aya::programs::{perf_event, PerfEvent, PerfEventScope, PerfTypeId, SamplePolicy, UProbe};
 use aya::util::online_cpus;
 use bytes::BytesMut;
 use log::{error, info};
@@ -226,66 +225,6 @@ pub async fn bpf_init() -> Result<Bpf> {
     BpfLogger::init(&mut bpf).unwrap();
 
     Ok(bpf)
-}
-
-pub(crate) async fn attach_perf_event(
-    state: &mut Tail2,
-    pid: Option<u32>,
-    period: u64,
-) -> Result<()> {
-    let program: &mut PerfEvent = state
-        .bpf
-        .program_mut("capture_stack")
-        .unwrap()
-        .try_into()
-        .unwrap();
-    match program.load() {
-        Ok(_) => {}
-        Err(e) => {
-            error!("{}", e.to_string());
-            panic!();
-        }
-    }
-
-    for cpu in online_cpus()? {
-        let scope = match pid {
-            Some(pid) => PerfEventScope::OneProcessOneCpu { cpu, pid },
-            None => PerfEventScope::AllProcessesOneCpu { cpu },
-        };
-        program.attach(
-            PerfTypeId::Software,
-            perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
-            scope,
-            SamplePolicy::Period(period),
-        )?;
-    }
-
-    Ok(())
-}
-
-pub async fn attach_uprobe(state: &mut Tail2, uprobe: &str, pid: Option<u32>) -> Result<()> {
-    let program: &mut UProbe = state
-        .bpf
-        .program_mut("malloc_enter")
-        .unwrap()
-        .try_into()
-        .unwrap();
-    match program.load() {
-        Ok(_) => {}
-        Err(e) => {
-            error!("{}", e.to_string());
-            panic!();
-        }
-    }
-
-    let mut uprobe = uprobe.split(':');
-    let src = uprobe.next().unwrap();
-    let func = uprobe.next().unwrap();
-    let _uprobe_link = program
-        .attach(Some(func), 0, src, pid.map(|i| i as i32))
-        .unwrap();
-    info!("loaded");
-    Ok(())
 }
 
 pub async fn run_until_exit(

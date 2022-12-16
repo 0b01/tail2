@@ -3,8 +3,8 @@ use tokio::sync::mpsc;
 
 use anyhow::Result;
 use tail2::{
-    client::run::{attach_uprobe, get_pid_child, run_until_exit},
-    Tail2,
+    client::{run::{get_pid_child, run_until_exit}},
+    Tail2, probes::{Probe, UprobeProbe, Scope},
 };
 
 #[tokio::main]
@@ -22,7 +22,15 @@ async fn main() -> Result<()> {
             let (tx, mut rx) = mpsc::channel(10);
             let mut state = Tail2::new().await?;
 
-            attach_uprobe(&mut state, &uprobe, pid).await?;
+            let probe = Probe::Uprobe(UprobeProbe {
+                scope: match pid {
+                    Some(pid) => Scope::Pid(pid),
+                    None => Scope::SystemWide,
+                },
+                uprobe,
+            });
+            probe.attach(&mut state).unwrap();
+            // attach_uprobe(&mut state, &uprobe, pid).await?;
             run_until_exit(&mut state, child, Some(tx)).await?;
             println!("{:?}", rx.recv().await.unwrap());
             println!("{:?}", rx.recv().await.unwrap());

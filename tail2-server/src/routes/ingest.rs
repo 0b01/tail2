@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
-use crate::{error::Result, state::{CurrentCallTree, AgentConfig, Connections}, Notifiable};
+use crate::{error::Result, state::{CurrentCallTree, Connections}, Notifiable};
 use log::info;
 use rocket::{response::stream::{Event, EventStream}, get};
 use rocket::{http::Status, post, tokio, Route, State};
@@ -9,7 +9,7 @@ use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
     dto::{FrameDto, StackBatchDto, StackDto, build_stack},
     symbolication::{elf::ElfCache, module::Module},
-    Mergeable,
+    Mergeable, client::agent_config::AgentConfig,
 };
 
 #[get("/connect")]

@@ -2,9 +2,9 @@ use anyhow::Result;
 use std::{process::Child};
 
 use crate::{
-    client::run::{attach_perf_event, attach_uprobe, get_pid_child, run_until_exit},
+    client::{run::{get_pid_child, run_until_exit}},
     processes::Processes,
-    Tail2,
+    Tail2, probes::{Scope, UprobeProbe, Probe, PerfProbe},
 };
 use clap::{Parser, Subcommand};
 use log::info;
@@ -77,7 +77,15 @@ impl Commands {
                 let mut child: Option<Child> = None;
                 let pid = get_pid_child(pid, command, &mut child);
 
-                attach_perf_event(&mut t2, pid, period).await?;
+                let probe = Probe::Perf(PerfProbe {
+                    scope: match pid {
+                        Some(pid) => Scope::Pid(pid),
+                        None => Scope::SystemWide,
+                    },
+                    period,
+                });
+
+                let _links = probe.attach(&mut t2)?;
                 run_until_exit(&mut t2, child, None).await?;
             }
             Commands::Uprobe {
@@ -87,8 +95,15 @@ impl Commands {
             } => {
                 let mut child: Option<Child> = None;
                 let pid = get_pid_child(pid, command, &mut child);
+                let probe = Probe::Uprobe(UprobeProbe {
+                    scope: match pid {
+                        Some(pid) => Scope::Pid(pid),
+                        None => Scope::SystemWide,
+                    },
+                    uprobe,
+                });
 
-                attach_uprobe(&mut t2, &uprobe, pid).await?;
+                let _links = probe.attach(&mut t2)?;
                 run_until_exit(&mut t2, child, None).await?;
             }
         }
