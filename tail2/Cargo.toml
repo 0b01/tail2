@@ -43,6 +43,8 @@ parking_lot = "0.12.1"
 toml = "0.5" 
 nix = { version = "0.26.1", features = ["process"] }
 
+shlex = "1.1.0"
+
 [features]
 server = ["rocket"]
 x86_64 = ["tail2-common/x86_64", "tail2-common/user"]

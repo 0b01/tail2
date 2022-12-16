@@ -168,12 +168,13 @@ fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Chi
     match (pid, command) {
         (None, None) => Ok(None),
         (None, Some(cmd)) => {
-            let path = PathBuf::from(cmd);
-            let current_dir = std::env::current_dir().expect("unable to get current dir");
-            debug!("Current directory: {}", current_dir.display());
-            let path = fs::canonicalize(path).expect("cannot canonicalize path");
-            info!("Launching child process: `{:?}`", path);
+            info!("Launching child process: `{:?}`", cmd);
+            let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
+            dbg!(&cmd_split);
+            let path = PathBuf::from(cmd_split.next().unwrap().to_owned());
             let mut cmd = Command::new(path);
+            let cmd = cmd.args(cmd_split);
+
             unsafe {
                 cmd.pre_exec(|| {
                     ptrace::traceme().or(Err(std::io::Error::new(
