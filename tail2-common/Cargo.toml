@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["gimli"]
-user = ["aya", "anyhow", "memmap2", "object", "thiserror", "gimli", "lru", "log", "parking_lot"]
+default = ["gimli/read-core"]
+user = ["aya", "anyhow", "memmap2", "object", "thiserror", "gimli/read", "lru", "log", "parking_lot"]
 x86_64 = []
 aarch64 = []
 
