@@ -43,9 +43,48 @@ pub fn tile((t0, t1): (i64, i64), available_timescales: &[i64]) -> Vec<(i64, i64
     vals
 }
 
+fn range_sub(rngs: &[(i64, i64)], to_sub: (i64, i64)) -> Vec<(i64, i64)> {
+    let (t0, t1) = to_sub;
+    let mut ret = Vec::new();
+    for (a, b) in rngs {
+        if t0 >= *a && t1 <= *b {
+            if a != &t0 {
+                ret.push((*a, t0));
+            }
+            if t1 != *b {
+                ret.push((t1, *b));
+            }
+        } else {
+            ret.push((*a, *b));
+        }
+    }
+    ret
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_tile_full() {
+        let avail: Vec<_> = (0..6).rev().map(|i| 10_i64.pow(i)).collect();
+
+        for i in 0..1000 {
+            for j in i + 1..1000 {
+                let t0 = i;
+                let t1 = j;
+
+                let plan = tile((t0, t1), &avail);
+                let mut orig = vec![(t0, t1)];
+                for (interval, start) in plan {
+                    let r = (start, start + interval);
+                    orig = range_sub(&orig, r);
+                }
+                assert_eq!(orig, vec![]);
+            }
+        }
+    }
+
     #[test]
     fn test_tile() {
         let avail: Vec<_> = (0..6).rev().map(|i| 10_i64.pow(i)).collect();

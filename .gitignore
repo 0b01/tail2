@@ -25,7 +25,8 @@ Packages
 Packages.gz
 *.gz
 *.deb
-tail2-server/flamegraph/
+tail2-server/flamegraph/*
+!tail2-server/flamegraph/.gitkeep
 a.out
 out
 __pycache__/

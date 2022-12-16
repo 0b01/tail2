@@ -1,8 +1,8 @@
+use indexmap::IndexMap;
+use object::*;
 use std::collections::BTreeMap;
 use std::fs;
 use std::sync::Arc;
-use indexmap::IndexMap;
-use object::*;
 use symbolic::demangle::demangle;
 
 #[derive(Debug)]
@@ -28,16 +28,12 @@ impl ElfCache {
             Some((idx, Arc::clone(v)))
         } else {
             self.add(&[path.to_owned()]);
-            self.map.get_full(path)
-                .map(|(a,_k,v)|
-                (a, v.clone()))
+            self.map.get_full(path).map(|(a, _k, v)| (a, v.clone()))
         }
-
     }
 
     pub fn add(&mut self, paths: &[String]) {
         for path in paths {
-
             if self.map.contains_key(path) {
                 continue;
             }
@@ -56,7 +52,8 @@ impl ElfCache {
                     object::FileKind::Elf64 => {
                         let key = path.to_string();
                         let value = Arc::new(ElfSymbols::build(&data));
-                        self.map.insert(key, value); },
+                        self.map.insert(key, value);
+                    }
                     _ => println!("unsupported"),
                 };
             }
@@ -86,15 +83,10 @@ impl ElfSymbols {
             }
         }
 
-        Self {
-            map,
-        }
+        Self { map }
     }
 
     pub fn find(&self, addr: usize) -> Option<String> {
-        self.map
-            .range(..=addr)
-            .next_back()
-            .map(|(_, s)| s.clone())
+        self.map.range(..=addr).next_back().map(|(_, s)| s.clone())
     }
 }

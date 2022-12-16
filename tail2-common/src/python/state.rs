@@ -45,7 +45,7 @@ pub enum ErrorCode {
     ERROR_BAD_THREAD_STATE = 11,
     /// A tail call to a BPF program failed.
     ERROR_CALL_FAILED = 12,
-    /// 
+    ///
     CANT_ALLOC = 13,
     ///
     NO_PID = 14,
@@ -80,17 +80,17 @@ pub enum pthreads_impl {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct py_globals {
-    pub constant_buffer: usize,  // arbitrary constant offset
+    pub constant_buffer: usize,        // arbitrary constant offset
     pub _PyThreadState_Current: usize, // 3.6-
-    pub _PyRuntime: usize,  // 3.7+
+    pub _PyRuntime: usize,             // 3.7+
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct pid_data {
-  pub pthreads_impl: pthreads_impl,
-  pub globals: py_globals,
-  pub interp: usize, // vaddr of PyInterpreterState
+    pub pthreads_impl: pthreads_impl,
+    pub globals: py_globals,
+    pub interp: usize, // vaddr of PyInterpreterState
 }
 
 /// Contains all the info we need for a stack frame.
@@ -141,9 +141,7 @@ pub struct PythonStack {
 
 impl PythonStack {
     pub fn uninit() -> Self {
-        unsafe {
-            core::mem::zeroed()
-        }
+        unsafe { core::mem::zeroed() }
     }
 }
 

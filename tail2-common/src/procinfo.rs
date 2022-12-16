@@ -1,7 +1,7 @@
 use crate::{
-    runtime_type::RuntimeType,
     native::unwinding::aarch64::unwind_rule::UnwindRuleAarch64,
     native::unwinding::x86_64::unwind_rule::UnwindRuleX86_64, python::state::pid_data,
+    runtime_type::RuntimeType,
 };
 
 /// 2 ^ 20
@@ -51,18 +51,25 @@ pub mod user {
     #[cfg(feature = "aarch64")]
     type UnwindTableRow = crate::native::unwinding::aarch64::unwind_table::UnwindTableRow;
 
-    use core::{str::from_utf8_unchecked, cell::RefCell};
-    use std::{path::{PathBuf, Path}, io::{BufReader, Read}, fs::File};
+    use core::{cell::RefCell, str::from_utf8_unchecked};
+    use std::{
+        fs::File,
+        io::{BufReader, Read},
+        path::{Path, PathBuf},
+    };
 
     use super::*;
+    use anyhow::{Context, Result};
     use std::sync::Arc;
-    use anyhow::{Result, Context};
 
     pub fn detect_runtime_type(paths: &[ProcMapRow]) -> Result<RuntimeType> {
         for path in paths {
-            let base_name = Path::new(&path.mod_name).file_name()
+            let base_name = Path::new(&path.mod_name)
+                .file_name()
                 .context("Unable to get entry file name")?
-                .to_str().context("unable to convert OsStr to str")?.to_owned();
+                .to_str()
+                .context("unable to convert OsStr to str")?
+                .to_owned();
             if base_name.starts_with("python") || base_name.starts_with("libpython") {
                 return Ok(RuntimeType::python(path, &base_name, paths));
             }
@@ -79,8 +86,15 @@ pub mod user {
 
             // build rows
             let mut rows = Vec::new();
-            for ProcMapRow {avma, unwind_table, ..} in infos {
-                for UnwindTableRow { start_address, rule } in &unwind_table.rows {
+            for ProcMapRow {
+                avma, unwind_table, ..
+            } in infos
+            {
+                for UnwindTableRow {
+                    start_address,
+                    rule,
+                } in &unwind_table.rows
+                {
                     rows.push((*start_address + *avma, *rule));
                 }
             }

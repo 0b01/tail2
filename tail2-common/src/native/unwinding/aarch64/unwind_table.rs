@@ -1,8 +1,8 @@
+use super::unwind_rule::{translate_into_unwind_rule, UnwindRuleAarch64};
 use anyhow::Result;
 use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection};
-use log::{error, debug};
+use log::{debug, error};
 use object::{Object, ObjectSection};
-use super::unwind_rule::{UnwindRuleAarch64, translate_into_unwind_rule};
 
 /// Row of a FDE.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
@@ -53,12 +53,12 @@ impl UnwindTable {
         let file = std::fs::File::open(p)?;
         let mmap = unsafe { memmap2::MmapOptions::new().map(&file).unwrap() };
         let file = object::File::parse(&mmap[..]).unwrap();
-        UnwindTable::parse(&file)
+        UnwindTable::parse(&file).map_err(|e| anyhow::Error::msg("err"))
     }
 
-    pub fn parse<'a, O: Object<'a, 'a>>(file: &'a O) -> Result<Self> {
+    pub fn parse<'a, O: Object<'a, 'a>>(file: &'a O) -> gimli::Result<Self> {
         let section = file.section_by_name(".eh_frame").unwrap();
-        let data = section.uncompressed_data()?;
+        let data = section.uncompressed_data().unwrap();
         let mut eh_frame = gimli::EhFrame::new(&data, NativeEndian);
         eh_frame.set_address_size(std::mem::size_of::<usize>() as _);
 

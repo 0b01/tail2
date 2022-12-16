@@ -1,4 +1,7 @@
-use crate::python::{PythonVersion, state::{pthreads_impl, pid_data}};
+use crate::python::{
+    state::{pid_data, pthreads_impl},
+    PythonVersion,
+};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum RuntimeType {
@@ -43,32 +46,34 @@ impl RuntimeType {
         match self {
             RuntimeType::Unknown => (),
             RuntimeType::Python { pid_data, .. } => {
-               pid_data.pthreads_impl = new_impl;
+                pid_data.pthreads_impl = new_impl;
             }
         }
     }
-
 }
 
 #[cfg(feature = "user")]
 pub mod user {
     use anyhow::Context;
+    use object::elf::{FileHeader32, FileHeader64, ProgramHeader64, PF_X, PT_LOAD};
+    use object::read::elf::{ElfFile, ElfSegment, FileHeader, ProgramHeader};
     use object::Endianness;
-    use object::elf::{FileHeader64, ProgramHeader64, FileHeader32, PT_LOAD, PF_X};
-    use object::read::elf::{ElfSegment, ElfFile, FileHeader, ProgramHeader};
-    use object::{Object, ObjectSegment, File, Endian, LittleEndian, ObjectSymbol};
+    use object::{Endian, File, LittleEndian, Object, ObjectSegment, ObjectSymbol};
 
     use super::*;
-    use core::str::from_utf8_unchecked;
-    use std::{path::Path, io::Read};
-    use crate::python::state::py_globals;
     use crate::procinfo::user::ProcMapRow;
+    use crate::python::state::py_globals;
+    use core::str::from_utf8_unchecked;
+    use std::{io::Read, path::Path};
 
     impl RuntimeType {
         pub fn python(row: &ProcMapRow, base_name: &str, paths: &[ProcMapRow]) -> Self {
-
             let is_lib = base_name.starts_with("libpython");
-            let mut version = PythonVersion { major: 0, minor: 0, patch: 0 };
+            let mut version = PythonVersion {
+                major: 0,
+                minor: 0,
+                patch: 0,
+            };
             if let Some(v_str) = base_name.split("python").last() {
                 let mut segs = v_str.split('.');
                 version.major = segs.next().unwrap().parse().unwrap();
@@ -89,14 +94,17 @@ pub mod user {
             if py_info._PyRuntime != 0 {
                 globals._PyRuntime = row.avma + py_info._PyRuntime;
                 log::info!("_PyRuntime: {}", globals._PyRuntime);
-            }
-            else {
+            } else {
                 assert!(py_info._PyThreadState_Current != 0);
                 globals._PyThreadState_Current = row.avma + py_info._PyThreadState_Current;
                 log::info!("_PyThreadState_Current: {}", globals._PyThreadState_Current);
             }
 
-            let pthreads_impl = if paths.iter().any(|i|i.mod_name.contains("musl")) { pthreads_impl::PTI_MUSL } else { pthreads_impl::PTI_GLIBC };
+            let pthreads_impl = if paths.iter().any(|i| i.mod_name.contains("musl")) {
+                pthreads_impl::PTI_MUSL
+            } else {
+                pthreads_impl::PTI_GLIBC
+            };
             RuntimeType::Python {
                 is_lib,
                 version,
@@ -104,7 +112,7 @@ pub mod user {
                     pthreads_impl,
                     globals,
                     interp: 0,
-                }
+                },
             }
         }
     }
@@ -139,7 +147,7 @@ pub mod user {
                     ret._PyThreadState_Current = sym.address() as usize;
                 }
                 if ret._PyRuntime > 0 && ret._PyThreadState_Current > 0 {
-                    break
+                    break;
                 }
             }
 
@@ -147,14 +155,17 @@ pub mod user {
         }
     }
 
-    pub fn to_python_version<P: AsRef<Path>>(file_path: P, ver_str: &str) -> anyhow::Result<PythonVersion> {
+    pub fn to_python_version<P: AsRef<Path>>(
+        file_path: P,
+        ver_str: &str,
+    ) -> anyhow::Result<PythonVersion> {
         const BUFSIZ: usize = 4096;
-        use std::{io::BufReader, path::Path, fs::File};
+        use std::{fs::File, io::BufReader, path::Path};
 
         use crate::python::PythonVersion;
 
         let mut rdr = BufReader::new(File::open(file_path)?);
-        let mut buf = [0u8; BUFSIZ  * 2];
+        let mut buf = [0u8; BUFSIZ * 2];
 
         let mut rd1 = 0;
         loop {
@@ -165,10 +176,10 @@ pub mod user {
             }
 
             // Search
-            let to_search = &buf[..(rd1+rd2)];
+            let to_search = &buf[..(rd1 + rd2)];
             let target = ver_str.as_bytes();
-            for start in 0..to_search.len()-target.len() {
-                if &to_search[start..start+target.len()] == target {
+            for start in 0..to_search.len() - target.len() {
+                if &to_search[start..start + target.len()] == target {
                     let mut null = None;
                     for (end, ch) in to_search[start..].iter().take(target.len()).enumerate() {
                         if *ch == 0 {
@@ -178,19 +189,31 @@ pub mod user {
                     }
                     if let Some(end) = null {
                         let ver = &to_search[start..end];
-                        let mut s = ver.split(|i|*i == b'.');
-                        let major = s.next().map(|x|str::parse::<u8>(unsafe{from_utf8_unchecked(x)}));
-                        let minor = s.next().map(|x|str::parse::<u8>(unsafe{from_utf8_unchecked(x)}));
-                        let patch = s.next().map(|x|str::parse::<u8>(unsafe{from_utf8_unchecked(x)}));
-                        if let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(patch))) = (major, minor, patch) {
-                            return Ok(PythonVersion { major, minor, patch });
+                        let mut s = ver.split(|i| *i == b'.');
+                        let major = s
+                            .next()
+                            .map(|x| str::parse::<u8>(unsafe { from_utf8_unchecked(x) }));
+                        let minor = s
+                            .next()
+                            .map(|x| str::parse::<u8>(unsafe { from_utf8_unchecked(x) }));
+                        let patch = s
+                            .next()
+                            .map(|x| str::parse::<u8>(unsafe { from_utf8_unchecked(x) }));
+                        if let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(patch))) =
+                            (major, minor, patch)
+                        {
+                            return Ok(PythonVersion {
+                                major,
+                                minor,
+                                patch,
+                            });
                         }
                     }
                 }
             }
-            
+
             // Slide
-            buf.copy_within(rd1..(rd1+rd2), 0);
+            buf.copy_within(rd1..(rd1 + rd2), 0);
             rd1 = rd2;
         }
 

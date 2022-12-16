@@ -1,15 +1,14 @@
+use rand::prelude::SliceRandom;
 use rand::SeedableRng;
-use rand::{prelude::SliceRandom};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::Config;
 use crate::strategy::from_usize;
+use crate::Config;
 use rand_chacha::ChaCha8Rng;
-
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Card {
-    pub suit: u8, 
+    pub suit: u8,
     pub rank: u8,
 }
 
@@ -24,7 +23,7 @@ impl Deck {
         let mut cards = vec![];
         for suit in 0..cfg.suits {
             for rank in 0..cfg.ranks {
-                cards.push(Card{suit, rank});
+                cards.push(Card { suit, rank });
             }
         }
 
@@ -64,8 +63,15 @@ impl Parade {
             panic!("not enough cards in deck");
         }
 
-        let parade = deck.draw(cfg.initial_parade).expect("Unable to setup parade");
-        let hands = (0..cfg.players).map(|_|deck.draw(cfg.initial_hand_size).expect("Unable to draw initial hand")).collect();
+        let parade = deck
+            .draw(cfg.initial_parade)
+            .expect("Unable to setup parade");
+        let hands = (0..cfg.players)
+            .map(|_| {
+                deck.draw(cfg.initial_hand_size)
+                    .expect("Unable to draw initial hand")
+            })
+            .collect();
         let boards = vec![vec![]; cfg.players];
         Self {
             deck,
@@ -98,8 +104,7 @@ impl Parade {
                 new_parade.push(*c);
             } else if card.suit == c.suit || c.rank < card.rank {
                 ejected.push(*c);
-            }
-            else {
+            } else {
                 new_parade.push(*c);
             }
         }
@@ -128,11 +133,12 @@ impl Parade {
     pub fn final_score(&self) -> Vec<usize> {
         let mut suits_count = vec![0_usize; self.cfg.suits as usize];
         for suit in 0..self.cfg.suits {
-            let max_player_idx = self.boards
+            let max_player_idx = self
+                .boards
                 .iter()
-                .map(|b| b.iter().filter(|c|c.suit == suit).count())
+                .map(|b| b.iter().filter(|c| c.suit == suit).count())
                 .enumerate()
-                .min_by_key(|(_idx, count)|*count)
+                .min_by_key(|(_idx, count)| *count)
                 .map(|(idx, _count)| idx)
                 .unwrap();
             suits_count[suit as usize] = max_player_idx;
@@ -142,11 +148,11 @@ impl Parade {
         (0..self.cfg.players).for_each(|player| {
             let mut score = 0;
             for suit in 0..self.cfg.suits {
-                let cards_of_suit = self.boards[player].iter().filter(|c|c.suit == suit);
+                let cards_of_suit = self.boards[player].iter().filter(|c| c.suit == suit);
                 score += if suits_count[suit as usize] == player {
                     cards_of_suit.count()
                 } else {
-                    cards_of_suit.map(|c|c.rank as usize).sum()
+                    cards_of_suit.map(|c| c.rank as usize).sum()
                 };
             }
             ret[player] = score;
@@ -165,8 +171,10 @@ pub fn simulate(cfg: &Config, seed: usize) -> (Parade, Vec<Stats>) {
     let mut parade = Parade::new(cfg, seed);
     let mut stats: Vec<Stats> = vec![Default::default(); cfg.players];
     let strats = match cfg.strats.len() {
-        0 => (0..cfg.players).map(|_|from_usize(&0)).collect(),
-        1 => (0..cfg.players).map(|_|from_usize(&cfg.strats[0])).collect(),
+        0 => (0..cfg.players).map(|_| from_usize(&0)).collect(),
+        1 => (0..cfg.players)
+            .map(|_| from_usize(&cfg.strats[0]))
+            .collect(),
         _ => cfg.strats.iter().map(from_usize).collect::<Vec<_>>(),
     };
 
@@ -179,7 +187,7 @@ pub fn simulate(cfg: &Config, seed: usize) -> (Parade, Vec<Stats>) {
             let card_to_play = strats[player].play(&parade, player);
             if parade.commit(player, card_to_play).is_none() {
                 parade.commit_end_game();
-                break 'outer
+                break 'outer;
             }
         }
     }

@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
+use crate::symbolication::module_cache::ModuleCache;
 use anyhow::Result;
 use procfs::process::Process;
-use tail2_common::procinfo::{ProcInfo, user::ProcMapRow};
-use crate::symbolication::module_cache::ModuleCache;
+use tail2_common::procinfo::{user::ProcMapRow, ProcInfo};
 use tokio::sync::Mutex;
 
 #[derive(Debug)]
@@ -11,7 +11,7 @@ pub struct Processes {
     // TODO: use pid + starttime
     pub processes: HashMap<i32, Box<ProcInfo>>,
     // TODO: more caching
-    // pub runtime_cache: 
+    // pub runtime_cache:
     module_cache: Arc<Mutex<ModuleCache>>,
 }
 
@@ -29,7 +29,10 @@ impl Processes {
 
     pub fn new(module_cache: Arc<Mutex<ModuleCache>>) -> Self {
         let processes = HashMap::new();
-        Self { processes, module_cache }
+        Self {
+            processes,
+            module_cache,
+        }
     }
 
     pub fn detect_pid(pid: i32, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
@@ -46,8 +49,7 @@ impl Processes {
                     if let procfs::process::MMapPath::Path(p) = e.pathname {
                         let path = p.to_string_lossy().to_string();
 
-                        let table = 
-                        {
+                        let table = {
                             if let Some(ret) = cache.resolve(&path) {
                                 Arc::clone(ret.unwind_table.as_ref().unwrap())
                             } else {
@@ -55,7 +57,11 @@ impl Processes {
                             }
                         };
 
-                        return Some(ProcMapRow {avma: e.address.0 as usize, mod_name: path, unwind_table: table});
+                        return Some(ProcMapRow {
+                            avma: e.address.0 as usize,
+                            mod_name: path,
+                            unwind_table: table,
+                        });
                     }
                 }
                 None

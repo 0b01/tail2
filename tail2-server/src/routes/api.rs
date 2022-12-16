@@ -1,35 +1,45 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
-use rocket::{serde::{json::Json, self}, State, Route, get, response::stream::{EventStream, Event}};
-use tail2::{calltree::inner::{serialize::Node, CallTreeFrame}, dto::FrameDto, symbolication::elf::ElfCache};
+use axum::{extract::State, debug_handler, response::IntoResponse, http::HeaderMap};
+use reqwest::header;
+use tail2::{
+    calltree::inner::{serialize::Node, CallTreeFrame},
+    dto::FrameDto,
+    symbolication::elf::ElfCache,
+};
+use axum::{
+    Router,
+    routing::get,
+    response::sse::{Event, KeepAlive, Sse},
+};
+use std::{time::Duration, convert::Infallible};
+use tokio_stream::StreamExt as _ ;
+use futures::stream::{self, Stream};
 
-use crate::state::{CurrentCallTree};
 
-#[get("/current")]
-pub async fn current<'a>(ct: &State<CurrentCallTree>) -> String {
-    let ct = ct.inner().ct.lock().await;
-    let node = Node::new(
-        ct.root,
-        &ct.arena,
-    );
+use crate::{state::{CurrentCallTree, AppState}, Notifiable};
 
-    serde::json::to_string(&node).unwrap()
+pub(crate) async fn current<'a>(State(ct): State<Arc<AppState>>) -> String {
+    let ct = ct.calltree.inner.ct.lock().await;
+    let node = Node::new(ct.root, &ct.arena);
+
+    serde_json::to_string(&node).unwrap()
 }
 
-#[get("/events")]
-fn events(ct: &State<CurrentCallTree>) -> EventStream![] {
-    let changed = ct.changed.clone();
-    EventStream! {
+use async_stream::{stream, try_stream, AsyncStream};
+
+pub(crate) async fn events(State(ct): State<Arc<AppState>>) -> impl IntoResponse {
+    let changed = ct.calltree.changed.clone();
+    changed.notify_one();
+    let stream = try_stream! {
         loop {
-            yield Event::empty();
+            yield Event::default().data("_");
             changed.notified().await;
         }
-    }
-}
+    };
 
-pub fn routes() -> Vec<Route> {
-    rocket::routes![
-        current,
-        events,
-    ]
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, "text/event-stream;charset=UTF-8".parse().unwrap());
+    headers.insert(header::CONTENT_ENCODING, "UTF-8".parse().unwrap());
+    (headers, Sse::<AsyncStream<Result<Event, Infallible>, _>>::new(stream))
 }

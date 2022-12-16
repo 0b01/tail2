@@ -1,4 +1,12 @@
-use std::{process::Command, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread, time::Duration};
+use std::{
+    process::Command,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread,
+    time::Duration,
+};
 
 use anyhow::Context as _;
 use clap::Parser;
@@ -26,23 +34,22 @@ pub struct Options {
 
 /// Build the project
 fn build(opts: &Options) -> Result<(), anyhow::Error> {
-    let target = (if cfg!(target_arch="aarch64")
-        {
-            "aarch64"
-        }
-        else if cfg!(target_arch="x86_64")
-        {
-            "x86_64"
-        }
-        else {
-            // compile_error!("unsupported target");
-            ""
-        }).to_string();
+    let target = (if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else {
+        // compile_error!("unsupported target");
+        ""
+    })
+    .to_string();
     let mut args = vec![
         "+nightly",
         "build",
-        "-p", "tail2",
-        "-p", "tail2-server",
+        "-p",
+        "tail2",
+        "-p",
+        "tail2-server",
         "--features",
     ];
     args.push(&target);
@@ -84,8 +91,7 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     args.push(bin_path.as_str());
     args.append(&mut run_args);
 
-    let mut a = Command::new(server_path)
-        .spawn()?;
+    let mut a = Command::new(server_path).spawn()?;
 
     let mut b = Command::new(args.first().expect("No first argument"))
         .args(args.iter().skip(1))

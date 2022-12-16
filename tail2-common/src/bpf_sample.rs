@@ -1,4 +1,4 @@
-use crate::{pidtgid::PidTgid, MAX_USER_STACK, python::state::PythonStack, NativeStack};
+use crate::{pidtgid::PidTgid, python::state::PythonStack, NativeStack, MAX_USER_STACK};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]

@@ -1,5 +1,5 @@
 use clap::Parser;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Debug, Clone, Serialize, Deserialize)]
 #[clap(author, version, about, long_about = None)]

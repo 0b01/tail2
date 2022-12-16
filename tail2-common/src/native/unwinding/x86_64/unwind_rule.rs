@@ -1,8 +1,8 @@
 use gimli::{CfaRule, RegisterRule, X86_64};
 
-#[cfg(feature="user")]
-use crate::native::unwinding::error::ConversionError;
 use super::unwindregs::UnwindRegsX86_64;
+#[cfg(feature = "user")]
+use crate::native::unwinding::error::ConversionError;
 
 /// For all of these: return address is *(new_sp - 8)
 #[repr(u8)]
@@ -87,8 +87,7 @@ impl UnwindRuleX86_64 {
                 let sp_offset = u64::from(sp_offset_by_8) * 8;
                 let new_sp = sp.checked_add(sp_offset)?;
                 let bp_storage_offset_from_sp = i64::from(bp_storage_offset_from_sp_by_8) * 8;
-                let bp_location = sp.checked_add_signed(bp_storage_offset_from_sp)
-                    ?;
+                let bp_location = sp.checked_add_signed(bp_storage_offset_from_sp)?;
                 let new_bp = match read_stack(bp_location) {
                     Ok(new_bp) => new_bp,
                     Err(()) if is_first_frame && bp_location < sp => {
@@ -165,8 +164,7 @@ impl UnwindRuleX86_64 {
                 (new_sp, new_bp)
             }
         };
-        let return_address =
-            read_stack(new_sp - 8).ok()?;
+        let return_address = read_stack(new_sp - 8).ok()?;
         if return_address == 0 {
             return Some(None);
         }
@@ -190,7 +188,6 @@ impl UnwindRuleX86_64 {
         }
     }
 }
-
 
 #[cfg(feature = "user")]
 pub(crate) fn translate_into_unwind_rule<R: gimli::Reader>(
