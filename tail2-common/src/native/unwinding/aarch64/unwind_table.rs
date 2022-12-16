@@ -53,7 +53,7 @@ impl UnwindTable {
         let file = std::fs::File::open(p)?;
         let mmap = unsafe { memmap2::MmapOptions::new().map(&file).unwrap() };
         let file = object::File::parse(&mmap[..]).unwrap();
-        Ok(UnwindTable::parse(&file).unwrap())
+        UnwindTable::parse(&file).map_err(|e| anyhow::Error::msg("err"))
     }
 
     pub fn parse<'a, O: Object<'a, 'a>>(file: &'a O) -> gimli::Result<Self> {
