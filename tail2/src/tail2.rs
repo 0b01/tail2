@@ -3,10 +3,16 @@ use std::sync::Arc;
 use anyhow::Result;
 use reqwest_eventsource::{EventSource, Event};
 use rocket::futures::StreamExt;
+use serde::{Serialize, Deserialize};
 use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
 use tokio::sync::Mutex;
 
 use crate::{client::api_client::ApiStackEndpointClient, config::Tail2Config};
+
+#[derive(Serialize, Deserialize)] 
+pub struct NewConnection {
+    pub name: String,
+}
 
 pub struct Tail2 {
     pub bpf: aya::Bpf,
@@ -31,7 +37,12 @@ impl Tail2 {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        let mut es = EventSource::get(&format!("{}/connect", self.config.server.url));
+        let new_connection = NewConnection {
+            name: "Test".to_owned(),
+        };
+
+        let payload = serde_json::to_string(&new_connection)?;
+        let mut es = EventSource::get(&format!("{}/connect?new_conn={}", self.config.server.url, payload));
         while let Some(event) = es.next().await {
             match event {
                 Ok(Event::Open) => println!("Connection Open!"),

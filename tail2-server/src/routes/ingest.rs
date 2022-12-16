@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
+use rocket::serde::json::Json;
 
 use crate::{error::Result, state::{CurrentCallTree, Connections}, Notifiable};
 use log::info;
@@ -9,24 +10,8 @@ use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
     dto::{FrameDto, StackBatchDto, StackDto, build_stack},
     symbolication::{elf::ElfCache, module::Module},
-    Mergeable, client::agent_config::AgentConfig,
+    Mergeable, client::agent_config::AgentConfig, tail2::NewConnection,
 };
-
-#[get("/connect")]
-async fn connect(st: &State<Connections>) -> EventStream![] {
-    let config = Notifiable::<AgentConfig>::new(AgentConfig::new());
-    let changed = Arc::clone(&config.changed);
-    st.machines.lock().await.push(config);
-
-    let stream = EventStream!{
-        loop {
-            changed.notified().await;
-            yield Event::data("test");
-        }
-    };
-
-    stream.heartbeat(Duration::from_secs(30))
-}
 
 #[post("/stack", data = "<var>")]
 async fn stack(var: StackBatchDto, st: &State<Notifiable<CurrentCallTree>>) -> Result<Status> {
@@ -52,6 +37,5 @@ async fn stack(var: StackBatchDto, st: &State<Notifiable<CurrentCallTree>>) -> R
 pub fn routes() -> Vec<Route> {
     rocket::routes![
         stack,
-        connect,
     ]
 }

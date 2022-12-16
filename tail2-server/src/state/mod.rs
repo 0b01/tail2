@@ -1,5 +1,6 @@
 use rocket::tokio::sync::{Mutex, Notify};
 use tail2::client::agent_config::AgentConfig;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -11,13 +12,13 @@ use crate::Notifiable;
 pub mod notifiable;
 
 pub struct Connections {
-    pub machines: Arc<Mutex<Vec<Notifiable<AgentConfig>>>>,
+    pub agents: Arc<Mutex<HashMap<String, Notifiable<AgentConfig>>>>,
 }
 
 impl Connections {
     pub fn new() -> Self {
         Self {
-            machines: Arc::new(Mutex::new(vec![])),
+            agents: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
