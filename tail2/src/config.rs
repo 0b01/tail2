@@ -10,7 +10,8 @@ pub struct Tail2Config {
 
 #[derive(Deserialize, Debug)]
 pub struct Server {
-    pub url: String,
+    pub host: String,
+    pub port: u16,
     pub batch_size: usize,
 }
 

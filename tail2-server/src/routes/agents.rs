@@ -1,5 +1,6 @@
-use axum::{response::{Result, IntoResponse}, extract::{WebSocketUpgrade, ws::WebSocket, Query}, Json};
-use futures::StreamExt;
+use axum::{response::{Result, IntoResponse}, extract::{WebSocketUpgrade, ws::{WebSocket, Message}, Query}, Json};
+use futures::{StreamExt, SinkExt};
+use tokio::time::sleep;
 use std::{time::Duration, sync::Arc};
 
 use axum::{Router, extract::State};
@@ -34,6 +35,19 @@ pub(crate) async fn connect(ws: WebSocketUpgrade, State(state): State<Arc<AppSta
 
 async fn connect_ws(stream: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = stream.split();
+
+    let mut send_task = tokio::spawn(
+        receiver.for_each(|msg| async {
+            let msg = msg.unwrap();
+            dbg!(msg);
+        }));
+
+    loop {
+        let _ = sender
+            .send(Message::Text(String::from("test.")))
+            .await;
+        sleep(Duration::from_secs(1)).await;
+    }
 }
 
 /*
@@ -73,14 +87,6 @@ async fn websocket(stream: WebSocket, state: Arc<AppState>) {
     let _ = state.tx.send(msg);
 
     // This task will receive broadcast messages and send text message to our client.
-    let mut send_task = tokio::spawn(async move {
-        while let Ok(msg) = rx.recv().await {
-            // In any websocket error, break loop.
-            if sender.send(Message::Text(msg)).await.is_err() {
-                break;
-            }
-        }
-    });
 
     // Clone things we want to pass to the receiving task.
     let tx = state.tx.clone();

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use log::info;
 
 pub mod utils;
 
@@ -10,8 +11,10 @@ async fn main() -> Result<()> {
     let mut t2 = tail2::Tail2::new().await?;
     match opt.command {
         Some(cmd) => cmd.run(t2).await.unwrap(),
-        None => t2.run().await?,
+        None => t2.run_agent().await?,
     }
+
+    info!("tail2 exiting");
 
     Ok(())
 }
