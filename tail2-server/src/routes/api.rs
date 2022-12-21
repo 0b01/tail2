@@ -1,23 +1,19 @@
-use std::{rc::Rc, sync::Arc};
+use std::{sync::Arc};
 
-use axum::{extract::State, debug_handler, response::IntoResponse, http::HeaderMap};
+use axum::{extract::State, response::IntoResponse, http::HeaderMap};
 use reqwest::header;
 use tail2::{
-    calltree::inner::{serialize::Node, CallTreeFrame},
-    dto::FrameDto,
-    symbolication::elf::ElfCache,
+    calltree::inner::{serialize::Node},
 };
 use axum::{
-    Router,
-    routing::get,
-    response::sse::{Event, KeepAlive, Sse},
+    response::sse::{Event, Sse},
 };
-use std::{time::Duration, convert::Infallible};
-use tokio_stream::StreamExt as _ ;
-use futures::stream::{self, Stream};
+use std::{convert::Infallible};
 
 
-use crate::{state::{CurrentCallTree, AppState}, Notifiable};
+
+
+use crate::{state::{AppState}};
 
 pub(crate) async fn current<'a>(State(ct): State<Arc<AppState>>) -> String {
     let ct = ct.calltree.inner.ct.lock().await;
@@ -26,7 +22,7 @@ pub(crate) async fn current<'a>(State(ct): State<Arc<AppState>>) -> String {
     serde_json::to_string(&node).unwrap()
 }
 
-use async_stream::{stream, try_stream, AsyncStream};
+use async_stream::{try_stream, AsyncStream};
 
 pub(crate) async fn events(State(ct): State<Arc<AppState>>) -> impl IntoResponse {
     let changed = ct.calltree.changed.clone();

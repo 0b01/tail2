@@ -34,7 +34,7 @@ impl Tail2 {
         let config = Tail2Config::new()?;
 
         let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
-            &format!("http://{}:{}", config.server.host, config.server.port),
+            &format!("http://{}:{}/stack", config.server.host, config.server.port),
             Arc::clone(&module_cache),
             config.server.batch_size,
         )));

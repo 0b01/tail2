@@ -1,5 +1,5 @@
 use anyhow::Result;
-use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink}, util::online_cpus};
+use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program, Link}, util::online_cpus};
 use serde::{Deserialize, Serialize};
 use crate::Tail2;
 use tracing::{info, error};
@@ -25,15 +25,37 @@ pub enum Probe {
 }
 
 impl Probe {
+    pub fn to_program<'a>(&'a self, state: &'a mut Tail2) -> &mut Program {
+        match self {
+            Probe::Perf(_) => state.bpf.program_mut("capture_stack").unwrap(),
+            Probe::Uprobe(_) => state.bpf.program_mut("malloc_enter").unwrap(),
+        }
+    }
+    pub fn detach(&self, state: &mut Tail2, links: Vec<PerfLink>) -> Result<()> {
+        let program = self.to_program(state);
+        match self {
+            Probe::Perf(_) => {
+                let program: &mut PerfEvent = program.try_into().unwrap();
+                for link in links {
+                    program.detach(link.id());
+                }
+            }
+            Probe::Uprobe(_) => {
+                let program: &mut PerfEvent = program.try_into().unwrap();
+                for link in links {
+                    program.detach(link.id());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn attach(&self, state: &mut Tail2) -> Result<Vec<PerfLink>> {
+        let program = self.to_program(state);
         match self {
             Probe::Perf(probe) => {
-                let program: &mut PerfEvent = state
-                    .bpf
-                    .program_mut("capture_stack")
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
+                let program: &mut PerfEvent = program.try_into().unwrap();
                 match program.load() {
                     Ok(_) => {}
                     Err(e) => {
@@ -60,12 +82,7 @@ impl Probe {
                 Ok(links)
             }
             Probe::Uprobe(probe) => {
-                let program: &mut UProbe = state
-                    .bpf
-                    .program_mut("malloc_enter")
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
+                let program: &mut UProbe = program.try_into().unwrap();
                 match program.load() {
                     Ok(_) => {}
                     Err(e) => {

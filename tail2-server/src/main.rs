@@ -1,31 +1,26 @@
 use include_dir::{include_dir, Dir};
 use axum::{
-    body::{Body, Bytes, BoxBody, self, Full, Empty},
-    handler::HandlerWithoutStateExt,
-    http::{Request, StatusCode, HeaderValue, Response},
+    body::{Bytes, self, Full, Empty},
+    http::{StatusCode, HeaderValue, Response},
     response::IntoResponse,
-    routing::{get, get_service, post},
+    routing::{get, post},
     Router, extract::Path,
 };
 use reqwest::header;
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
-use tower::{ServiceExt, ServiceBuilder};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tower::{ServiceBuilder};
 use tower_http::{
-    services::{ServeDir, ServeFile},
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,
 };
-use state::{AppState, CurrentCallTree};
-use tail2::symbolication::elf::ElfCache;
+use state::AppState;
 
+
+pub mod error;
 pub mod routes;
 pub mod state;
 pub use state::notifiable::Notifiable;
 
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/flamegraph");
-
-async fn handle_error(_err: io::Error) -> impl IntoResponse {
-    (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong...")
-}
 
 #[tokio::main]
 async fn main() {
@@ -55,7 +50,8 @@ async fn main() {
         .compression();
 
     let app = Router::new()
-        .route("/start", get(routes::agents::start_agent))
+        .route("/start_probe", get(routes::agents::start_probe))
+        .route("/stop_probe", get(routes::agents::stop_probe))
         .route("/agents", get(routes::agents::agents))
         .route("/current", get(routes::api::current))
         .route("/stack", post(routes::ingest::stack))

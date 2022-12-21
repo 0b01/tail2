@@ -1,21 +1,21 @@
+use anyhow::Context;
 use axum::{response::Result, debug_handler};
-use std::{path::PathBuf, sync::Arc, time::Duration};
-use axum::{Router, routing::post, body::Bytes, extract::State};
-use tokio::sync::Mutex;
-use crate::state::{CurrentCallTree, AppState};
 use tracing::info;
+use std::{sync::Arc};
+use axum::{body::Bytes, extract::State};
+
+use crate::{state::{AppState}, error::AppError};
+
 use tail2::{
-    calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
-    dto::{FrameDto, StackBatchDto, StackDto, build_stack},
-    symbolication::{elf::ElfCache, module::Module},
-    Mergeable, client::agent_config::AgentConfig
+    calltree::{inner::CallTreeInner},
+    dto::{StackBatchDto, build_stack},
+    Mergeable
 };
 
-#[debug_handler]
-pub(crate) async fn stack(State(st): State<Arc<AppState>>, var: Bytes) -> Result<()> {
+pub(crate) async fn stack(State(st): State<Arc<AppState>>, var: Bytes) -> Result<(), AppError> {
     // info!("{:#?}", var);
     let st = &st.calltree;
-    let var: StackBatchDto = bincode::deserialize(&var).unwrap();
+    let var: StackBatchDto = bincode::deserialize(&var).context("cant deserialize")?;
     let changed = Arc::clone(&st.changed);
 
     let ct_ = Arc::clone(&st.inner.ct);

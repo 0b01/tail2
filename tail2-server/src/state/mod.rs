@@ -3,9 +3,9 @@ use tokio::sync::{Mutex, Notify};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde::Serialize;
+
 use tail2::calltree::CallTree;
-use tail2::{calltree::inner::CallTreeInner, dto::FrameDto, symbolication::elf::ElfCache};
+use tail2::{calltree::inner::CallTreeInner, symbolication::elf::ElfCache};
 
 use crate::Notifiable;
 
@@ -33,7 +33,7 @@ pub struct CurrentCallTree {
 impl CurrentCallTree {
     pub fn new() -> Self {
         let ct = Arc::new(Mutex::new(CallTreeInner::new()));
-        let changed = Arc::new(Notify::new());
+        let _changed = Arc::new(Notify::new());
         let syms = Arc::new(Mutex::new(ElfCache::new()));
         Self { ct, syms }
     }

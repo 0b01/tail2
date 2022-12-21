@@ -1,12 +1,12 @@
 use anyhow::Result;
-use tracing::error;
+use tracing::{error, info};
 use serde::{Serialize, Deserialize, ser::{SerializeMap, SerializeSeq}};
 use tokio::sync::{mpsc::UnboundedSender, Mutex};
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 use aya::programs::perf_attach::PerfLink;
 
-use crate::{probes::Probe, Tail2};
+use crate::{probes::Probe, Tail2, client::run::run_until_exit};
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ProbeInfo {
@@ -76,17 +76,36 @@ impl AgentProbeState {
         match &diff {
             AgentMessage::AddProbe { probe } => {
                 if self.attached.contains_key(&probe) {
-                    tx.send(AgentMessage::AgentError { message: format!("Probe is already running: {:?}", probe) });
+                    tx.send(AgentMessage::AgentError {
+                        message: format!("Probe is already running: {:?}", probe)
+                    }).unwrap();
                     return;
                 }
 
                 let mut tail2 = tail2.lock().await;
                 let links = probe.attach(&mut tail2).unwrap();
                 self.attached.insert(probe.clone(), links);
-                // dbg!(&self.attached);
+                info!("Probe attached: {:?}", &probe);
                 tx.send(diff).unwrap();
+                // tokio::spawn(async move {
+                    run_until_exit(&mut tail2, None, None).await.unwrap();
+                // });
             }
-            AgentMessage::StopProbe { probe } => todo!(),
+            AgentMessage::StopProbe { probe } => {
+                if !self.attached.contains_key(&probe) {
+                    tx.send(AgentMessage::AgentError {
+                        message: format!("Probe doesn't exist: {:?}", probe)
+                    }).unwrap();
+                    return;
+                }
+
+                let mut tail2 = tail2.lock().await;
+                let links = self.attached.remove(probe).unwrap();
+                probe.detach(&mut tail2, links);
+
+                info!("Probe detached: {:?}", &probe);
+                tx.send(diff).unwrap();
+            },
             AgentMessage::AgentError { message } => todo!(),
         }
     }
