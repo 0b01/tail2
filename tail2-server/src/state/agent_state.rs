@@ -45,6 +45,9 @@ impl Tail2Agent {
             }
             AgentMessage::Halt => {
                 self.is_halted = true;
+                self.probes.values_mut().for_each(|v|
+                    v.is_running = false
+                );
             }
         };
 

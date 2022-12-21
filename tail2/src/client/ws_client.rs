@@ -128,6 +128,7 @@ impl WsAgent {
                     Some(halt_tx) => {
                         halt_tx.send(()).unwrap();
                         tx.send(AgentMessage::Halt).unwrap();
+                        self.is_task_running = false;
                     }
                     None => {
                         tx.send(AgentMessage::AgentError {
