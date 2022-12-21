@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
-use log::info;
+use tracing::info;
 use tail2::Tail2;
 use tokio::sync::Mutex;
 
@@ -12,7 +12,7 @@ pub mod utils;
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = tail2::args::Opt::parse();
-    let mut t2 = tail2::Tail2::new().await?;
+    let t2 = tail2::Tail2::new().await?;
     match opt.command {
         Some(cmd) => cmd.run(t2).await.unwrap(),
         None => Tail2::run_agent(Arc::new(Mutex::new(t2))).await?,

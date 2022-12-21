@@ -2,7 +2,7 @@ use anyhow::Result;
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
-use log::{error, info};
+use tracing::{error, info};
 use nix::sys::ptrace;
 
 use nix::unistd::{getuid, Pid};

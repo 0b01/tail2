@@ -2,7 +2,7 @@ use anyhow::Result;
 use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink}, util::online_cpus};
 use serde::{Deserialize, Serialize};
 use crate::Tail2;
-use log::{info, error};
+use tracing::{info, error};
 
 use super::Scope;
 

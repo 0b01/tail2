@@ -1,7 +1,7 @@
 use super::unwind_rule::{translate_into_unwind_rule, UnwindRuleX86_64};
 use anyhow::{Result, Context};
 use gimli::{NativeEndian, Reader, UnwindContext, UnwindSection, X86_64};
-use log::{debug, error};
+use tracing::{debug, error};
 use object::{Object, ObjectSection};
 
 /// Row of a FDE.

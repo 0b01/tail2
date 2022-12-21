@@ -1,4 +1,3 @@
-#![allow(unused)]
 use include_dir::{include_dir, Dir};
 use axum::{
     body::{Body, Bytes, BoxBody, self, Full, Empty},

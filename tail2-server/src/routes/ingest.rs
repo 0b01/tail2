@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 use axum::{Router, routing::post, body::Bytes, extract::State};
 use tokio::sync::Mutex;
 use crate::state::{CurrentCallTree, AppState};
-use log::info;
+use tracing::info;
 use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
     dto::{FrameDto, StackBatchDto, StackDto, build_stack},

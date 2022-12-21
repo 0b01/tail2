@@ -7,7 +7,7 @@ use crate::{
     Tail2, probes::{Scope, UprobeProbe, Probe, PerfProbe},
 };
 use clap::{Parser, Subcommand};
-use log::info;
+use tracing::info;
 
 #[derive(Debug, Parser)]
 pub struct Opt {

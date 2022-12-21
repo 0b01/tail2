@@ -1,6 +1,6 @@
 use anyhow::Result;
-use log::error;
-use serde::{Serialize, Deserialize, ser::SerializeMap};
+use tracing::error;
+use serde::{Serialize, Deserialize, ser::{SerializeMap, SerializeSeq}};
 use tokio::sync::{mpsc::UnboundedSender, Mutex};
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
@@ -8,29 +8,17 @@ use aya::programs::perf_attach::PerfLink;
 
 use crate::{probes::Probe, Tail2};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct ProbeInfo {
     pub is_running: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AgentConfig {
+    #[serde(with = "vectorize")]
     pub probes: HashMap<Probe, ProbeInfo>,
     #[serde(skip)]
     pub tx: Option<UnboundedSender<AgentMessage>>,
-}
-
-impl Serialize for AgentConfig {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer
-    {
-        let mut map = serializer.serialize_map(Some(self.probes.len()))?;
-        for (k, v) in &self.probes {
-            map.serialize_entry(&serde_json::to_string(k)?, &v)?;
-        }
-        map.end()
-    }
 }
 
 impl AgentConfig {
@@ -44,11 +32,12 @@ impl AgentConfig {
     pub fn process(&mut self, diff: &AgentMessage) -> Result<()> {
         match diff {
             AgentMessage::AddProbe { probe } => {
-                let info = ProbeInfo { is_running: true };
-                self.probes.insert(probe.clone(), info);
+                let info = self.probes.entry(probe.clone()).or_insert(Default::default());
+                info.is_running = true;
             }
             AgentMessage::StopProbe { probe } => {
-                self.probes.remove(probe);
+                let info = self.probes.entry(probe.clone()).or_insert(Default::default());
+                info.is_running = false;
             }
             AgentMessage::AgentError { message } => {
                 error!("error: {}", message);
@@ -87,7 +76,7 @@ impl AgentProbeState {
         match &diff {
             AgentMessage::AddProbe { probe } => {
                 if self.attached.contains_key(&probe) {
-                    tx.send(AgentMessage::AgentError { message: "Already running".to_owned() });
+                    tx.send(AgentMessage::AgentError { message: format!("Probe is already running: {:?}", probe) });
                     return;
                 }
 
@@ -95,7 +84,7 @@ impl AgentProbeState {
                 let links = probe.attach(&mut tail2).unwrap();
                 self.attached.insert(probe.clone(), links);
                 // dbg!(&self.attached);
-                tx.send(diff);
+                tx.send(diff).unwrap();
             }
             AgentMessage::StopProbe { probe } => todo!(),
             AgentMessage::AgentError { message } => todo!(),
@@ -107,4 +96,31 @@ impl AgentProbeState {
 pub struct StartAgent {
     pub name: String,
     pub probe: Option<Probe>,
+}
+
+pub mod vectorize {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::iter::FromIterator;
+
+    pub fn serialize<'a, T, K, V, S>(target: T, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: IntoIterator<Item = (&'a K, &'a V)>,
+        K: Serialize + 'a,
+        V: Serialize + 'a,
+    {
+        let container: Vec<_> = target.into_iter().collect();
+        serde::Serialize::serialize(&container, ser)
+    }
+
+    pub fn deserialize<'de, T, K, V, D>(des: D) -> Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromIterator<(K, V)>,
+        K: Deserialize<'de>,
+        V: Deserialize<'de>,
+    {
+        let container: Vec<_> = serde::Deserialize::deserialize(des)?;
+        Ok(T::from_iter(container.into_iter()))
+    }
 }
