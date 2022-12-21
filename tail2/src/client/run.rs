@@ -171,9 +171,12 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Child> {
+pub fn get_pid_child(
+    pid: Option<u32>,
+    command: Option<String>,
+) -> (Option<u32>, Option<Child>) {
     match (pid, command) {
-        (None, None) => Ok(None),
+        (None, None) => (None, None),
         (None, Some(cmd)) => {
             info!("Launching child process: `{:?}`", cmd);
             let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
@@ -191,30 +194,14 @@ fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Chi
             }
             match cmd.spawn() {
                 Ok(child) => {
-                    let _pid = child.id();
-                    Err(child)
+                    let pid = child.id();
+                    (Some(pid), Some(child))
                 }
                 Err(e) => panic!("{}", e.to_string()),
             }
         }
-        (Some(pid), None) => Ok(Some(pid as i32)),
+        (Some(pid), None) => (Some(pid as u32), None),
         (Some(_), Some(_)) => panic!("supply one of --pid, --command"),
-    }
-}
-
-pub fn get_pid_child(
-    pid: Option<u32>,
-    command: Option<String>,
-    child: &mut Option<Child>,
-) -> Option<u32> {
-    match get_pid(pid, command) {
-        Err(c) => {
-            let ret = c.id();
-            *child = Some(c);
-            Some(ret)
-        }
-        Ok(Some(pid)) => Some(pid as u32),
-        Ok(None) => None,
     }
 }
 
@@ -234,42 +221,54 @@ pub async fn bpf_init() -> Result<Bpf> {
     Ok(bpf)
 }
 
+pub enum RunUntil {
+    CtrlC,
+    ChildProcessExits(Child),
+    ExternalHalt(Receiver<()>),
+}
+
 pub async fn run_until_exit(
     bpf: Arc<Mutex<Bpf>>,
     cli: Arc<Mutex<ApiStackEndpointClient>>,
     module_cache: Arc<Mutex<ModuleCache>>,
-    child: Option<Child>,
+    mut run_until: RunUntil,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<()> {
-    // for awaiting Ctrl-C signal
-    let (stop_tx, stop_rx) = watch::channel(());
-    if child.is_some() {
-        proc_refresh_once(bpf.clone(), module_cache)
-            .await
-            .unwrap();
-    } else {
-        spawn_proc_refresh(bpf.clone(), module_cache, stop_rx.clone()).await;
-    }
+    let (stop_tx, stop_rx) =
+        if let RunUntil::ExternalHalt(rx) = &run_until {
+            (None, rx.clone())
+        } else {
+            let (tx, rx) = watch::channel(());
+            (Some(tx), rx)
+        };
+
+    spawn_proc_refresh(bpf.clone(), module_cache, stop_rx.clone()).await;
 
     let tasks = run_bpf(bpf.clone(), cli, stop_rx, output_tx).await?;
 
-    if let Some(mut c) = child {
-        info!("resuming child");
-        let pid = Pid::from_raw(c.id() as i32);
-        // nix::sys::wait::waitpid(pid, None).unwrap();
-        ptrace::cont(pid, None).unwrap();
-        c.wait().expect("unable to execute child");
-        info!("child exited");
-    } else {
-        signal::ctrl_c().await.expect("failed to listen for event");
+    match run_until {
+        RunUntil::CtrlC => {
+            signal::ctrl_c().await.expect("failed to listen for event");
+        }
+        RunUntil::ChildProcessExits(mut child) => {
+            info!("resuming child");
+            let pid = Pid::from_raw(child.id() as i32);
+            // nix::sys::wait::waitpid(pid, None).unwrap();
+            ptrace::cont(pid, None).unwrap();
+            child.wait().expect("unable to execute child");
+            info!("child exited");
+        }
+        RunUntil::ExternalHalt(_) => (),
     }
 
-    info!("exiting");
-    stop_tx.send(())?;
-    for t in tasks {
-        let _ = tokio::join!(t);
+    if let Some(stop_tx) = stop_tx {
+        info!("exiting");
+        stop_tx.send(())?;
+        for t in tasks {
+            let _ = tokio::join!(t);
+        }
+        print_stats(bpf).await?;
     }
-    print_stats(bpf).await?;
 
     Ok(())
 }

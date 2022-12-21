@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use anyhow::Result;
 use tail2::{
-    client::{run::{get_pid_child, run_until_exit}},
+    client::{run::{get_pid_child, run_until_exit, RunUntil}},
     Tail2, probes::{Probe, UprobeProbe, Scope},
 };
 
@@ -16,8 +16,7 @@ async fn main() -> Result<()> {
             let command = Some("../tests/fixtures/aarch64/malloc".to_owned());
             let uprobe = "libc:malloc".to_owned();
 
-            let mut child: Option<Child> = None;
-            let pid = get_pid_child(pid, command, &mut child);
+            let (pid, child) = get_pid_child(pid, command);
 
             let (tx, mut rx) = mpsc::channel(10);
             let state = Tail2::new().await?;
@@ -30,8 +29,7 @@ async fn main() -> Result<()> {
                 uprobe,
             });
             probe.attach(&mut *state.bpf.lock().await).unwrap();
-            // attach_uprobe(&mut state, &uprobe, pid).await?;
-            run_until_exit(state.bpf, state.cli, state.module_cache, child, Some(tx)).await?;
+            run_until_exit(state.bpf, state.cli, state.module_cache, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
             println!("{:?}", rx.recv().await.unwrap());
             println!("{:?}", rx.recv().await.unwrap());
         }

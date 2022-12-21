@@ -32,6 +32,7 @@ impl Probe {
         }
     }
 
+    #[must_use]
     pub fn attach(&self, bpf: &mut Bpf) -> Result<Vec<PerfLink>> {
         let program = self.to_program(bpf);
         match self {

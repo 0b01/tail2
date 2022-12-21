@@ -5,7 +5,7 @@ use tokio::{sync::mpsc::{self, UnboundedReceiver}};
 use std::{sync::Arc};
 
 use axum::{extract::State};
-use tail2::{client::agent_config::{AgentConfig, AgentMessage, NewConnection, StartAgent}, probes::{PerfProbe, Scope, Probe}};
+use tail2::{client::agent_config::{AgentConfig, AgentMessage, NewConnection, StartAgent, HaltAgent}, probes::{PerfProbe, Scope, Probe}};
 
 
 use crate::{state::AppState};
@@ -80,6 +80,16 @@ pub(crate) async fn stop_probe(State(st): State<Arc<AppState>>, start_agent: Que
     );
 
     tx.send(AgentMessage::StopProbe { probe }).unwrap();
+
+    Ok(String::from(""))
+}
+
+pub(crate) async fn halt(State(st): State<Arc<AppState>>, start_agent: Query<HaltAgent>) -> Result<String> {
+    let agents = st.agents.lock().await;
+    let agt = agents.get(&start_agent.name).unwrap();
+    let tx = agt.tx.as_ref().unwrap().clone();
+
+    tx.send(AgentMessage::Halt).unwrap();
 
     Ok(String::from(""))
 }

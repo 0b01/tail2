@@ -9,7 +9,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{Mutex, mpsc};
 use serde::{Serialize, Deserialize};
 use tokio::time::sleep;
-use crate::client::agent_config::{AgentMessage, AgentProbeState, NewConnection};
+use crate::client::agent_config::{AgentMessage, AgentState, NewConnection};
 use crate::client::run::run_until_exit;
 use crate::probes::Probe;
 use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
@@ -25,7 +25,7 @@ pub struct Tail2 {
     pub config: Tail2Config,
     pub cli: Arc<Mutex<ApiStackEndpointClient>>,
     pub module_cache: Arc<Mutex<ModuleCache>>,
-    probe_state: Arc<Mutex<AgentProbeState>>,
+    probes: Arc<Mutex<AgentState>>,
 }
 
 impl Tail2 {
@@ -41,7 +41,7 @@ impl Tail2 {
         )));
 
         let probe_state = Default::default();
-        Ok(Self { bpf, config, cli, module_cache, probe_state })
+        Ok(Self { bpf, config, cli, module_cache, probes: probe_state })
     }
 
     pub async fn run_agent(&self) -> Result<()> {
@@ -60,11 +60,11 @@ impl Tail2 {
         let bpf = self.bpf.clone();
         let cli = self.cli.clone();
         let module_cache = self.module_cache.clone();
-        let probe_state = self.probe_state.clone();
+        let probes = self.probes.clone();
         let t = tokio::spawn(async move {
             while let Some(Ok(Message::Text(msg))) = read.next().await {
                 let diff: AgentMessage = serde_json::from_str(&msg).unwrap();
-                probe_state.clone().lock().await.on_new_msg(
+                probes.clone().lock().await.on_new_msg(
                     diff,
                     ws_tx.clone(),
                     bpf.clone(),
