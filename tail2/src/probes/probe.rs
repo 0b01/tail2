@@ -6,19 +6,19 @@ use log::{info, error};
 
 use super::Scope;
 
-#[derive(Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct PerfProbe {
     pub scope: Scope,
     pub period: u64,
 }
 
-#[derive(Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct UprobeProbe {
     pub scope: Scope,
     pub uprobe: String,
 }
 
-#[derive(Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub enum Probe {
     Perf(PerfProbe),
     Uprobe(UprobeProbe),

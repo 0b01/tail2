@@ -8,7 +8,7 @@ use tail2::{
     calltree::{inner::CallTreeInner, CodeType, ResolvedFrame},
     dto::{FrameDto, StackBatchDto, StackDto, build_stack},
     symbolication::{elf::ElfCache, module::Module},
-    Mergeable, client::agent_config::AgentConfig, tail2::NewConnection,
+    Mergeable, client::agent_config::AgentConfig
 };
 
 #[debug_handler]

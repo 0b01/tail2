@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::{process::Child};
+use std::{process::Child, sync::Arc};
 
 use crate::{
     client::{run::{get_pid_child, run_until_exit}},

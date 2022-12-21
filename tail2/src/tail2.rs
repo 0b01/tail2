@@ -1,11 +1,16 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use anyhow::Result;
+use aya::programs::perf_attach::PerfLink;
 use reqwest::Url;
 use tokio::join;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{Mutex, mpsc};
 use serde::{Serialize, Deserialize};
 use tokio::time::sleep;
+use crate::client::agent_config::{AgentMessage, AgentProbeState, NewConnection};
+use crate::probes::Probe;
 use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
 
 use crate::{client::api_client::ApiStackEndpointClient, config::Tail2Config};
@@ -14,16 +19,12 @@ use futures_util::{future, pin_mut, StreamExt, SinkExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
-#[derive(Serialize, Deserialize)] 
-pub struct NewConnection {
-    pub name: String,
-}
-
 pub struct Tail2 {
     pub bpf: aya::Bpf,
     pub config: Tail2Config,
     pub cli: Arc<Mutex<ApiStackEndpointClient>>,
     pub module_cache: Arc<Mutex<ModuleCache>>,
+    probe_state: Arc<Mutex<AgentProbeState>>,
 }
 
 impl Tail2 {
@@ -38,42 +39,41 @@ impl Tail2 {
             config.server.batch_size,
         )));
 
-        Ok(Self { bpf, config, cli, module_cache })
+        let probe_state = Default::default();
+        Ok(Self { bpf, config, cli, module_cache, probe_state })
     }
 
-    pub async fn run_agent(&mut self) -> Result<()> {
+    pub async fn run_agent(tail2: Arc<Mutex<Self>>) -> Result<()> {
         let new_connection = NewConnection {
-            name: "Test".to_owned(),
+            name: "Test".to_owned(), // TODO:
         };
 
+        let t2 = tail2.lock().await;
+
         let payload = serde_qs::to_string(&new_connection)?;
-
-        let connect_addr = format!("ws://{}:{}/connect?{}", self.config.server.host, self.config.server.port, payload);
-
+        let connect_addr = format!("ws://{}:{}/connect?{}", t2.config.server.host, t2.config.server.port, payload);
         let url = Url::parse(&connect_addr).unwrap();
 
+        let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<AgentMessage>();
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
-    
-        let (mut write, read) = ws_stream.split();
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-
-        let t = tokio::spawn(read.for_each(move |message| async {
-            let data = message.unwrap().into_text().unwrap();
-            dbg!(data);
-        }));
-
-        tokio::spawn(async move {
-            while let Some(msg) = rx.recv().await {
-                write.send(Message::Text(msg.to_owned())).await.unwrap();
+        let (mut write, mut read) = ws_stream.split();
+        let probes = t2.probe_state.clone();
+        drop(t2);
+        let t = tokio::spawn(async move {
+            while let Some(Ok(Message::Text(msg))) = read.next().await {
+                let diff: AgentMessage = serde_json::from_str(&msg).unwrap();
+                probes.lock().await.on_new_msg(diff, ws_tx.clone(), tail2.clone()).await
             }
         });
 
-        loop {
-            tx.send("test".to_owned()).unwrap();
-            sleep(Duration::from_secs(1)).await;
-        }
+        tokio::spawn(async move {
+            while let Some(msg) = ws_rx.recv().await {
+                let s = serde_json::to_string(&msg).unwrap();
+                write.send(Message::Text(s)).await.unwrap();
+            }
+        });
 
-        t.await;
+        t.await.unwrap();
         Ok(())
     }
 }

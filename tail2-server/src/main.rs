@@ -56,12 +56,12 @@ async fn main() {
         .compression();
 
     let app = Router::new()
+        .route("/start", get(routes::agents::start_agent))
         .route("/agents", get(routes::agents::agents))
-        .route("/start", get(routes::agents::start))
         .route("/current", get(routes::api::current))
         .route("/stack", post(routes::ingest::stack))
         .route("/events", get(routes::api::events))
-        .route("/connect", get(routes::agents::connect))
+        .route("/connect", get(routes::agents::on_connect))
 
         .route("/*path", get(static_path))
         .route("/app", get(|| static_path(Path("/app.html".to_owned()))))

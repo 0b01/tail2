@@ -12,7 +12,7 @@ use crate::Notifiable;
 pub mod notifiable;
 
 pub struct AppState {
-    pub agents: Arc<Mutex<HashMap<String, Notifiable<AgentConfig>>>>,
+    pub agents: Arc<Mutex<HashMap<String, AgentConfig>>>,
     pub calltree: Notifiable<CurrentCallTree>,
 }
 
