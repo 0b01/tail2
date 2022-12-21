@@ -1,9 +1,9 @@
-use std::{env::args, process::Child};
+use std::{env::args};
 use tokio::sync::mpsc;
 
 use anyhow::Result;
 use tail2::{
-    client::{run::{get_pid_child, run_until_exit}},
+    client::{run::{get_pid_child, run_until_exit, RunUntil}},
     Tail2, probes::{Probe, UprobeProbe, Scope},
 };
 
@@ -16,11 +16,10 @@ async fn main() -> Result<()> {
             let command = Some("../tests/fixtures/aarch64/malloc".to_owned());
             let uprobe = "libc:malloc".to_owned();
 
-            let mut child: Option<Child> = None;
-            let pid = get_pid_child(pid, command, &mut child);
+            let (pid, child) = get_pid_child(pid, command);
 
             let (tx, mut rx) = mpsc::channel(10);
-            let mut state = Tail2::new().await?;
+            let state = Tail2::new().await?;
 
             let probe = Probe::Uprobe(UprobeProbe {
                 scope: match pid {
@@ -29,9 +28,8 @@ async fn main() -> Result<()> {
                 },
                 uprobe,
             });
-            probe.attach(&mut state).unwrap();
-            // attach_uprobe(&mut state, &uprobe, pid).await?;
-            run_until_exit(&mut state, child, Some(tx)).await?;
+            probe.attach(&mut *state.bpf.lock().await).unwrap();
+            run_until_exit(state.bpf, state.cli, state.module_cache, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
             println!("{:?}", rx.recv().await.unwrap());
             println!("{:?}", rx.recv().await.unwrap());
         }

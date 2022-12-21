@@ -2,13 +2,13 @@ use anyhow::Result;
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
-use log::{error, info};
+use tracing::{error, info};
 use nix::sys::ptrace;
 
 use nix::unistd::{getuid, Pid};
 
 use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
-use crate::Tail2;
+
 use std::os::unix::prelude::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -36,14 +36,16 @@ use tokio::sync::Mutex;
 
 use crate::processes::Processes;
 
-pub(crate) fn open_and_subcribe(
-    state: &mut Tail2,
+use super::post_stack_client::PostStackClient;
+
+pub(crate) async fn open_and_subcribe(
+    bpf: Arc<Mutex<Bpf>>,
     tx: mpsc::Sender<BpfSample>,
     stop_rx: watch::Receiver<()>,
     ts: &mut Vec<JoinHandle<()>>,
 ) {
     // open bpf maps
-    let mut stacks = AsyncPerfEventArray::try_from(state.bpf.take_map("STACKS").unwrap()).unwrap();
+    let mut stacks = AsyncPerfEventArray::try_from(bpf.lock().await.take_map("STACKS").unwrap()).unwrap();
 
     // listen to bpf perf buf, send stacks to tx
     for cpu_id in online_cpus().unwrap() {
@@ -80,32 +82,37 @@ pub(crate) fn open_and_subcribe(
     }
 }
 
-pub(crate) fn run_bpf(
-    state: &mut Tail2,
+pub(crate) async fn run_bpf(
+    bpf: Arc<Mutex<Bpf>>,
+    cli: Arc<Mutex<PostStackClient>>,
     stop_rx: watch::Receiver<()>,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<Vec<JoinHandle<()>>> {
+    info!("run_bpf");
     // send device info
-    let mut config: HashMap<_, u32, u64> =
-        HashMap::try_from(state.bpf.map_mut("CONFIG").unwrap()).unwrap();
-    let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-    config
-        .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
-        .unwrap();
-    config
-        .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
-        .unwrap();
+    {
+        let bpf_ = &mut *bpf.lock().await;
+        let mut config: HashMap<_, u32, u64> =
+            HashMap::try_from(bpf_.take_map("CONFIG").unwrap()).unwrap();
+        let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
+        config
+            .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
+            .unwrap();
+        config
+            .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
+            .unwrap();
+    }
 
     let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
 
     let kernel_stacks =
-        StackTraceMap::try_from(state.bpf.take_map("KERNEL_STACKS").unwrap()).unwrap();
+        StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap();
     let ksyms = aya::util::kernel_symbols().unwrap();
 
     // receiver thread
     let mut ts = vec![];
     let mut total_time = Duration::new(0, 0);
-    let cli = Arc::clone(&state.cli);
+    let cli = Arc::clone(&cli);
     let t = tokio::spawn(async move {
         let mut c = 0;
         while let Some(st) = rx.recv().await {
@@ -137,7 +144,7 @@ pub(crate) fn run_bpf(
     });
     ts.push(t);
 
-    open_and_subcribe(state, tx, stop_rx, &mut ts);
+    open_and_subcribe(bpf, tx, stop_rx, &mut ts).await;
 
     Ok(ts)
 }
@@ -164,13 +171,16 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Child> {
+pub fn get_pid_child(
+    pid: Option<u32>,
+    command: Option<String>,
+) -> (Option<u32>, Option<Child>) {
     match (pid, command) {
-        (None, None) => Ok(None),
+        (None, None) => (None, None),
         (None, Some(cmd)) => {
             info!("Launching child process: `{:?}`", cmd);
             let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
-            let path = PathBuf::from(cmd_split.next().unwrap().to_owned());
+            let path = PathBuf::from(cmd_split.next().unwrap());
             let mut cmd = Command::new(path);
             let cmd = cmd.args(cmd_split);
 
@@ -184,30 +194,14 @@ fn get_pid(pid: Option<u32>, command: Option<String>) -> Result<Option<i32>, Chi
             }
             match cmd.spawn() {
                 Ok(child) => {
-                    let _pid = child.id();
-                    Err(child)
+                    let pid = child.id();
+                    (Some(pid), Some(child))
                 }
                 Err(e) => panic!("{}", e.to_string()),
             }
         }
-        (Some(pid), None) => Ok(Some(pid as i32)),
+        (Some(pid), None) => (Some(pid), None),
         (Some(_), Some(_)) => panic!("supply one of --pid, --command"),
-    }
-}
-
-pub fn get_pid_child(
-    pid: Option<u32>,
-    command: Option<String>,
-    child: &mut Option<Child>,
-) -> Option<u32> {
-    match get_pid(pid, command) {
-        Err(c) => {
-            let ret = c.id();
-            *child = Some(c);
-            Some(ret)
-        }
-        Ok(Some(pid)) => Some(pid as u32),
-        Ok(None) => None,
     }
 }
 
@@ -227,40 +221,54 @@ pub async fn bpf_init() -> Result<Bpf> {
     Ok(bpf)
 }
 
+pub enum RunUntil {
+    CtrlC,
+    ChildProcessExits(Child),
+    ExternalHalt(Receiver<()>),
+}
+
 pub async fn run_until_exit(
-    state: &mut Tail2,
-    child: Option<Child>,
+    bpf: Arc<Mutex<Bpf>>,
+    cli: Arc<Mutex<PostStackClient>>,
+    module_cache: Arc<Mutex<ModuleCache>>,
+    run_until: RunUntil,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<()> {
-    // for awaiting Ctrl-C signal
-    let (stop_tx, stop_rx) = watch::channel(());
-    if child.is_some() {
-        proc_refresh_once(state)
-            .await
-            .unwrap();
-    } else {
-        spawn_proc_refresh(state, stop_rx.clone()).await;
+    let (stop_tx, stop_rx) =
+        if let RunUntil::ExternalHalt(rx) = &run_until {
+            (None, rx.clone())
+        } else {
+            let (tx, rx) = watch::channel(());
+            (Some(tx), rx)
+        };
+
+    spawn_proc_refresh(bpf.clone(), module_cache, stop_rx.clone()).await;
+
+    let tasks = run_bpf(bpf.clone(), cli, stop_rx, output_tx).await?;
+
+    match run_until {
+        RunUntil::CtrlC => {
+            signal::ctrl_c().await.expect("failed to listen for event");
+        }
+        RunUntil::ChildProcessExits(mut child) => {
+            info!("resuming child");
+            let pid = Pid::from_raw(child.id() as i32);
+            // nix::sys::wait::waitpid(pid, None).unwrap();
+            ptrace::cont(pid, None).unwrap();
+            child.wait().expect("unable to execute child");
+            info!("child exited");
+        }
+        RunUntil::ExternalHalt(_) => (),
     }
 
-    let tasks = run_bpf(state, stop_rx, output_tx)?;
-
-    if let Some(mut c) = child {
-        info!("resuming child");
-        let pid = Pid::from_raw(c.id() as i32);
-        // nix::sys::wait::waitpid(pid, None).unwrap();
-        ptrace::cont(pid, None).unwrap();
-        c.wait().expect("unable to execute child");
-        info!("child exited");
-    } else {
-        signal::ctrl_c().await.expect("failed to listen for event");
+    if let Some(stop_tx) = stop_tx {
+        info!("exiting");
+        stop_tx.send(())?;
+        for t in tasks {
+            let _ = tokio::join!(t);
+        }
+        print_stats(bpf).await?;
     }
-
-    info!("exiting");
-    stop_tx.send(())?;
-    for t in tasks {
-        let _ = tokio::join!(t);
-    }
-    print_stats(state).await?;
 
     Ok(())
 }
@@ -281,25 +289,11 @@ async fn proc_refresh_inner(
     }
 }
 
-pub(crate) async fn proc_refresh_once(state: &mut Tail2) -> Result<()> {
-    let pid_info: HashMap<_, u32, ProcInfo> =
-        HashMap::try_from(state.bpf.map_mut("PIDS").unwrap()).unwrap();
-    // HACK: extend lifetime to 'static
-    let mut pid_info = unsafe {
-        std::mem::transmute::<
-            HashMap<&mut MapData, u32, ProcInfo>,
-            HashMap<&'static mut MapData, u32, ProcInfo>,
-        >(pid_info)
-    };
-
-    proc_refresh_inner(&mut pid_info, state.module_cache.clone()).await;
-    Ok(())
-}
-
 // TODO: don't refresh, listen to mmap and execve calls
-pub(crate) async fn spawn_proc_refresh(state: &mut Tail2, mut stop_rx: Receiver<()>) {
+pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, module_cache: Arc<Mutex<ModuleCache>>, mut stop_rx: Receiver<()>) {
+    let bpf = &mut *bpf.lock().await;
     let pid_info: HashMap<_, u32, ProcInfo> =
-        HashMap::try_from(state.bpf.map_mut("PIDS").unwrap()).unwrap();
+        HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
     let mut pid_info = unsafe {
         std::mem::transmute::<
@@ -308,10 +302,10 @@ pub(crate) async fn spawn_proc_refresh(state: &mut Tail2, mut stop_rx: Receiver<
         >(pid_info)
     };
 
-    proc_refresh_inner(&mut pid_info, Arc::clone(&state.module_cache)).await;
+    proc_refresh_inner(&mut pid_info, Arc::clone(&module_cache)).await;
 
     // refresh pid info table
-    let module_cache = Arc::clone(&state.module_cache);
+    let module_cache = Arc::clone(&module_cache);
     tokio::spawn(async move {
         loop {
             proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
@@ -338,9 +332,10 @@ pub(crate) fn load_bpf() -> Result<Bpf> {
     Ok(bpf)
 }
 
-pub(crate) async fn print_stats(state: &mut Tail2) -> Result<()> {
+pub(crate) async fn print_stats(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
+    let bpf = &mut *bpf.lock().await;
     let info: HashMap<_, u32, u64> =
-        HashMap::try_from(state.bpf.map("RUN_STATS").context("no such map")?)?;
+        HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
     info!(
         "Sent: {} stacks",
         info.get(&(RunStatsKey::SentStackCount as u32), 0)?

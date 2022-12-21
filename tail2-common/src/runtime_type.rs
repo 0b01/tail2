@@ -93,11 +93,11 @@ pub mod user {
             // one of _PyRuntime or _PyThreadState_Current is set, depending on Python version
             if py_info._PyRuntime != 0 {
                 globals._PyRuntime = row.avma + py_info._PyRuntime;
-                log::info!("_PyRuntime: {}", globals._PyRuntime);
+                tracing::info!("_PyRuntime: {}", globals._PyRuntime);
             } else {
                 assert!(py_info._PyThreadState_Current != 0);
                 globals._PyThreadState_Current = row.avma + py_info._PyThreadState_Current;
-                log::info!("_PyThreadState_Current: {}", globals._PyThreadState_Current);
+                tracing::info!("_PyThreadState_Current: {}", globals._PyThreadState_Current);
             }
 
             let pthreads_impl = if paths.iter().any(|i| i.mod_name.contains("musl")) {

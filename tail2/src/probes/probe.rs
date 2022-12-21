@@ -1,44 +1,46 @@
 use anyhow::Result;
-use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink}, util::online_cpus};
+use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program}, util::online_cpus, Bpf};
 use serde::{Deserialize, Serialize};
-use crate::Tail2;
-use log::{info, error};
+
+use tracing::{info, error};
 
 use super::Scope;
 
-#[derive(Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct PerfProbe {
     pub scope: Scope,
     pub period: u64,
 }
 
-#[derive(Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct UprobeProbe {
     pub scope: Scope,
     pub uprobe: String,
 }
 
-#[derive(Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub enum Probe {
     Perf(PerfProbe),
     Uprobe(UprobeProbe),
 }
 
 impl Probe {
-    pub fn attach(&self, state: &mut Tail2) -> Result<Vec<PerfLink>> {
+    pub fn to_program<'a>(&'a self, bpf: &'a mut Bpf) -> &mut Program {
+        match self {
+            Probe::Perf(_) => bpf.program_mut("capture_stack").unwrap(),
+            Probe::Uprobe(_) => bpf.program_mut("malloc_enter").unwrap(),
+        }
+    }
+
+    pub fn attach(&self, bpf: &mut Bpf) -> Result<Vec<PerfLink>> {
+        let program = self.to_program(bpf);
         match self {
             Probe::Perf(probe) => {
-                let program: &mut PerfEvent = state
-                    .bpf
-                    .program_mut("capture_stack")
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
+                let program: &mut PerfEvent = program.try_into().unwrap();
                 match program.load() {
                     Ok(_) => {}
                     Err(e) => {
                         error!("{}", e.to_string());
-                        panic!();
                     }
                 }
 
@@ -55,17 +57,12 @@ impl Probe {
                         SamplePolicy::Period(probe.period),
                     )?;
                     let link = program.take_link(link_id)?;
-                    links.push(link.into());
+                    links.push(link);
                 }
                 Ok(links)
             }
             Probe::Uprobe(probe) => {
-                let program: &mut UProbe = state
-                    .bpf
-                    .program_mut("malloc_enter")
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
+                let program: &mut UProbe = program.try_into().unwrap();
                 match program.load() {
                     Ok(_) => {}
                     Err(e) => {

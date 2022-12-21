@@ -17,6 +17,13 @@ impl<T> Notifiable<T> {
             inner,
         }
     }
+
+    pub async fn with_notify<F>(&mut self, f: F) 
+        where F: Fn(&mut T)
+    {
+        self.changed.notify_one();
+        f(&mut self.inner)
+    }
 }
 
 impl<T: Serialize> Serialize for Notifiable<T> {

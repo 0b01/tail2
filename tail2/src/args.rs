@@ -1,13 +1,12 @@
 use anyhow::Result;
-use std::{process::Child};
 
 use crate::{
-    client::{run::{get_pid_child, run_until_exit}},
+    client::{run::{get_pid_child, run_until_exit, RunUntil}},
     processes::Processes,
     Tail2, probes::{Scope, UprobeProbe, Probe, PerfProbe},
 };
 use clap::{Parser, Subcommand};
-use log::info;
+use tracing::info;
 
 #[derive(Debug, Parser)]
 pub struct Opt {
@@ -51,7 +50,7 @@ pub enum Commands {
 }
 
 impl Commands {
-    pub async fn run(self, mut t2: Tail2) -> Result<()> {
+    pub async fn run(self, t2: Tail2) -> Result<()> {
         match self {
             Commands::Table { pid } => {
                 let _ret = Processes::detect_pid(pid, &mut *t2.module_cache.lock().await);
@@ -74,8 +73,7 @@ impl Commands {
                 period,
                 command,
             } => {
-                let mut child: Option<Child> = None;
-                let pid = get_pid_child(pid, command, &mut child);
+                let (pid, child) = get_pid_child(pid, command);
 
                 let probe = Probe::Perf(PerfProbe {
                     scope: match pid {
@@ -85,16 +83,16 @@ impl Commands {
                     period,
                 });
 
-                let _links = probe.attach(&mut t2)?;
-                run_until_exit(&mut t2, child, None).await?;
+                let _links = probe.attach(&mut*t2.bpf.lock().await)?;
+                let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
+                run_until_exit(t2.bpf, t2.cli, t2.module_cache, run_until, None).await?;
             }
             Commands::Uprobe {
                 pid,
                 uprobe,
                 command,
             } => {
-                let mut child: Option<Child> = None;
-                let pid = get_pid_child(pid, command, &mut child);
+                let (pid, child) = get_pid_child(pid, command);
                 let probe = Probe::Uprobe(UprobeProbe {
                     scope: match pid {
                         Some(pid) => Scope::Pid(pid),
@@ -103,8 +101,9 @@ impl Commands {
                     uprobe,
                 });
 
-                let _links = probe.attach(&mut t2)?;
-                run_until_exit(&mut t2, child, None).await?;
+                let _links = probe.attach(&mut *t2.bpf.lock().await)?;
+                let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
+                run_until_exit(t2.bpf, t2.cli, t2.module_cache, run_until, None).await?;
             }
         }
 

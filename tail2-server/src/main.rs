@@ -1,32 +1,26 @@
-#![allow(unused)]
 use include_dir::{include_dir, Dir};
 use axum::{
-    body::{Body, Bytes, BoxBody, self, Full, Empty},
-    handler::HandlerWithoutStateExt,
-    http::{Request, StatusCode, HeaderValue, Response},
+    body::{Bytes, self, Full, Empty},
+    http::{StatusCode, HeaderValue, Response},
     response::IntoResponse,
-    routing::{get, get_service, post},
+    routing::{get, post},
     Router, extract::Path,
 };
 use reqwest::header;
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
-use tower::{ServiceExt, ServiceBuilder};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tower::{ServiceBuilder};
 use tower_http::{
-    services::{ServeDir, ServeFile},
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,
 };
-use state::{AppState, CurrentCallTree};
-use tail2::symbolication::elf::ElfCache;
+use state::ServerState;
 
+
+pub mod error;
 pub mod routes;
 pub mod state;
 pub use state::notifiable::Notifiable;
 
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/flamegraph");
-
-async fn handle_error(_err: io::Error) -> impl IntoResponse {
-    (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong...")
-}
 
 #[tokio::main]
 async fn main() {
@@ -56,12 +50,14 @@ async fn main() {
         .compression();
 
     let app = Router::new()
+        .route("/agent/start_probe", get(routes::agents::start_probe))
+        .route("/agent/stop_probe", get(routes::agents::stop_probe))
+        .route("/agent/halt", get(routes::agents::halt))
         .route("/agents", get(routes::agents::agents))
-        .route("/start", get(routes::agents::start))
         .route("/current", get(routes::api::current))
         .route("/stack", post(routes::ingest::stack))
         .route("/events", get(routes::api::events))
-        .route("/connect", get(routes::agents::connect))
+        .route("/connect", get(routes::agents::on_connect))
 
         .route("/*path", get(static_path))
         .route("/app", get(|| static_path(Path("/app.html".to_owned()))))
@@ -70,7 +66,7 @@ async fn main() {
         .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()))))
 
         .layer(middleware)
-        .with_state(Arc::new(AppState::new()));
+        .with_state(Arc::new(ServerState::new()));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     tracing::debug!("listening on {}", addr);

@@ -1,27 +1,35 @@
-use tail2::client::agent_config::AgentConfig;
 use tokio::sync::{Mutex, Notify};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde::Serialize;
+
 use tail2::calltree::CallTree;
-use tail2::{calltree::inner::CallTreeInner, dto::FrameDto, symbolication::elf::ElfCache};
+use tail2::{calltree::inner::CallTreeInner, symbolication::elf::ElfCache};
 
 use crate::Notifiable;
 
 pub mod notifiable;
+pub mod agent_state;
 
-pub struct AppState {
-    pub agents: Arc<Mutex<HashMap<String, Notifiable<AgentConfig>>>>,
+pub use agent_state::Tail2Agent;
+
+pub struct ServerState {
+    pub agents: Arc<Mutex<HashMap<String, Tail2Agent>>>,
     pub calltree: Notifiable<CurrentCallTree>,
 }
 
-impl AppState {
+impl ServerState {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(Mutex::new(HashMap::new())),
             calltree: Notifiable::<CurrentCallTree>::new(CurrentCallTree::new()),
         }
+    }
+}
+
+impl Default for ServerState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -33,7 +41,7 @@ pub struct CurrentCallTree {
 impl CurrentCallTree {
     pub fn new() -> Self {
         let ct = Arc::new(Mutex::new(CallTreeInner::new()));
-        let changed = Arc::new(Notify::new());
+        let _changed = Arc::new(Notify::new());
         let syms = Arc::new(Mutex::new(ElfCache::new()));
         Self { ct, syms }
     }
