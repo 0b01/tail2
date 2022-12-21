@@ -22,7 +22,7 @@ impl Tail2Config {
 
     pub fn from_path(path: &str) -> Result<Self> {
         let current_dir = std::env::current_dir().context("unable to get current dir")?;
-        let mut config_file = File::open(path).with_context(move || format!("Tail2.toml not found in {:?}", current_dir))?;
+        let mut config_file = File::open(path).with_context(move || format!("Tail2.toml not found in {current_dir:?}"))?;
         let mut contents = String::new();
         config_file
             .read_to_string(&mut contents)

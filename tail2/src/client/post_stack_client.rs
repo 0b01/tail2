@@ -8,7 +8,7 @@ use anyhow::Result;
 use reqwest::{Client, StatusCode};
 use tokio::sync::Mutex;
 
-pub struct ApiStackEndpointClient {
+pub struct PostStackClient {
     client: Client,
     url: String,
     batch_size: usize,
@@ -16,7 +16,7 @@ pub struct ApiStackEndpointClient {
     module_cache: Arc<Mutex<ModuleCache>>,
 }
 
-impl ApiStackEndpointClient {
+impl PostStackClient {
     pub fn new(url: &str, module_cache: Arc<Mutex<ModuleCache>>, batch_size: usize) -> Self {
         Self {
             client: reqwest::Client::new(),

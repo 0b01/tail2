@@ -10,8 +10,6 @@ use tokio::sync::Mutex;
 pub struct Processes {
     // TODO: use pid + starttime
     pub processes: HashMap<i32, Box<ProcInfo>>,
-    // TODO: more caching
-    // pub runtime_cache:
     module_cache: Arc<Mutex<ModuleCache>>,
 }
 

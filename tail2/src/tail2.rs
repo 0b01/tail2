@@ -1,31 +1,32 @@
-use std::collections::HashMap;
+
 use std::sync::Arc;
-use std::time::Duration;
+
 use anyhow::Result;
-use aya::programs::perf_attach::PerfLink;
+
 use reqwest::Url;
-use tokio::join;
-use tokio::sync::mpsc::UnboundedSender;
+
+
 use tokio::sync::{Mutex, mpsc};
-use serde::{Serialize, Deserialize};
-use tokio::time::sleep;
-use crate::client::agent_config::{AgentMessage, AgentState, NewConnection};
-use crate::client::run::run_until_exit;
-use crate::probes::Probe;
+
+
+use crate::client::ws_client::{WsAgent};
+use crate::client::ws_client::messages::{AgentMessage, NewConnection};
+
+
 use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
 
-use crate::{client::api_client::ApiStackEndpointClient, config::Tail2Config};
+use crate::{client::PostStackClient, config::Tail2Config};
 
-use futures_util::{future, pin_mut, StreamExt, SinkExt};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use futures_util::{StreamExt, SinkExt};
+
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 pub struct Tail2 {
     pub bpf: Arc<Mutex<aya::Bpf>>,
     pub config: Tail2Config,
-    pub cli: Arc<Mutex<ApiStackEndpointClient>>,
+    pub cli: Arc<Mutex<PostStackClient>>,
     pub module_cache: Arc<Mutex<ModuleCache>>,
-    probes: Arc<Mutex<AgentState>>,
+    probes: Arc<Mutex<WsAgent>>,
 }
 
 impl Tail2 {
@@ -34,7 +35,7 @@ impl Tail2 {
         let bpf = Arc::new(Mutex::new(bpf_init().await?));
         let config = Tail2Config::new()?;
 
-        let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
+        let cli = Arc::new(Mutex::new(PostStackClient::new(
             &format!("http://{}:{}/stack", config.server.host, config.server.port),
             Arc::clone(&module_cache),
             config.server.batch_size,

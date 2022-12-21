@@ -1,10 +1,10 @@
-use std::sync::Arc;
+
 
 use anyhow::Result;
 use clap::Parser;
 use tracing::info;
-use tail2::Tail2;
-use tokio::sync::Mutex;
+
+
 
 pub mod utils;
 

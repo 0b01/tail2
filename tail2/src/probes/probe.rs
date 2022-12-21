@@ -1,7 +1,7 @@
 use anyhow::Result;
-use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program, Link}, util::online_cpus, Bpf};
+use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program}, util::online_cpus, Bpf};
 use serde::{Deserialize, Serialize};
-use crate::Tail2;
+
 use tracing::{info, error};
 
 use super::Scope;
@@ -32,7 +32,6 @@ impl Probe {
         }
     }
 
-    #[must_use]
     pub fn attach(&self, bpf: &mut Bpf) -> Result<Vec<PerfLink>> {
         let program = self.to_program(bpf);
         match self {
@@ -58,7 +57,7 @@ impl Probe {
                         SamplePolicy::Period(probe.period),
                     )?;
                     let link = program.take_link(link_id)?;
-                    links.push(link.into());
+                    links.push(link);
                 }
                 Ok(links)
             }

@@ -1,9 +1,9 @@
 use anyhow::Context;
-use axum::{response::Result, debug_handler};
+use axum::{response::Result};
 use std::{sync::Arc};
 use axum::{body::Bytes, extract::State};
 
-use crate::{state::{AppState}, error::AppError};
+use crate::{state::{ServerState}, error::AppError};
 
 use tail2::{
     calltree::{inner::CallTreeInner},
@@ -11,7 +11,7 @@ use tail2::{
     Mergeable
 };
 
-pub(crate) async fn stack(State(st): State<Arc<AppState>>, var: Bytes) -> Result<(), AppError> {
+pub(crate) async fn stack(State(st): State<Arc<ServerState>>, var: Bytes) -> Result<(), AppError> {
     // info!("{:#?}", var);
     let st = &st.calltree;
     let var: StackBatchDto = bincode::deserialize(&var).context("cant deserialize")?;

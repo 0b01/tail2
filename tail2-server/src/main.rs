@@ -12,7 +12,7 @@ use tower::{ServiceBuilder};
 use tower_http::{
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,
 };
-use state::AppState;
+use state::ServerState;
 
 
 pub mod error;
@@ -50,8 +50,9 @@ async fn main() {
         .compression();
 
     let app = Router::new()
-        .route("/start_probe", get(routes::agents::start_probe))
-        .route("/stop_probe", get(routes::agents::stop_probe))
+        .route("/agent/start_probe", get(routes::agents::start_probe))
+        .route("/agent/stop_probe", get(routes::agents::stop_probe))
+        .route("/agent/halt", get(routes::agents::halt))
         .route("/agents", get(routes::agents::agents))
         .route("/current", get(routes::api::current))
         .route("/stack", post(routes::ingest::stack))
@@ -65,7 +66,7 @@ async fn main() {
         .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()))))
 
         .layer(middleware)
-        .with_state(Arc::new(AppState::new()));
+        .with_state(Arc::new(ServerState::new()));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     tracing::debug!("listening on {}", addr);

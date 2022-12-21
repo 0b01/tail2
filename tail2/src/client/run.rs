@@ -8,7 +8,7 @@ use nix::sys::ptrace;
 use nix::unistd::{getuid, Pid};
 
 use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
-use crate::Tail2;
+
 use std::os::unix::prelude::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -36,7 +36,7 @@ use tokio::sync::Mutex;
 
 use crate::processes::Processes;
 
-use super::api_client::ApiStackEndpointClient;
+use super::post_stack_client::PostStackClient;
 
 pub(crate) async fn open_and_subcribe(
     bpf: Arc<Mutex<Bpf>>,
@@ -84,7 +84,7 @@ pub(crate) async fn open_and_subcribe(
 
 pub(crate) async fn run_bpf(
     bpf: Arc<Mutex<Bpf>>,
-    cli: Arc<Mutex<ApiStackEndpointClient>>,
+    cli: Arc<Mutex<PostStackClient>>,
     stop_rx: watch::Receiver<()>,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<Vec<JoinHandle<()>>> {
@@ -180,7 +180,7 @@ pub fn get_pid_child(
         (None, Some(cmd)) => {
             info!("Launching child process: `{:?}`", cmd);
             let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
-            let path = PathBuf::from(cmd_split.next().unwrap().to_owned());
+            let path = PathBuf::from(cmd_split.next().unwrap());
             let mut cmd = Command::new(path);
             let cmd = cmd.args(cmd_split);
 
@@ -200,7 +200,7 @@ pub fn get_pid_child(
                 Err(e) => panic!("{}", e.to_string()),
             }
         }
-        (Some(pid), None) => (Some(pid as u32), None),
+        (Some(pid), None) => (Some(pid), None),
         (Some(_), Some(_)) => panic!("supply one of --pid, --command"),
     }
 }
@@ -229,9 +229,9 @@ pub enum RunUntil {
 
 pub async fn run_until_exit(
     bpf: Arc<Mutex<Bpf>>,
-    cli: Arc<Mutex<ApiStackEndpointClient>>,
+    cli: Arc<Mutex<PostStackClient>>,
     module_cache: Arc<Mutex<ModuleCache>>,
-    mut run_until: RunUntil,
+    run_until: RunUntil,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<()> {
     let (stop_tx, stop_rx) =
@@ -287,25 +287,6 @@ async fn proc_refresh_inner(
             pid_info.insert(*pid as u32, nfo, 0).unwrap();
         }
     }
-}
-
-pub(crate) async fn proc_refresh_once(
-    bpf: Arc<Mutex<Bpf>>,
-    module_cache: Arc<Mutex<ModuleCache>>,
-) -> Result<()> {
-    let bpf = &mut *bpf.lock().await;
-    let pid_info: HashMap<_, u32, ProcInfo> =
-        HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
-    // HACK: extend lifetime to 'static
-    let mut pid_info = unsafe {
-        std::mem::transmute::<
-            HashMap<&mut MapData, u32, ProcInfo>,
-            HashMap<&'static mut MapData, u32, ProcInfo>,
-        >(pid_info)
-    };
-
-    proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
-    Ok(())
 }
 
 // TODO: don't refresh, listen to mmap and execve calls

@@ -13,9 +13,9 @@ use std::{convert::Infallible};
 
 
 
-use crate::{state::{AppState}};
+use crate::{state::{ServerState}};
 
-pub(crate) async fn current<'a>(State(ct): State<Arc<AppState>>) -> String {
+pub(crate) async fn current<'a>(State(ct): State<Arc<ServerState>>) -> String {
     let ct = ct.calltree.inner.ct.lock().await;
     let node = Node::new(ct.root, &ct.arena);
 
@@ -24,7 +24,7 @@ pub(crate) async fn current<'a>(State(ct): State<Arc<AppState>>) -> String {
 
 use async_stream::{try_stream, AsyncStream};
 
-pub(crate) async fn events(State(ct): State<Arc<AppState>>) -> impl IntoResponse {
+pub(crate) async fn events(State(ct): State<Arc<ServerState>>) -> impl IntoResponse {
     let changed = ct.calltree.changed.clone();
     changed.notify_one();
     let stream = try_stream! {
