@@ -1,5 +1,5 @@
 use anyhow::Result;
-use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program, Link}, util::online_cpus};
+use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program, Link}, util::online_cpus, Bpf};
 use serde::{Deserialize, Serialize};
 use crate::Tail2;
 use tracing::{info, error};
@@ -25,34 +25,15 @@ pub enum Probe {
 }
 
 impl Probe {
-    pub fn to_program<'a>(&'a self, state: &'a mut Tail2) -> &mut Program {
+    pub fn to_program<'a>(&'a self, bpf: &'a mut Bpf) -> &mut Program {
         match self {
-            Probe::Perf(_) => state.bpf.program_mut("capture_stack").unwrap(),
-            Probe::Uprobe(_) => state.bpf.program_mut("malloc_enter").unwrap(),
+            Probe::Perf(_) => bpf.program_mut("capture_stack").unwrap(),
+            Probe::Uprobe(_) => bpf.program_mut("malloc_enter").unwrap(),
         }
     }
-    pub fn detach(&self, state: &mut Tail2, links: Vec<PerfLink>) -> Result<()> {
-        let program = self.to_program(state);
-        match self {
-            Probe::Perf(_) => {
-                let program: &mut PerfEvent = program.try_into().unwrap();
-                for link in links {
-                    program.detach(link.id());
-                }
-            }
-            Probe::Uprobe(_) => {
-                let program: &mut PerfEvent = program.try_into().unwrap();
-                for link in links {
-                    program.detach(link.id());
-                }
-            }
-        }
 
-        Ok(())
-    }
-
-    pub fn attach(&self, state: &mut Tail2) -> Result<Vec<PerfLink>> {
-        let program = self.to_program(state);
+    pub fn attach(&self, bpf: &mut Bpf) -> Result<Vec<PerfLink>> {
+        let program = self.to_program(bpf);
         match self {
             Probe::Perf(probe) => {
                 let program: &mut PerfEvent = program.try_into().unwrap();
@@ -60,7 +41,6 @@ impl Probe {
                     Ok(_) => {}
                     Err(e) => {
                         error!("{}", e.to_string());
-                        panic!();
                     }
                 }
 

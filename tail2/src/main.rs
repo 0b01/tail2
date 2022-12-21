@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     let t2 = tail2::Tail2::new().await?;
     match opt.command {
         Some(cmd) => cmd.run(t2).await.unwrap(),
-        None => Tail2::run_agent(Arc::new(Mutex::new(t2))).await?,
+        None => t2.run_agent().await?,
     }
 
     info!("tail2 exiting");

@@ -85,8 +85,8 @@ impl Commands {
                     period,
                 });
 
-                let _links = probe.attach(&mut t2)?;
-                run_until_exit(&mut t2, child, None).await?;
+                let _links = probe.attach(&mut*t2.bpf.lock().await)?;
+                run_until_exit(t2.bpf, t2.cli, t2.module_cache, child, None).await?;
             }
             Commands::Uprobe {
                 pid,
@@ -103,8 +103,8 @@ impl Commands {
                     uprobe,
                 });
 
-                let _links = probe.attach(&mut t2)?;
-                run_until_exit(&mut t2, child, None).await?;
+                let _links = probe.attach(&mut *t2.bpf.lock().await)?;
+                run_until_exit(t2.bpf, t2.cli, t2.module_cache, child, None).await?;
             }
         }
 

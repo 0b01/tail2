@@ -36,14 +36,16 @@ use tokio::sync::Mutex;
 
 use crate::processes::Processes;
 
-pub(crate) fn open_and_subcribe(
-    state: &mut Tail2,
+use super::api_client::ApiStackEndpointClient;
+
+pub(crate) async fn open_and_subcribe(
+    bpf: Arc<Mutex<Bpf>>,
     tx: mpsc::Sender<BpfSample>,
     stop_rx: watch::Receiver<()>,
     ts: &mut Vec<JoinHandle<()>>,
 ) {
     // open bpf maps
-    let mut stacks = AsyncPerfEventArray::try_from(state.bpf.take_map("STACKS").unwrap()).unwrap();
+    let mut stacks = AsyncPerfEventArray::try_from(bpf.lock().await.take_map("STACKS").unwrap()).unwrap();
 
     // listen to bpf perf buf, send stacks to tx
     for cpu_id in online_cpus().unwrap() {
@@ -80,32 +82,37 @@ pub(crate) fn open_and_subcribe(
     }
 }
 
-pub(crate) fn run_bpf(
-    state: &mut Tail2,
+pub(crate) async fn run_bpf(
+    bpf: Arc<Mutex<Bpf>>,
+    cli: Arc<Mutex<ApiStackEndpointClient>>,
     stop_rx: watch::Receiver<()>,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<Vec<JoinHandle<()>>> {
+    info!("run_bpf");
     // send device info
-    let mut config: HashMap<_, u32, u64> =
-        HashMap::try_from(state.bpf.map_mut("CONFIG").unwrap()).unwrap();
-    let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-    config
-        .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
-        .unwrap();
-    config
-        .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
-        .unwrap();
+    {
+        let bpf_ = &mut *bpf.lock().await;
+        let mut config: HashMap<_, u32, u64> =
+            HashMap::try_from(bpf_.take_map("CONFIG").unwrap()).unwrap();
+        let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
+        config
+            .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
+            .unwrap();
+        config
+            .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
+            .unwrap();
+    }
 
     let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
 
     let kernel_stacks =
-        StackTraceMap::try_from(state.bpf.take_map("KERNEL_STACKS").unwrap()).unwrap();
+        StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap();
     let ksyms = aya::util::kernel_symbols().unwrap();
 
     // receiver thread
     let mut ts = vec![];
     let mut total_time = Duration::new(0, 0);
-    let cli = Arc::clone(&state.cli);
+    let cli = Arc::clone(&cli);
     let t = tokio::spawn(async move {
         let mut c = 0;
         while let Some(st) = rx.recv().await {
@@ -137,7 +144,7 @@ pub(crate) fn run_bpf(
     });
     ts.push(t);
 
-    open_and_subcribe(state, tx, stop_rx, &mut ts);
+    open_and_subcribe(bpf, tx, stop_rx, &mut ts).await;
 
     Ok(ts)
 }
@@ -228,21 +235,23 @@ pub async fn bpf_init() -> Result<Bpf> {
 }
 
 pub async fn run_until_exit(
-    state: &mut Tail2,
+    bpf: Arc<Mutex<Bpf>>,
+    cli: Arc<Mutex<ApiStackEndpointClient>>,
+    module_cache: Arc<Mutex<ModuleCache>>,
     child: Option<Child>,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<()> {
     // for awaiting Ctrl-C signal
     let (stop_tx, stop_rx) = watch::channel(());
     if child.is_some() {
-        proc_refresh_once(state)
+        proc_refresh_once(bpf.clone(), module_cache)
             .await
             .unwrap();
     } else {
-        spawn_proc_refresh(state, stop_rx.clone()).await;
+        spawn_proc_refresh(bpf.clone(), module_cache, stop_rx.clone()).await;
     }
 
-    let tasks = run_bpf(state, stop_rx, output_tx)?;
+    let tasks = run_bpf(bpf.clone(), cli, stop_rx, output_tx).await?;
 
     if let Some(mut c) = child {
         info!("resuming child");
@@ -260,7 +269,7 @@ pub async fn run_until_exit(
     for t in tasks {
         let _ = tokio::join!(t);
     }
-    print_stats(state).await?;
+    print_stats(bpf).await?;
 
     Ok(())
 }
@@ -281,9 +290,13 @@ async fn proc_refresh_inner(
     }
 }
 
-pub(crate) async fn proc_refresh_once(state: &mut Tail2) -> Result<()> {
+pub(crate) async fn proc_refresh_once(
+    bpf: Arc<Mutex<Bpf>>,
+    module_cache: Arc<Mutex<ModuleCache>>,
+) -> Result<()> {
+    let bpf = &mut *bpf.lock().await;
     let pid_info: HashMap<_, u32, ProcInfo> =
-        HashMap::try_from(state.bpf.map_mut("PIDS").unwrap()).unwrap();
+        HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
     let mut pid_info = unsafe {
         std::mem::transmute::<
@@ -292,14 +305,15 @@ pub(crate) async fn proc_refresh_once(state: &mut Tail2) -> Result<()> {
         >(pid_info)
     };
 
-    proc_refresh_inner(&mut pid_info, state.module_cache.clone()).await;
+    proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
     Ok(())
 }
 
 // TODO: don't refresh, listen to mmap and execve calls
-pub(crate) async fn spawn_proc_refresh(state: &mut Tail2, mut stop_rx: Receiver<()>) {
+pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, module_cache: Arc<Mutex<ModuleCache>>, mut stop_rx: Receiver<()>) {
+    let bpf = &mut *bpf.lock().await;
     let pid_info: HashMap<_, u32, ProcInfo> =
-        HashMap::try_from(state.bpf.map_mut("PIDS").unwrap()).unwrap();
+        HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
     let mut pid_info = unsafe {
         std::mem::transmute::<
@@ -308,10 +322,10 @@ pub(crate) async fn spawn_proc_refresh(state: &mut Tail2, mut stop_rx: Receiver<
         >(pid_info)
     };
 
-    proc_refresh_inner(&mut pid_info, Arc::clone(&state.module_cache)).await;
+    proc_refresh_inner(&mut pid_info, Arc::clone(&module_cache)).await;
 
     // refresh pid info table
-    let module_cache = Arc::clone(&state.module_cache);
+    let module_cache = Arc::clone(&module_cache);
     tokio::spawn(async move {
         loop {
             proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
@@ -338,9 +352,10 @@ pub(crate) fn load_bpf() -> Result<Bpf> {
     Ok(bpf)
 }
 
-pub(crate) async fn print_stats(state: &mut Tail2) -> Result<()> {
+pub(crate) async fn print_stats(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
+    let bpf = &mut *bpf.lock().await;
     let info: HashMap<_, u32, u64> =
-        HashMap::try_from(state.bpf.map("RUN_STATS").context("no such map")?)?;
+        HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
     info!(
         "Sent: {} stacks",
         info.get(&(RunStatsKey::SentStackCount as u32), 0)?

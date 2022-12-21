@@ -4,9 +4,11 @@ use serde::{Serialize, Deserialize, ser::{SerializeMap, SerializeSeq}};
 use tokio::sync::{mpsc::UnboundedSender, Mutex};
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
-use aya::programs::perf_attach::PerfLink;
+use aya::{programs::perf_attach::PerfLink, Bpf};
 
-use crate::{probes::Probe, Tail2, client::run::run_until_exit};
+use crate::{probes::Probe, Tail2, client::run::run_until_exit, symbolication::module_cache::ModuleCache};
+
+use super::api_client::ApiStackEndpointClient;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ProbeInfo {
@@ -66,13 +68,40 @@ pub struct NewConnection {
     pub name: String,
 }
 
-#[derive(Default)]
+// TODO: currently dropping PerfLink is broken, alessandrod will change to PerfEventLink
+pub struct ProbeLinks {
+    links: Vec<PerfLink>,
+}
+
 pub struct AgentProbeState {
-    attached: HashMap<Probe, Vec<PerfLink>>,
+    attached: HashMap<Probe, ProbeLinks>,
+    is_task_running: bool,
 }
 
 impl AgentProbeState {
-    pub async fn on_new_msg(&mut self, diff: AgentMessage, tx: UnboundedSender<AgentMessage>, tail2: Arc<Mutex<Tail2>>) {
+    pub fn new() -> Self {
+        Self {
+            attached: Default::default(),
+            is_task_running: false,
+        }
+    }
+}
+
+impl Default for AgentProbeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AgentProbeState {
+    pub async fn on_new_msg(
+        &mut self,
+        diff: AgentMessage,
+        tx: UnboundedSender<AgentMessage>,
+        bpf: Arc<Mutex<Bpf>>,
+        cli: Arc<Mutex<ApiStackEndpointClient>>,
+        module_cache: Arc<Mutex<ModuleCache>>,
+    ) {
         match &diff {
             AgentMessage::AddProbe { probe } => {
                 if self.attached.contains_key(&probe) {
@@ -82,14 +111,22 @@ impl AgentProbeState {
                     return;
                 }
 
-                let mut tail2 = tail2.lock().await;
-                let links = probe.attach(&mut tail2).unwrap();
-                self.attached.insert(probe.clone(), links);
+                let links = probe.attach(&mut *bpf.lock().await).unwrap();
+                self.attached.insert(probe.clone(), ProbeLinks { links });
                 info!("Probe attached: {:?}", &probe);
+
+                if !self.is_task_running {
+                    tokio::spawn(
+                        run_until_exit(
+                            bpf,
+                            cli,
+                            module_cache,
+                            None,
+                            None)
+                    );
+                }
+
                 tx.send(diff).unwrap();
-                // tokio::spawn(async move {
-                    run_until_exit(&mut tail2, None, None).await.unwrap();
-                // });
             }
             AgentMessage::StopProbe { probe } => {
                 if !self.attached.contains_key(&probe) {
@@ -99,9 +136,8 @@ impl AgentProbeState {
                     return;
                 }
 
-                let mut tail2 = tail2.lock().await;
                 let links = self.attached.remove(probe).unwrap();
-                probe.detach(&mut tail2, links);
+                drop(links);
 
                 info!("Probe detached: {:?}", &probe);
                 tx.send(diff).unwrap();

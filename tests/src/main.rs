@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
             let pid = get_pid_child(pid, command, &mut child);
 
             let (tx, mut rx) = mpsc::channel(10);
-            let mut state = Tail2::new().await?;
+            let state = Tail2::new().await?;
 
             let probe = Probe::Uprobe(UprobeProbe {
                 scope: match pid {
@@ -29,9 +29,9 @@ async fn main() -> Result<()> {
                 },
                 uprobe,
             });
-            probe.attach(&mut state).unwrap();
+            probe.attach(&mut *state.bpf.lock().await).unwrap();
             // attach_uprobe(&mut state, &uprobe, pid).await?;
-            run_until_exit(&mut state, child, Some(tx)).await?;
+            run_until_exit(state.bpf, state.cli, state.module_cache, child, Some(tx)).await?;
             println!("{:?}", rx.recv().await.unwrap());
             println!("{:?}", rx.recv().await.unwrap());
         }

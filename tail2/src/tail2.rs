@@ -10,6 +10,7 @@ use tokio::sync::{Mutex, mpsc};
 use serde::{Serialize, Deserialize};
 use tokio::time::sleep;
 use crate::client::agent_config::{AgentMessage, AgentProbeState, NewConnection};
+use crate::client::run::run_until_exit;
 use crate::probes::Probe;
 use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
 
@@ -20,7 +21,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 pub struct Tail2 {
-    pub bpf: aya::Bpf,
+    pub bpf: Arc<Mutex<aya::Bpf>>,
     pub config: Tail2Config,
     pub cli: Arc<Mutex<ApiStackEndpointClient>>,
     pub module_cache: Arc<Mutex<ModuleCache>>,
@@ -30,7 +31,7 @@ pub struct Tail2 {
 impl Tail2 {
     pub async fn new() -> Result<Self> {
         let module_cache = Arc::new(Mutex::new(ModuleCache::new()));
-        let bpf = bpf_init().await?;
+        let bpf = Arc::new(Mutex::new(bpf_init().await?));
         let config = Tail2Config::new()?;
 
         let cli = Arc::new(Mutex::new(ApiStackEndpointClient::new(
@@ -43,26 +44,33 @@ impl Tail2 {
         Ok(Self { bpf, config, cli, module_cache, probe_state })
     }
 
-    pub async fn run_agent(tail2: Arc<Mutex<Self>>) -> Result<()> {
+    pub async fn run_agent(&self) -> Result<()> {
         let new_connection = NewConnection {
             name: "Test".to_owned(), // TODO:
         };
 
-        let t2 = tail2.lock().await;
-
         let payload = serde_qs::to_string(&new_connection)?;
-        let connect_addr = format!("ws://{}:{}/connect?{}", t2.config.server.host, t2.config.server.port, payload);
+        let connect_addr = format!("ws://{}:{}/connect?{}", self.config.server.host, self.config.server.port, payload);
         let url = Url::parse(&connect_addr).unwrap();
 
         let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<AgentMessage>();
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
         let (mut write, mut read) = ws_stream.split();
-        let probes = t2.probe_state.clone();
-        drop(t2);
+
+        let bpf = self.bpf.clone();
+        let cli = self.cli.clone();
+        let module_cache = self.module_cache.clone();
+        let probe_state = self.probe_state.clone();
         let t = tokio::spawn(async move {
             while let Some(Ok(Message::Text(msg))) = read.next().await {
                 let diff: AgentMessage = serde_json::from_str(&msg).unwrap();
-                probes.lock().await.on_new_msg(diff, ws_tx.clone(), tail2.clone()).await
+                probe_state.clone().lock().await.on_new_msg(
+                    diff,
+                    ws_tx.clone(),
+                    bpf.clone(),
+                    cli.clone(),
+                    module_cache.clone(),
+                ).await
             }
         });
 
