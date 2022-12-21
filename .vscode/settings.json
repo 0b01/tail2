@@ -13,5 +13,15 @@
     "string_view": "cpp",
     "initializer_list": "cpp",
     "regex": "cpp"
-  }
+  },
+  "rust-analyzer.cargo.features": [
+    "aarch64",
+  ],
+  "rust-analyzer.checkOnSave.allTargets": false,
+  "rust-analyzer.cargo.noDefaultFeatures": true,
+  "rust-analyzer.checkOnSave.features": [
+    "aarch64"
+  ],
+  "rust-analyzer.checkOnSave.noDefaultFeatures": true,
+  "editor.fontLigatures": true,
 }
