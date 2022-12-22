@@ -47,7 +47,7 @@ impl Tail2 {
 
     pub async fn run_agent(&self) -> Result<()> {
         let new_connection = NewConnection {
-            name: "Test".to_owned(), // TODO:
+            name: gethostname::gethostname().to_string_lossy().to_string(),
         };
 
         let payload = serde_qs::to_string(&new_connection)?;

@@ -60,11 +60,10 @@ async fn main() {
         .route("/events", get(routes::api::events))
         .route("/connect", get(routes::agents::on_connect))
 
-        .route("/*path", get(static_path))
-        .route("/app", get(|| static_path(Path("/app.html".to_owned()))))
-        .route("/", get(|| static_path(Path("/index.html".to_owned()))))
-        .route("/dashboard", get(|| static_path(Path("/dashboard.html".to_owned()))))
-        .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()))))
+        .route("/flamegraph/*path", get(|p|static_path(p, "flamegraph")))
+        .route("/app", get(|| static_path(Path("/app.html".to_owned()), "flamegraph")))
+        .route("/", get(|| static_path(Path("/index.html".to_owned()), "flamegraph")))
+        .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()), "flamegraph")))
 
         .layer(middleware)
         .with_state(Arc::new(ServerState::new()));
@@ -77,14 +76,15 @@ async fn main() {
         .unwrap();
 }
 
-async fn static_path(Path(path): Path<String>) -> impl IntoResponse {
+async fn static_path(Path(path): Path<String>, prefix: &str) -> impl IntoResponse {
     let path = path.trim_start_matches('/');
     let mime_type = mime_guess::from_path(path).first_or_text_plain();
 
     #[cfg(not(feature="deploy"))]
     {
         use std::{path::PathBuf, fs::File, io::Read};
-        let path = PathBuf::from(format!("./tail2-server/static/{}", path)).canonicalize().unwrap();
+        dbg!(path);
+        let path = PathBuf::from(format!("./tail2-server/static/{}/{}", prefix, path)).canonicalize().unwrap();
         debug!("{path:?}");
         if path.exists() {
             let mut buf = String::new();
