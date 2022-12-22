@@ -60,9 +60,10 @@ async fn main() {
         .route("/events", get(routes::api::events))
         .route("/connect", get(routes::agents::on_connect))
 
+        .route("/landing/*path", get(|p|static_path(p, "landing")))
         .route("/flamegraph/*path", get(|p|static_path(p, "flamegraph")))
         .route("/app", get(|| static_path(Path("/app.html".to_owned()), "flamegraph")))
-        .route("/", get(|| static_path(Path("/index.html".to_owned()), "flamegraph")))
+        .route("/", get(|| static_path(Path("/index.html".to_owned()), "landing")))
         .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()), "flamegraph")))
 
         .layer(middleware)
@@ -87,8 +88,8 @@ async fn static_path(Path(path): Path<String>, prefix: &str) -> impl IntoRespons
         let path = PathBuf::from(format!("./tail2-server/static/{}/{}", prefix, path)).canonicalize().unwrap();
         debug!("{path:?}");
         if path.exists() {
-            let mut buf = String::new();
-            File::open(path).unwrap().read_to_string(&mut buf).unwrap();
+            let mut buf = vec![];
+            File::open(path).unwrap().read_to_end(&mut buf).unwrap();
             Response::builder()
                 .status(StatusCode::OK)
                 .header(

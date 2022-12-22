@@ -29,6 +29,8 @@ tail2-server/static/*
 !tail2-server/static/.gitkeep
 tail2-server/static/flamegraph/*
 !tail2-server/static/flamegraph/.gitkeep
+tail2-server/static/landing/*
+!tail2-server/static/landing/.gitkeep
 a.out
 out
 __pycache__/
