@@ -42,36 +42,37 @@ const Header: NextComponentType = () => {
             <div className="container mx-auto px-10 border-b border-gray-800">
                 <div className='text-center'>
                     <div>
-                        <h2 className='text-3xl md:text-4xl lg:text-6xl font-bold header-color w-3/4 mx-auto my-5'>Keep track of every important detail</h2>
-                        <p className='text-color my-5 w-2/4 mx-auto text-sm md:text-lg lg:text-lg'>Every feature in Open PRO makes things easy to build, pleasant to create, and simple to manage.</p>
+                        <h2 className='text-3xl md:text-4xl lg:text-6xl font-bold header-color w-3/4 mx-auto my-5'>Ambient Profiling Made Easy</h2>
+                        <p className='text-color my-5 w-2/4 mx-auto text-sm md:text-lg lg:text-lg'>Understand the runtime behavior of your app, optimize performance and resolve issues quickly and easily with tail2.</p>
                     </div>
                     <div style={imageContainerStyles}>
                         <Image src={HeaderImg} />
                     </div>
                     <div>
                         <h2 className='text-lg md:text-2xl lg:text-4xl font-bold header-color w-2/4 mx-auto mt-10 mb-5'>
-                            Integrated workflow designed for product teams
+                            The Always-On Profiler
                         </h2>
                         <p className='text-color my-5 w-2/4 mx-auto text-sm md:text-lg lg:text-lg'>
-                            Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit laborum — semper quis lectus nulla.
+                            Profile all layers of your stack, all the time with so little overhead. No code change required.
                         </p>
                     </div>
                 </div>
-                {/* Counter */}
-                <div className='grid md:grid-cols-1 lg:grid-cols-3 gap-5 p-5 box-bg text-center my-20'>
+
+                {/* <div className='grid md:grid-cols-1 lg:grid-cols-3 gap-5 p-5 box-bg text-center my-20'>
                     <div className='py-5 lg:border-r lg:border-gray-700'>
-                        <h3 className='text-3xl lg:text-5xl font-bold main-color my-2'>179K</h3>
-                        <p className='text-color text-sm md:text-lg w-3/4 mx-auto'>Lorem ipsum is placeholder text commonly used.</p>
+                        <h3 className='text-3xl lg:text-5xl font-bold main-color my-2'>0</h3>
+                        <p className='text-color text-sm md:text-lg w-3/4 mx-auto'>No code change required. Simply deploy the agent and receive stacks.</p>
                     </div>
                     <div className='py-5 border-r border-gray-700'>
-                        <h3 className='text-3xl lg:text-5xl font-bold main-color my-2'>147%</h3>
-                        <p className='text-color text-sm md:text-lg w-3/4 mx-auto'>Lorem ipsum is placeholder text commonly used.</p>
+                        <h3 className='text-3xl lg:text-5xl font-bold main-color my-2'>1ms</h3>
+                        <p className='text-color text-sm md:text-lg w-3/4 mx-auto'>Time to </p>
                     </div>
                     <div className='py-5'>
-                        <h3 className='text-3xl lg:text-5xl font-bold main-color my-2'>$97K</h3>
-                        <p className='text-color text-sm md:text-lg w-3/4 mx-auto'>Lorem ipsum is placeholder text commonly used.</p>
+                        <h3 className='text-3xl lg:text-5xl font-bold main-color my-2'>&lt;1%</h3>
+                        <p className='text-color text-sm md:text-lg w-3/4 mx-auto'>CPU used by tail2 when running in production</p>
                     </div>
-                </div>
+                </div> */}
+
             </div>
             <div className='absolute top-0 right-0 -z-10'>
                 <RightSvg />

@@ -239,7 +239,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
       return ret;
     };
 
-    const evtSource = new EventSource("/events");
+    const evtSource = new EventSource("/api/events");
     console.log(evtSource);
     evtSource.onmessage = (event) => {
       this.loadProfile(load);
@@ -249,7 +249,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
 
   loadFromApi(url?: string) {
     var load = async () => {
-      let f = await fetch(url ?? "/current");
+      let f = await fetch(url ?? "/api/current");
       let j: CallTree = await f.json();
       let profile = convert(j);
       console.log(profile);
@@ -260,7 +260,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
       return ret;
     };
 
-    const evtSource = new EventSource("/events");
+    const evtSource = new EventSource("/api/events");
     console.log(evtSource);
     evtSource.onmessage = (event) => {
       console.log(event);

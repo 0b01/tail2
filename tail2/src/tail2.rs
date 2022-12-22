@@ -36,7 +36,7 @@ impl Tail2 {
         let config = Tail2Config::new()?;
 
         let cli = Arc::new(Mutex::new(PostStackClient::new(
-            &format!("http://{}:{}/stack", config.server.host, config.server.port),
+            &format!("http://{}:{}/api/stack", config.server.host, config.server.port),
             Arc::clone(&module_cache),
             config.server.batch_size,
         )));
@@ -51,7 +51,7 @@ impl Tail2 {
         };
 
         let payload = serde_qs::to_string(&new_connection)?;
-        let connect_addr = format!("ws://{}:{}/connect?{}", self.config.server.host, self.config.server.port, payload);
+        let connect_addr = format!("ws://{}:{}/api/connect?{}", self.config.server.host, self.config.server.port, payload);
         let url = Url::parse(&connect_addr).unwrap();
 
         let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<AgentMessage>();

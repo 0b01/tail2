@@ -17,16 +17,16 @@ const Navbar = () => {
                                     <a className='text-sm md:text-base'>Home</a>
                                 </Link>
                             </li>
-                            <li className='text-color font-semibold cursor-pointer'>
+                            {/* <li className='text-color font-semibold cursor-pointer'>
                                 <Link href="/pricing">
                                     <a className='text-sm md:text-base'>Pricing</a>
                                 </Link>
-                            </li>
-                            <li className='text-color font-semibold cursor-pointer'>
+                            </li> */}
+                            {/* <li className='text-color font-semibold cursor-pointer'>
                                 <Link href="/blog">
                                     <a className='text-sm md:text-base'>Blog</a>
                                 </Link>
-                            </li>
+                            </li> */}
                             <li className='text-color font-semibold cursor-pointer'>
                                 <Link href="/contact">
                                     <a className='text-sm md:text-base'>Contact</a>
@@ -40,12 +40,12 @@ const Navbar = () => {
                         </ul>
                     </div>
                     <div className='hidden md:flex items-center gap-5'>
-                        <Link href="/auth/sign-in">
+                        {/* <Link href="/auth/sign-in">
                             <button className='text-main'>Sign In</button>
                         </Link>
                         <Link href="/auth/sign-up">
                             <button className='bg-main text-white py-2 px-4 rounded-sm'>Sign Up</button>
-                        </Link>
+                        </Link> */}
                     </div>
                 </div>
             </div>
