@@ -6,10 +6,10 @@ import Footer from 'src/components/Footer';
 
 import AccountBalance from './AccountBalance';
 import Wallets from './Wallets';
-import AccountSecurity from './AccountSecurity';
+import AgentCard from './AgentCard';
 import WatchList from './WatchList';
 
-function DashboardCrypto() {
+function Agents() {
   return (
     <>
       <Helmet>
@@ -32,8 +32,10 @@ function DashboardCrypto() {
           <Grid item lg={8} xs={12}>
             <Wallets />
           </Grid> */}
-          <Grid item lg={4} xs={12}>
-            <AccountSecurity />
+          <Grid item lg={12} xs={12}>
+            <Grid container direction={"row"} justifyItems={"flex-start"} alignItems={"flex-start"} spacing={4}>
+              <AgentCard name="test"/>
+            </Grid>
           </Grid>
           <Grid item xs={12}>
             <WatchList />
@@ -45,4 +47,4 @@ function DashboardCrypto() {
   );
 }
 
-export default DashboardCrypto;
+export default Agents;
