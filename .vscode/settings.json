@@ -23,5 +23,5 @@
     "aarch64"
   ],
   "rust-analyzer.checkOnSave.noDefaultFeatures": true,
-  "editor.fontLigatures": true,
+  "editor.fontLigatures": false,
 }

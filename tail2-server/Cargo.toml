@@ -3,6 +3,9 @@ name = "tail2-server"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+deploy = []
+
 [dependencies]
 anyhow = "1.0.66"
 tokio = { version = "1.23", features = ["macros", "rt", "rt-multi-thread", "net", "signal", "sync", "time"] }

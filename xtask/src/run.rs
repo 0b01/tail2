@@ -24,6 +24,8 @@ pub struct Options {
     /// Build only
     #[clap(long)]
     pub build: bool,
+    #[clap(long)]
+    pub deploy: bool,
     /// The command used to wrap your application
     #[clap(short, long, default_value = "sudo -E")]
     pub runner: String,
@@ -33,17 +35,13 @@ pub struct Options {
 }
 
 /// Build the project
-fn build(opts: &Options) -> Result<(), anyhow::Error> {
-    let target = (if cfg!(target_arch = "aarch64") {
-        "aarch64"
-    } else if cfg!(target_arch = "x86_64") {
-        "x86_64"
-    } else {
-        // compile_error!("unsupported target");
-        ""
-    })
-    .to_string();
-    let mut args = vec![
+pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
+    let features = vec![
+        if cfg!(target_arch = "aarch64") { "aarch64" } else if cfg!(target_arch = "x86_64") { "x86_64" } else { "" },
+        if opts.deploy { "deploy" } else { "" },
+    ];
+    let features = format!("{}", features.join(" "));
+    let args = vec![
         "+nightly",
         "build",
         "-p",
@@ -51,11 +49,12 @@ fn build(opts: &Options) -> Result<(), anyhow::Error> {
         "-p",
         "tail2-server",
         "--features",
+        &features,
+        if opts.release { "--release" } else { "" },
     ];
-    args.push(&target);
-    if opts.release {
-        args.push("--release")
-    }
+
+    // dbg!(&args);
+
     let status = Command::new("cargo")
         .args(&args)
         .status()

@@ -1,4 +1,3 @@
-use include_dir::{include_dir, Dir};
 use axum::{
     body::{Bytes, self, Full, Empty},
     http::{StatusCode, HeaderValue, Response},
@@ -7,8 +6,9 @@ use axum::{
     Router, extract::Path,
 };
 use reqwest::header;
+use tracing::debug;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tower::{ServiceBuilder};
+use tower::ServiceBuilder;
 use tower_http::{
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,
 };
@@ -20,7 +20,8 @@ pub mod routes;
 pub mod state;
 pub use state::notifiable::Notifiable;
 
-static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/flamegraph");
+#[cfg(feature="deploy")]
+static STATIC_DIR: include_dir::Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/static");
 
 #[tokio::main]
 async fn main() {
@@ -80,18 +81,45 @@ async fn static_path(Path(path): Path<String>) -> impl IntoResponse {
     let path = path.trim_start_matches('/');
     let mime_type = mime_guess::from_path(path).first_or_text_plain();
 
-    match STATIC_DIR.get_file(path) {
-        None => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(body::boxed(Empty::new()))
-            .unwrap(),
-        Some(file) => Response::builder()
-            .status(StatusCode::OK)
-            .header(
-                header::CONTENT_TYPE,
-                HeaderValue::from_str(mime_type.as_ref()).unwrap(),
-            )
-            .body(body::boxed(Full::from(file.contents())))
-            .unwrap(),
+    #[cfg(not(feature="deploy"))]
+    {
+        use std::{path::PathBuf, fs::File, io::Read};
+        let path = PathBuf::from(format!("./tail2-server/static/{}", path)).canonicalize().unwrap();
+        debug!("{path:?}");
+        if path.exists() {
+            let mut buf = String::new();
+            File::open(path).unwrap().read_to_string(&mut buf).unwrap();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_str(mime_type.as_ref()).unwrap(),
+                )
+                .body(body::boxed(Full::from(buf)))
+                .unwrap()
+        } else {
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(body::boxed(Empty::new()))
+                .unwrap()
+        }
+    }
+
+    #[cfg(feature="deploy")]
+    {
+        match STATIC_DIR.get_file(path) {
+            None => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(body::boxed(Empty::new()))
+                .unwrap(),
+            Some(file) => Response::builder()
+                .status(StatusCode::OK)
+                .header(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_str(mime_type.as_ref()).unwrap(),
+                )
+                .body(body::boxed(Full::from(file.contents())))
+                .unwrap(),
+        }
     }
 }
