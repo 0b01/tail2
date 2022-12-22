@@ -16,7 +16,7 @@ const ErrorSection = () => {
             y: 0,
             opacity: 1,
             transition: {
-                duration: 2
+                duration: 0.66
             }
         }
     }

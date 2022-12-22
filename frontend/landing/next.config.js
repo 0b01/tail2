@@ -2,7 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  distDir: "../../tail2-server/static/landing",
+  images: {
+    loader: 'akamai',
+    path: '/',
+  },
+  basePath: "/landing",
 }
 
 module.exports = nextConfig
