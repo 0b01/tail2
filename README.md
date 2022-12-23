@@ -26,7 +26,6 @@ cargo build
 
 ```bash
 npm run watch
-cargo xtask run -- sample --pid $(pidof parade)
 ```
 
 ## Troubleshooting

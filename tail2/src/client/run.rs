@@ -73,6 +73,7 @@ pub(crate) async fn open_and_subcribe(
                         }
                     },
                     _ = stop_rx2.changed() => {
+                        tracing::error!("stopping");
                         break;
                     },
                 };
@@ -93,7 +94,7 @@ pub(crate) async fn run_bpf(
     {
         let bpf_ = &mut *bpf.lock().await;
         let mut config: HashMap<_, u32, u64> =
-            HashMap::try_from(bpf_.take_map("CONFIG").unwrap()).unwrap();
+            HashMap::try_from(bpf_.map_mut("CONFIG").unwrap()).unwrap();
         let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
         config
             .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)

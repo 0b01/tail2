@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{
     client::{run::{get_pid_child, run_until_exit, RunUntil}},
     processes::Processes,
-    Tail2, probes::{Scope, UprobeProbe, Probe, PerfProbe},
+    Tail2, probes::{Scope, Probe},
 };
 use clap::{Parser, Subcommand};
 use tracing::info;
@@ -75,13 +75,13 @@ impl Commands {
             } => {
                 let (pid, child) = get_pid_child(pid, command);
 
-                let probe = Probe::Perf(PerfProbe {
+                let probe = Probe::Perf{
                     scope: match pid {
-                        Some(pid) => Scope::Pid(pid),
+                        Some(pid) => Scope::Pid {pid},
                         None => Scope::SystemWide,
                     },
                     period,
-                });
+                };
 
                 let _links = probe.attach(&mut*t2.bpf.lock().await)?;
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
@@ -93,13 +93,13 @@ impl Commands {
                 command,
             } => {
                 let (pid, child) = get_pid_child(pid, command);
-                let probe = Probe::Uprobe(UprobeProbe {
+                let probe = Probe::Uprobe{
                     scope: match pid {
-                        Some(pid) => Scope::Pid(pid),
+                        Some(pid) => Scope::Pid{pid},
                         None => Scope::SystemWide,
                     },
                     uprobe,
-                });
+                };
 
                 let _links = probe.attach(&mut *t2.bpf.lock().await)?;
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);

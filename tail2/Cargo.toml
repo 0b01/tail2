@@ -48,6 +48,7 @@ reqwest-eventsource = "0.4.0"
 tokio-tungstenite = "*"
 futures-util = "0.3.25"
 futures-channel = "0.3.25"
+gethostname = "0.4.1"
 
 [features]
 default = ["aya", "aya-log"]

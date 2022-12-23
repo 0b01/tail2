@@ -41,7 +41,7 @@ pub mod messages {
     #[derive(Serialize, Deserialize)]
     pub struct StartAgent {
         pub name: String,
-        pub probe: Option<Probe>,
+        pub probe: String,
     }
 }
 
@@ -94,9 +94,9 @@ impl WsAgent {
                 self.probes.insert(probe.clone(), ProbeLinks { links });
                 info!("Probe attached: {:?}", &probe);
 
-                let (halt_tx, halt_rx) = watch::channel(());
-                self.halt_tx = Some(halt_tx);
                 if !self.is_task_running {
+                    let (halt_tx, halt_rx) = watch::channel(());
+                    self.halt_tx = Some(halt_tx);
                     tokio::spawn(
                         run_until_exit(
                             bpf,
@@ -105,6 +105,7 @@ impl WsAgent {
                             RunUntil::ExternalHalt(halt_rx),
                             None)
                     );
+                    self.is_task_running = true;
                 }
 
                 tx.send(diff).unwrap();
@@ -128,6 +129,7 @@ impl WsAgent {
                     Some(halt_tx) => {
                         halt_tx.send(()).unwrap();
                         tx.send(AgentMessage::Halt).unwrap();
+                        self.probes.clear();
                         self.is_task_running = false;
                     }
                     None => {

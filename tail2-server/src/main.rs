@@ -1,4 +1,3 @@
-use include_dir::{include_dir, Dir};
 use axum::{
     body::{Bytes, self, Full, Empty},
     http::{StatusCode, HeaderValue, Response},
@@ -7,8 +6,9 @@ use axum::{
     Router, extract::Path,
 };
 use reqwest::header;
+use tracing::debug;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tower::{ServiceBuilder};
+use tower::ServiceBuilder;
 use tower_http::{
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,
 };
@@ -20,7 +20,8 @@ pub mod routes;
 pub mod state;
 pub use state::notifiable::Notifiable;
 
-static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/flamegraph");
+#[cfg(feature="deploy")]
+static STATIC_DIR: include_dir::Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/static");
 
 #[tokio::main]
 async fn main() {
@@ -50,20 +51,25 @@ async fn main() {
         .compression();
 
     let app = Router::new()
-        .route("/agent/start_probe", get(routes::agents::start_probe))
-        .route("/agent/stop_probe", get(routes::agents::stop_probe))
-        .route("/agent/halt", get(routes::agents::halt))
-        .route("/agents", get(routes::agents::agents))
-        .route("/current", get(routes::api::current))
-        .route("/stack", post(routes::ingest::stack))
-        .route("/events", get(routes::api::events))
-        .route("/connect", get(routes::agents::on_connect))
+        .route("/api/agent/events", get(routes::agents::agent_events))
+        .route("/api/agent/start_probe", get(routes::agents::start_probe))
+        .route("/api/agent/stop_probe", get(routes::agents::stop_probe))
+        .route("/api/agent/halt", get(routes::agents::halt))
+        .route("/api/agents", get(routes::agents::agents))
+        .route("/api/current", get(routes::api::current))
+        .route("/api/stack", post(routes::ingest::stack))
+        .route("/api/events", get(routes::api::events))
+        .route("/api/connect", get(routes::agents::on_connect))
 
-        .route("/*path", get(static_path))
-        .route("/app", get(|| static_path(Path("/app.html".to_owned()))))
-        .route("/", get(|| static_path(Path("/index.html".to_owned()))))
-        .route("/dashboard", get(|| static_path(Path("/dashboard.html".to_owned()))))
-        .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()))))
+        .route("/dashboard", get(||static_path(Path("index.html".to_owned()), "dashboard")))
+
+        .route("/", get(|| static_path(Path("/index.html".to_owned()), ".")))
+
+        .route("/flamegraph/app.html", get(|| static_path(Path("/app.html".to_owned()), "flamegraph")))
+
+        // wildcards
+        .route("/dashboard/*path", get(|p|static_path(p, "dashboard")))
+        .route("/*path", get(|p|static_path(p, ".")))
 
         .layer(middleware)
         .with_state(Arc::new(ServerState::new()));
@@ -76,22 +82,50 @@ async fn main() {
         .unwrap();
 }
 
-async fn static_path(Path(path): Path<String>) -> impl IntoResponse {
+async fn static_path(Path(path): Path<String>, prefix: &str) -> impl IntoResponse {
     let path = path.trim_start_matches('/');
     let mime_type = mime_guess::from_path(path).first_or_text_plain();
 
-    match STATIC_DIR.get_file(path) {
-        None => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(body::boxed(Empty::new()))
-            .unwrap(),
-        Some(file) => Response::builder()
-            .status(StatusCode::OK)
-            .header(
-                header::CONTENT_TYPE,
-                HeaderValue::from_str(mime_type.as_ref()).unwrap(),
-            )
-            .body(body::boxed(Full::from(file.contents())))
-            .unwrap(),
+    #[cfg(not(feature="deploy"))]
+    {
+        use std::{path::PathBuf, fs::File, io::Read};
+        // dbg!(path);
+        let path = PathBuf::from(format!("./tail2-server/static/{}/{}", prefix, path)).canonicalize().unwrap();
+        debug!("{path:?}");
+        if path.exists() {
+            let mut buf = vec![];
+            File::open(path).unwrap().read_to_end(&mut buf).unwrap();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_str(mime_type.as_ref()).unwrap(),
+                )
+                .body(body::boxed(Full::from(buf)))
+                .unwrap()
+        } else {
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(body::boxed(Empty::new()))
+                .unwrap()
+        }
+    }
+
+    #[cfg(feature="deploy")]
+    {
+        match STATIC_DIR.get_file(path) {
+            None => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(body::boxed(Empty::new()))
+                .unwrap(),
+            Some(file) => Response::builder()
+                .status(StatusCode::OK)
+                .header(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_str(mime_type.as_ref()).unwrap(),
+                )
+                .body(body::boxed(Full::from(file.contents())))
+                .unwrap(),
+        }
     }
 }
