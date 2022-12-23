@@ -17,6 +17,11 @@ const Navbar = () => {
                                     <a className='text-sm md:text-base'>Home</a>
                                 </Link>
                             </li>
+                            <li className='text-color font-semibold cursor-pointer'>
+                                <Link href="https://discord.gg/krReQzBB8T">
+                                    <a className='text-sm md:text-base'>Discord</a>
+                                </Link>
+                            </li>
                             {/* <li className='text-color font-semibold cursor-pointer'>
                                 <Link href="/pricing">
                                     <a className='text-sm md:text-base'>Pricing</a>
@@ -27,16 +32,16 @@ const Navbar = () => {
                                     <a className='text-sm md:text-base'>Blog</a>
                                 </Link>
                             </li> */}
-                            <li className='text-color font-semibold cursor-pointer'>
+                            {/* <li className='text-color font-semibold cursor-pointer'>
                                 <Link href="/contact">
                                     <a className='text-sm md:text-base'>Contact</a>
                                 </Link>
-                            </li>
-                            <li className='text-color font-semibold cursor-pointer'>
+                            </li> */}
+                            {/* <li className='text-color font-semibold cursor-pointer'>
                                 <Link href="/faq">
                                     <a className='text-sm md:text-base'>Faq</a>
                                 </Link>
-                            </li>
+                            </li> */}
                         </ul>
                     </div>
                     <div className='hidden md:flex items-center gap-5'>

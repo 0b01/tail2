@@ -239,6 +239,8 @@ export class Application extends StatelessComponent<ApplicationProps> {
       return ret;
     };
 
+    console.log("test");
+    this.loadProfile(load);
     const evtSource = new EventSource("/api/events");
     console.log(evtSource);
     evtSource.onmessage = (event) => {
@@ -260,6 +262,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
       return ret;
     };
 
+    this.loadProfile(load);
     const evtSource = new EventSource("/api/events");
     console.log(evtSource);
     evtSource.onmessage = (event) => {
@@ -305,20 +308,14 @@ export class Application extends StatelessComponent<ApplicationProps> {
   }
 
   load() {
-    if (window.sample) {
-      console.log(0);
-      this.loadSample();
-    } 
-    else {
-      const queryString = window.location.search;
-      const urlParams = new URLSearchParams(queryString);
-      const profileURL = urlParams.get("profileURL");
-      if (profileURL !== null) {
-        return this.loadFromApi(profileURL);
-      }
-
-      return this.loadFromApi();
+    const queryString = window.location.search;
+    const urlParams = new URLSearchParams(queryString);
+    const profileURL = urlParams.get("profileURL");
+    if (profileURL !== null) {
+      return this.loadFromApi(profileURL);
     }
+
+    return this.loadFromApi();
   }
 
   renderLanding() {

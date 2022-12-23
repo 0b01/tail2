@@ -61,13 +61,15 @@ async fn main() {
         .route("/api/events", get(routes::api::events))
         .route("/api/connect", get(routes::agents::on_connect))
 
-        .route("/landing/*path", get(|p|static_path(p, "landing")))
-        .route("/flamegraph/*path", get(|p|static_path(p, "flamegraph")))
-        .route("/dashboard/*path", get(|p|static_path(p, "dashboard")))
         .route("/dashboard", get(||static_path(Path("index.html".to_owned()), "dashboard")))
-        .route("/app", get(|| static_path(Path("/app.html".to_owned()), "flamegraph")))
-        .route("/", get(|| static_path(Path("/index.html".to_owned()), "landing")))
-        .route("/sample.json", get(|| static_path(Path("/data/sample.txt".to_owned()), "flamegraph")))
+
+        .route("/", get(|| static_path(Path("/index.html".to_owned()), ".")))
+
+        .route("/flamegraph/app.html", get(|| static_path(Path("/app.html".to_owned()), "flamegraph")))
+
+        // wildcards
+        .route("/dashboard/*path", get(|p|static_path(p, "dashboard")))
+        .route("/*path", get(|p|static_path(p, ".")))
 
         .layer(middleware)
         .with_state(Arc::new(ServerState::new()));

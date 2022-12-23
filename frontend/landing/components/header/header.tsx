@@ -12,8 +12,9 @@ import { motion } from 'framer-motion';
 const Header: NextComponentType = () => {
 
     const imageContainerStyles = {
+        height: 800,
         maxWidth: '768px',
-        maxHeight: '432px',
+        maxHeight: '800px',
         margin: 'auto'
     };
 
@@ -42,18 +43,22 @@ const Header: NextComponentType = () => {
             <div className="container mx-auto px-10 border-b border-gray-800">
                 <div className='text-center'>
                     <div>
-                        <h2 className='text-3xl md:text-4xl lg:text-6xl font-bold header-color w-3/4 mx-auto my-5'>Ambient Profiling Made Easy</h2>
-                        <p className='text-color my-5 w-2/4 mx-auto text-sm md:text-lg lg:text-lg'>Understand the runtime behavior of your app, optimize performance and resolve issues quickly and easily with tail2.</p>
+                        <h2 className='text-3xl md:text-4xl lg:text-6xl font-bold header-color w-3/4 mx-auto my-5'>
+                            The Next-Generation Profiler</h2>
+                        <p className='text-color my-5 w-2/4 mx-auto text-sm md:text-lg lg:text-lg'>
+                            Profile all layers of your stack, all the time with so little overhead. No code change required.
+                        </p>
                     </div>
                     <div style={imageContainerStyles}>
-                        <Image src={HeaderImg} />
+                        {/* <Image src={HeaderImg} /> */}
+                        <iframe src="/flamegraph/app.html?profileURL=data/sample.txt" style={{height:"100%", width: "100%"}}></iframe>
                     </div>
                     <div>
                         <h2 className='text-lg md:text-2xl lg:text-4xl font-bold header-color w-2/4 mx-auto mt-10 mb-5'>
                             The Always-On Profiler
                         </h2>
                         <p className='text-color my-5 w-2/4 mx-auto text-sm md:text-lg lg:text-lg'>
-                            Profile all layers of your stack, all the time with so little overhead. No code change required.
+                            Understand the runtime behavior of your app, optimize performance and resolve issues quickly and easily with tail2.
                         </p>
                     </div>
                 </div>

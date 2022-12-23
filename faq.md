@@ -1,29 +1,37 @@
 # Discover
 
-## What is tail2 ambient profiler?
+Last updated: 12/23/2022
 
-tail2 is a *self-service ambient profiler* that can be run in your production environment.
+## What is tail2 continuous profiler?
 
-## What is ambient profiling?
+tail2 is a *self-service continuous profiler* that can be run in your production environment.
 
-Ambient profiling is **system-wide continuous profiling**, rather than being limited to a specific application or process.
+## What is continuous profiling?
 
-In ambient profiling, the profiler is constantly running in the background, collecting data on the performance of the entire system.  This allows developers to get a comprehensive view of the performance of their systems and applications.
+Continuous profiling is **always-on system-wide profiling**, rather than being limited to a specific application or process.
 
-## Why ambient profiling?
+A continuous profiler is constantly running in the background, collecting data on the performance of the entire system. This allows developers to get a comprehensive view of the performance of their systems and applications.
 
-Ambient profiling is particularly useful for identifying issues that may not be immediately apparent when profiling a single application or process. For example, it can help developers quickly identify performance bottlenecks that are caused by interactions between multiple applications or processes, or by external factors such as kernel resource contention or networking hardware limitations.
+## Why continuous profiling?
 
-At a previous job, we had a service that required us to be on call. Every day at 3am, we would get a notification that the cpu cores was maxing out and had to manually reboot the service. We couldn't figure out why it was happening, and it was causing a lot of frustration and disruption. One day, I decided to debug the issue and it turns out there was an infinite loop in the *database extension* we were using. With ambient profiling, we could have easily found the problem much sooner. It would allow us to identify the root cause by looking at the flamegraph for that time frame.
+Continuous profiling is particularly useful for identifying issues that may not be immediately apparent when profiling a single application or process. For example, it can help developers quickly identify performance bottlenecks that are caused by interactions between multiple applications or processes, or by external factors such as kernel resource contention or networking hardware limitations.
+
+It's **magical** to see exactly what your application is doing.
+
+## What languages/runtimes are supported?
+
+Currently we support native languages such as C/C++, Rust, Go and others.
+
+Scripting languages support: Python3.11.
+
+We don't currently support JIT runtimes but we are working on Java, .NET, Node.JS and wasmtime support.
 
 ## How to use tail2?
 
-tail2 is designed to be easy to integrate, without any change to your code.
+tail2 is designed to be easy to integrate, without *any* changes to your code.
 
-Simply deploy the agent to your environment and go to the portal to configure the types of profiling you would like the agent to run.
+Simply deploy the agent and view traces on the portal.
 
-## How does tail2 work?
+## How to download and use tail2?
 
-tail2 does system-wide stack sampling with extended Berkeley Packet Filter(eBPF) in the Linux kernel. It registers BPF programs for kernel events, which would pause program execution and run a sophisticated BPF program to unwind user stacks.
-
-We can attach to perf events as well as user functions. For example, we sample memory leak with malloc/free, unnecessary memory copying with memcpy and cache efficiency by attaching to cache misses etc..
+It's really early in development. So please join our discord: [link](https://discord.gg/krReQzBB8T) to get the binary.

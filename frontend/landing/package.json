@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "export": "next build && next export -o ../../tail2-server/static/landing/"
+    "export": "next build && next export -o ../../tail2-server/static/"
   },
   "dependencies": {
     "framer-motion": "^7.2.0",

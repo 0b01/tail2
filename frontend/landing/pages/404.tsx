@@ -5,9 +5,9 @@ import ErrorSection from "../sections/error-section/error-section";
 const ErrorPage = () => {
     return (
         <>
-            <Navbar />
+            {/* <Navbar />
             <ErrorSection />
-            <Footer />
+            <Footer /> */}
         </>
     )
 }
