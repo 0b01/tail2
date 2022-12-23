@@ -87,7 +87,7 @@ async fn static_path(Path(path): Path<String>, prefix: &str) -> impl IntoRespons
     #[cfg(not(feature="deploy"))]
     {
         use std::{path::PathBuf, fs::File, io::Read};
-        dbg!(path);
+        // dbg!(path);
         let path = PathBuf::from(format!("./tail2-server/static/{}/{}", prefix, path)).canonicalize().unwrap();
         debug!("{path:?}");
         if path.exists() {

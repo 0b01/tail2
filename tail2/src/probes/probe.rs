@@ -42,6 +42,7 @@ impl Probe {
                 let mut links = vec![];
                 for cpu in online_cpus()? {
                     let scope = match scope {
+                        Scope::Pid{pid: 0} => PerfEventScope::OneProcessOneCpu { cpu, pid: std::process::id() },
                         Scope::Pid{pid} => PerfEventScope::OneProcessOneCpu { cpu, pid: *pid },
                         Scope::SystemWide => PerfEventScope::AllProcessesOneCpu { cpu },
                     };
@@ -69,6 +70,7 @@ impl Probe {
                 let src = uprobe.next().unwrap();
                 let func = uprobe.next().unwrap();
                 let pid = match scope {
+                    Scope::Pid{pid: 0} => Some(std::process::id() as i32),
                     Scope::Pid{pid} => Some(*pid as i32),
                     Scope::SystemWide => None,
                 };

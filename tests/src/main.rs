@@ -22,13 +22,17 @@ async fn main() -> Result<()> {
             let state = Tail2::new().await?;
 
             let probe = Probe::Uprobe {
-                scope: match pid {
-                    Some(pid) => Scope::Pid{pid},
-                    None => Scope::SystemWide,
-                },
+                scope: Scope::Pid{pid: pid.unwrap()},
                 uprobe,
             };
             probe.attach(&mut *state.bpf.lock().await).unwrap();
+
+            let probe = Probe::Perf {
+                scope: Scope::Pid{pid: pid.unwrap()},
+                period: 400000,
+            };
+            probe.attach(&mut *state.bpf.lock().await).unwrap();
+
             run_until_exit(state.bpf, state.cli, state.module_cache, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
             println!("{:?}", rx.recv().await.unwrap());
             println!("{:?}", rx.recv().await.unwrap());

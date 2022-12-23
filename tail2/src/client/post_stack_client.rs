@@ -48,6 +48,7 @@ impl PostStackClient {
     }
 
     async fn post_stacks(&mut self, stacks: Vec<ResolvedBpfSample>) -> Result<StatusCode> {
+        tracing::info!("posting stack len {}", stacks.len());
         if stacks.is_empty() {
             return Ok(StatusCode::ACCEPTED);
         }
