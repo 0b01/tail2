@@ -15,6 +15,7 @@ pub use agent_state::Tail2Agent;
 
 pub struct ServerState {
     pub agents: Arc<Mutex<HashMap<String, Tail2Agent>>>,
+    pub agents_changed: Arc<Notify>,
     pub calltree: Notifiable<CurrentCallTree>,
 }
 
@@ -22,6 +23,7 @@ impl ServerState {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(Mutex::new(HashMap::new())),
+            agents_changed: Arc::new(Notify::new()),
             calltree: Notifiable::<CurrentCallTree>::new(CurrentCallTree::new()),
         }
     }

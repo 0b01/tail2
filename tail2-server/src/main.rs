@@ -51,6 +51,7 @@ async fn main() {
         .compression();
 
     let app = Router::new()
+        .route("/api/agent/events", get(routes::agents::agent_events))
         .route("/api/agent/start_probe", get(routes::agents::start_probe))
         .route("/api/agent/stop_probe", get(routes::agents::stop_probe))
         .route("/api/agent/halt", get(routes::agents::halt))

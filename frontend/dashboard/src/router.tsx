@@ -20,7 +20,7 @@ const Overview = Loader(lazy(() => import('src/content/overview')));
 
 // Dashboards
 
-const Crypto = Loader(lazy(() => import('src/content/dashboards/Crypto')));
+const Agents = Loader(lazy(() => import('src/content/dashboards/Agents')));
 
 // Applications
 
@@ -126,7 +126,7 @@ const routes: RouteObject[] = [
     children: [
       {
         path: '',
-        element: <Crypto />
+        element: <Agents />
       }
     ]
   },

@@ -41,7 +41,7 @@ pub mod messages {
     #[derive(Serialize, Deserialize)]
     pub struct StartAgent {
         pub name: String,
-        pub probe: Option<Probe>,
+        pub probe: String,
     }
 }
 
@@ -128,6 +128,7 @@ impl WsAgent {
                     Some(halt_tx) => {
                         halt_tx.send(()).unwrap();
                         tx.send(AgentMessage::Halt).unwrap();
+                        self.probes.clear();
                         self.is_task_running = false;
                     }
                     None => {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Card,
   CardHeader,
@@ -10,12 +10,27 @@ import {
   ListItemAvatar,
   Avatar,
   styled,
-  Grid
+  Grid,
+  Button,
+  CardContent,
+  ListItemButton,
+  Modal,
+  Typography,
+  Select,
+  MenuItem,
+  InputLabel,
+  FormControl,
+  Slider,
+  TextField
 } from '@mui/material';
 import LockTwoToneIcon from '@mui/icons-material/LockTwoTone';
 import PhoneLockedTwoToneIcon from '@mui/icons-material/PhoneLockedTwoTone';
 import EmailTwoToneIcon from '@mui/icons-material/EmailTwoTone';
 import Text from 'src/components/Text';
+import { AddTwoTone, CheckTwoTone, PauseTwoTone, PlayArrow, PlayArrowTwoTone, SmartToyTwoTone, StopTwoTone } from '@mui/icons-material';
+import { Box } from '@mui/system';
+import { IAgentProps, INewProbeModalProps, start_probe, stop_probe } from './types';
+import { NewProbeModal } from './NewProbeModal';
 
 const AvatarWrapperError = styled(Avatar)(
   ({ theme }) => `
@@ -38,44 +53,65 @@ const AvatarWrapperWarning = styled(Avatar)(
 `
 );
 
-interface IAgentProps {
-  name: string;
-}
-
 function AgentCard(props: IAgentProps) {
-  const [checked, setChecked] = useState(['phone_verification']);
+  const [agent, setAgent] = useState(props.agent);
+  const [open, setOpen] = useState(false);
 
-  const handleToggle = (value: string) => () => {
-    const currentIndex = checked.indexOf(value);
-    const newChecked = [...checked];
+  useEffect(() => {
+    setAgent(props.agent);
+  }, [props.agent]);
 
-    if (currentIndex === -1) {
-      newChecked.push(value);
-    } else {
-      newChecked.splice(currentIndex, 1);
-    }
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => setOpen(false);
+  
+  let add_probe = <ListItemButton onClick={handleOpen}>
+    <ListItemAvatar>
+      <AvatarWrapperSuccess>
+        <AddTwoTone />
+      </AvatarWrapperSuccess>
+    </ListItemAvatar>
+    <ListItemText
+      primary={<Text color="black">New Probe</Text>}
+      primaryTypographyProps={{
+        gutterBottom: true,
+        noWrap: true
+      }}
+    />
+  </ListItemButton>
 
-    setChecked(newChecked);
-  };
+  let modal = <NewProbeModal open={open} handleClose={handleClose} name={props.name} />;
+  let probes = agent.probes.map((nfo) => {
+    let txt;
+    let scope;
+    switch(nfo[0].scope.type) {
+      case "Pid":
+        scope = `Pid(${nfo[0].scope.pid})`;
+        break;
+      case "SystemWide":
+        scope = `*`;
+    };
+    switch (nfo[0].type) {
+      case 'Perf':
+        txt = `${nfo[0].type}(${nfo[0].period}) @ ${scope}`;
+        break;
+      case 'Uprobe':
+        txt = `${nfo[0].type}(${nfo[0].uprobe}) @ ${scope}`;
+        break;
+    };
 
-  return (
-    <Grid item md={3}>
-      <Card style={{marginBottom: '10px', minWidth: "275px"}}>
-        <CardHeader title={props.name} />
-        <Divider />
-        <List disablePadding>
-          <ListItem
+          return <ListItem
+            key={JSON.stringify(nfo[0])}
             sx={{
               py: 2
             }}
           >
-            <ListItemAvatar>
-              <AvatarWrapperError>
-                <LockTwoToneIcon />
-              </AvatarWrapperError>
-            </ListItemAvatar>
+            {/* <ListItemAvatar>
+              <AvatarWrapperSuccess>
+                <PhoneLockedTwoToneIcon />
+              </AvatarWrapperSuccess>
+            </ListItemAvatar> */}
             <ListItemText
-              primary={<Text color="black">2FA Authentication</Text>}
+              primary={<Text color="black">{txt}</Text>}
               primaryTypographyProps={{
                 variant: 'body1',
                 fontWeight: 'bold',
@@ -83,18 +119,53 @@ function AgentCard(props: IAgentProps) {
                 gutterBottom: true,
                 noWrap: true
               }}
-              secondary={<Text color="error">Disabled</Text>}
+              secondary={nfo[1].is_running ? <Text color="success">Active</Text> : <Text color="black">Stopped</Text>}
               secondaryTypographyProps={{ variant: 'body2', noWrap: true }}
             />
             <Switch
               edge="end"
               color="primary"
-              onChange={handleToggle('2fa')}
-              checked={checked.indexOf('2fa') !== -1}
+              onChange={(e) => e.target.checked ? start_probe(props.name, nfo[0]) : stop_probe(props.name, nfo[0])}
+              checked={nfo[1].is_running}
             />
           </ListItem>
+  });
+
+  let stop_agent = async () => {
+    await fetch(`/api/agent/halt?name=${props.name}`);
+  }
+
+  return (
+    <Grid item md={3}>
+      {modal}
+      <Card style={{marginBottom: '10px', minWidth: "275px"}}>
+        <CardHeader
+          avatar={
+            agent.is_halted ? 
+              <AvatarWrapperError>
+                <SmartToyTwoTone />
+              </AvatarWrapperError>
+            :
+              <AvatarWrapperSuccess>
+                <SmartToyTwoTone />
+              </AvatarWrapperSuccess>
+          }
+          action={agent.is_halted? null : <Button color="error" onClick={() => stop_agent()}>Stop</Button>}
+          title={props.name}
+          titleTypographyProps={{
+            variant: 'body1',
+            fontWeight: 'bold',
+            color: 'textPrimary',
+            gutterBottom: true,
+            noWrap: true
+          }}
+        />
+        <Divider />
+        <List disablePadding>
+          {probes}
           <Divider />
-          <ListItem
+          {add_probe}
+          {/* <ListItem
             sx={{
               py: 2
             }}
@@ -152,7 +223,7 @@ function AgentCard(props: IAgentProps) {
               onChange={handleToggle('recovery_email')}
               checked={checked.indexOf('recovery_email') !== -1}
             />
-          </ListItem>
+          </ListItem> */}
         </List>
       </Card>
     </Grid>

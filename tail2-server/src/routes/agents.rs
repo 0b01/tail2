@@ -1,11 +1,13 @@
-use axum::{response::{Result, IntoResponse}, extract::{WebSocketUpgrade, ws::{WebSocket, Message}, Query}};
+use async_stream::{try_stream, AsyncStream};
+use axum::{response::{Result, IntoResponse, sse::Event, Sse}, extract::{WebSocketUpgrade, ws::{WebSocket, Message}, Query}, http::HeaderMap};
 use futures::{StreamExt, SinkExt};
 
+use reqwest::header;
 use tokio::{sync::mpsc::{self, UnboundedReceiver}};
-use std::{sync::Arc};
+use std::{sync::Arc, convert::Infallible};
 
 use axum::{extract::State};
-use tail2::{client::ws_client::messages::{AgentMessage, NewConnection, StartAgent, HaltAgent}, probes::{PerfProbe, Scope, Probe}};
+use tail2::{client::ws_client::messages::{AgentMessage, NewConnection, StartAgent, HaltAgent}};
 
 
 use crate::{state::{ServerState, Tail2Agent}};
@@ -39,6 +41,7 @@ async fn connect_ws(stream: WebSocket, state: Arc<ServerState>, name: String, mu
             let mut agents = state.agents.lock().await;
             let agt = agents.get_mut(&name).unwrap();
             agt.process(&diff).unwrap();
+            state.agents_changed.notify_one();
         }});
 
     // sender
@@ -56,24 +59,18 @@ pub(crate) async fn start_probe(State(st): State<Arc<ServerState>>, start_agent:
     let agents = st.agents.lock().await;
     let agt = agents.get(&start_agent.name).unwrap();
     let tx = agt.tx.as_ref().unwrap().clone();
-    let probe = start_agent.probe.clone().unwrap_or(Probe::Perf(PerfProbe{
-            scope: Scope::Pid(375573),
-            period: 400000,
-        }));
+    let probe = serde_json::from_str(&start_agent.probe).unwrap();
 
     tx.send(AgentMessage::AddProbe { probe }).unwrap();
 
     Ok(String::from(""))
 }
 
-pub(crate) async fn stop_probe(State(st): State<Arc<ServerState>>, start_agent: Query<StartAgent>) -> Result<String> {
+pub(crate) async fn stop_probe(State(st): State<Arc<ServerState>>, stop_agent: Query<StartAgent>) -> Result<String> {
     let agents = st.agents.lock().await;
-    let agt = agents.get(&start_agent.name).unwrap();
+    let agt = agents.get(&stop_agent.name).unwrap();
     let tx = agt.tx.as_ref().unwrap().clone();
-    let probe = start_agent.probe.clone().unwrap_or(Probe::Perf(PerfProbe{
-            scope: Scope::Pid(375573),
-            period: 400000,
-        }));
+    let probe = serde_json::from_str(&stop_agent.probe).unwrap();
 
     tx.send(AgentMessage::StopProbe { probe }).unwrap();
 
@@ -88,4 +85,20 @@ pub(crate) async fn halt(State(st): State<Arc<ServerState>>, start_agent: Query<
     tx.send(AgentMessage::Halt).unwrap();
 
     Ok(String::from(""))
+}
+
+pub(crate) async fn agent_events(State(st): State<Arc<ServerState>>) -> impl IntoResponse {
+    let changed = st.agents_changed.clone();
+    changed.notify_one();
+    let stream = try_stream! {
+        loop {
+            yield Event::default().data("_");
+            changed.notified().await;
+        }
+    };
+
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, "text/event-stream;charset=UTF-8".parse().unwrap());
+    headers.insert(header::CONTENT_ENCODING, "UTF-8".parse().unwrap());
+    (headers, Sse::<AsyncStream<Result<Event, Infallible>, _>>::new(stream))
 }
