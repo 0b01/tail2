@@ -11,14 +11,14 @@ use tail2::{
     Mergeable
 };
 
-pub(crate) async fn stack(State(st): State<Arc<ServerState>>, var: Bytes) -> Result<(), AppError> {
+pub(crate) async fn stack(State(st): State<ServerState>, var: Bytes) -> Result<(), AppError> {
     // info!("{:#?}", var);
     let st = &st.calltree;
     let var: StackBatchDto = bincode::deserialize(&var).context("cant deserialize")?;
-    let changed = Arc::clone(&st.changed);
+    let notify = st.notify();
 
-    let ct_ = Arc::clone(&st.inner.ct);
-    let syms = Arc::clone(&st.inner.syms);
+    let ct_ = Arc::clone(&st.as_ref().ct);
+    let syms = Arc::clone(&st.as_ref().syms);
     tokio::spawn(async move {
         let mut ct = CallTreeInner::new();
         for stack in var.stacks {
@@ -27,7 +27,7 @@ pub(crate) async fn stack(State(st): State<Arc<ServerState>>, var: Bytes) -> Res
         }
         // info!("{:#?}", ct.root.debug_pretty_print(&ct.arena));
         ct_.lock().await.merge(&ct);
-        changed.notify_one();
+        notify.notify_one();
     });
 
     Ok(())

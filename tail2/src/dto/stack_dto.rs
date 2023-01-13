@@ -7,7 +7,7 @@ use tail2_common::NativeStack;
 use tokio::sync::Mutex;
 
 use crate::{
-    symbolication::{module::Module, module_cache::ModuleCache, elf::ElfCache},
+    symbolication::{module::Module, module_cache::ModuleCache, elf::SymbolCache},
     utils::MMapPathExt, calltree::{ResolvedFrame, CodeType},
 };
 
@@ -152,7 +152,7 @@ fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)>
 
 pub async fn build_stack(
     stack: StackDto,
-    syms: &Arc<Mutex<ElfCache>>,
+    syms: &Arc<Mutex<SymbolCache>>,
     modules: &[Arc<Module>],
 ) -> Vec<Option<ResolvedFrame>> {
     let mut ret = vec![];

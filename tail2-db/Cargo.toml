@@ -7,7 +7,7 @@ edition = "2021"
 path = "src/lib.rs"
 
 [dependencies]
-tokio = "1.23"
+tokio = "1.24"
 anyhow = "*"
 duckdb = { version = "0.6.0", git = "https://github.com/wangfenjin/duckdb-rs" }
 tail2 = { path = "../tail2", version = "0.1.0", features = [ "aarch64" ], default-features = false}

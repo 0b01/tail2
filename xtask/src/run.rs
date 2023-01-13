@@ -42,7 +42,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
     ];
     let features = format!("{}", features.join(" "));
     let args = vec![
-        "+nightly",
+        // "+nightly",
         "build",
         "-p",
         "tail2",

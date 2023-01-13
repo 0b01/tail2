@@ -1,36 +1,25 @@
-use std::{sync::Arc};
-
 use axum::{extract::State, response::IntoResponse, http::HeaderMap};
 use reqwest::header;
-use tail2::{
-    calltree::inner::{serialize::Node},
-};
-use axum::{
-    response::sse::{Event, Sse},
-};
-use std::{convert::Infallible};
+use tail2::calltree::inner::serialize::Node;
+use axum::response::sse::{Event, Sse};
+use std::convert::Infallible;
+use crate::state::ServerState;
+use async_stream::{try_stream, AsyncStream};
 
-
-
-
-use crate::{state::{ServerState}};
-
-pub(crate) async fn current<'a>(State(ct): State<Arc<ServerState>>) -> String {
-    let ct = ct.calltree.inner.ct.lock().await;
+pub(crate) async fn current<'a>(State(ct): State<ServerState>) -> String {
+    let ct = ct.calltree.as_ref().ct.lock().await;
     let node = Node::new(ct.root, &ct.arena);
 
     serde_json::to_string(&node).unwrap()
 }
 
-use async_stream::{try_stream, AsyncStream};
-
-pub(crate) async fn events(State(ct): State<Arc<ServerState>>) -> impl IntoResponse {
-    let changed = ct.calltree.changed.clone();
-    changed.notify_one();
+pub(crate) async fn events(State(ct): State<ServerState>) -> impl IntoResponse {
+    let notify = ct.calltree.notify();
+    notify.notify_one();
     let stream = try_stream! {
         loop {
             yield Event::default().data("_");
-            changed.notified().await;
+            notify.notified().await;
         }
     };
 

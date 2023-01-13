@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use tokio::sync::{mpsc::UnboundedSender, Mutex, watch};
 use std::{collections::HashMap, sync::Arc};
 
-use aya::{programs::perf_attach::PerfLink, Bpf};
+use aya::{programs::{perf_attach::PerfLink, Link}, Bpf};
 
 use crate::{probes::Probe, client::run::{run_until_exit, RunUntil}, symbolication::module_cache::ModuleCache};
 
@@ -48,6 +48,14 @@ pub mod messages {
 // TODO: currently dropping PerfLink is broken, alessandrod will change to PerfEventLink
 pub struct ProbeLinks {
     pub links: Vec<PerfLink>,
+}
+
+impl ProbeLinks {
+    pub fn detach(self) {
+        for link in self.links {
+            link.detach().unwrap();
+        }
+    }
 }
 
 pub struct WsAgent {
@@ -119,7 +127,7 @@ impl WsAgent {
                 }
 
                 let links = self.probes.remove(probe).unwrap();
-                drop(links);
+                links.detach();
 
                 info!("Probe detached: {:?}", &probe);
                 tx.send(diff).unwrap();

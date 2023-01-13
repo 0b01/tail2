@@ -7,7 +7,7 @@ use axum::{
 };
 use reqwest::header;
 use tracing::debug;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::{
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,
@@ -61,18 +61,18 @@ async fn main() {
         .route("/api/events", get(routes::api::events))
         .route("/api/connect", get(routes::agents::on_connect))
 
-        .route("/dashboard", get(||static_path(Path("index.html".to_owned()), "dashboard")))
+        .route("/dashboard", get(||static_path("dashboard", Path("index.html".to_owned()))))
 
-        .route("/", get(|| static_path(Path("/index.html".to_owned()), ".")))
+        .route("/", get(|| static_path(".", Path("/index.html".to_owned()))))
 
-        .route("/flamegraph/app.html", get(|| static_path(Path("/app.html".to_owned()), "flamegraph")))
+        .route("/flamegraph/app.html", get(|| static_path("flamegraph", Path("/app.html".to_owned()))))
 
         // wildcards
-        .route("/dashboard/*path", get(|p|static_path(p, "dashboard")))
-        .route("/*path", get(|p|static_path(p, ".")))
+        .route("/dashboard/*path", get(|p|static_path("dashboard", p)))
+        .route("/*path", get(|p|static_path(".", p)))
 
         .layer(middleware)
-        .with_state(Arc::new(ServerState::new()));
+        .with_state(ServerState::new());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     tracing::debug!("listening on {}", addr);
@@ -82,7 +82,7 @@ async fn main() {
         .unwrap();
 }
 
-async fn static_path(Path(path): Path<String>, prefix: &str) -> impl IntoResponse {
+async fn static_path(prefix: &str, Path(path): Path<String>) -> impl IntoResponse {
     let path = path.trim_start_matches('/');
     let mime_type = mime_guess::from_path(path).first_or_text_plain();
 

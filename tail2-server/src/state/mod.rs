@@ -1,10 +1,10 @@
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 
 use tail2::calltree::CallTree;
-use tail2::{calltree::inner::CallTreeInner, symbolication::elf::ElfCache};
+use tail2::{calltree::inner::CallTreeInner, symbolication::elf::SymbolCache};
 
 use crate::Notifiable;
 
@@ -13,18 +13,17 @@ pub mod agent_state;
 
 pub use agent_state::Tail2Agent;
 
+#[derive(Clone)]
 pub struct ServerState {
-    pub agents: Arc<Mutex<HashMap<String, Tail2Agent>>>,
-    pub agents_changed: Arc<Notify>,
-    pub calltree: Notifiable<CurrentCallTree>,
+    pub agents: Notifiable<Arc<Mutex<HashMap<String, Tail2Agent>>>>,
+    pub calltree: Notifiable<Arc<SymbolizedCallTree>>,
 }
 
 impl ServerState {
     pub fn new() -> Self {
         Self {
-            agents: Arc::new(Mutex::new(HashMap::new())),
-            agents_changed: Arc::new(Notify::new()),
-            calltree: Notifiable::<CurrentCallTree>::new(CurrentCallTree::new()),
+            agents: Notifiable::new(Arc::new(Mutex::new(HashMap::new()))),
+            calltree: Notifiable::new(Arc::new(SymbolizedCallTree::new())),
         }
     }
 }
@@ -35,21 +34,21 @@ impl Default for ServerState {
     }
 }
 
-pub struct CurrentCallTree {
+pub struct SymbolizedCallTree {
     pub ct: Arc<Mutex<CallTree>>,
-    pub syms: Arc<Mutex<ElfCache>>,
+    pub syms: Arc<Mutex<SymbolCache>>,
 }
 
-impl CurrentCallTree {
+impl SymbolizedCallTree {
     pub fn new() -> Self {
         let ct = Arc::new(Mutex::new(CallTreeInner::new()));
-        let _changed = Arc::new(Notify::new());
-        let syms = Arc::new(Mutex::new(ElfCache::new()));
+        // let _changed = Arc::new(Notify::new());
+        let syms = Arc::new(Mutex::new(SymbolCache::new()));
         Self { ct, syms }
     }
 }
 
-impl Default for CurrentCallTree {
+impl Default for SymbolizedCallTree {
     fn default() -> Self {
         Self::new()
     }

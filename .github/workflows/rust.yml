@@ -19,9 +19,9 @@ jobs:
     - name: info
       run: uname -a
     - name: +nightly
-      run: rustup install nightly && rustup default nightly
+      run: rustup install nightly-2023-01-10 && rustup default nightly-2023-01-10
     - name: add src
-      run: rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+      run: rustup component add rust-src --toolchain nightly-2023-01-10-x86_64-unknown-linux-gnu
     - name: install bpf-linker
       run: cargo install bpf-linker
     - name: Build
