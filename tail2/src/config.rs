@@ -1,7 +1,12 @@
 use anyhow::{Context, Result};
+use once_cell::sync::Lazy;
 use std::{fs::File, io::Read};
 
 use serde::Deserialize;
+
+pub static CONFIG: Lazy<Tail2Config> = Lazy::new(|| {
+    Tail2Config::new().unwrap()
+});
 
 #[derive(Deserialize, Debug)]
 pub struct Tail2Config {

@@ -1,17 +1,17 @@
-use tracing::info;
+use std::sync::Arc;
+
 use serde::{Serialize, Deserialize};
-use tokio::sync::{mpsc::UnboundedSender, Mutex, watch};
-use std::{collections::HashMap, sync::Arc};
 
-use aya::{programs::{perf_attach::PerfLink, Link}, Bpf};
+use aya::programs::{perf_attach::PerfLink, Link};
+use tokio::sync::Mutex;
 
-use crate::{probes::Probe, client::run::{run_until_exit, RunUntil}, symbolication::module_cache::ModuleCache};
+use crate::config::CONFIG;
 
-use self::messages::AgentMessage;
-
-use super::post_stack_client::PostStackClient;
+use super::PostStackClient;
 
 pub mod messages {
+    use crate::probes::Probe;
+
     use super::*;
 
     #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -46,108 +46,28 @@ pub mod messages {
 }
 
 // TODO: currently dropping PerfLink is broken, alessandrod will change to PerfEventLink
-pub struct ProbeLinks {
+pub struct ProbeState {
     pub links: Vec<PerfLink>,
+    pub cli: Arc<Mutex<PostStackClient>>,
 }
 
-impl ProbeLinks {
-    pub fn detach(self) {
+impl ProbeState {
+    pub fn new(links: Vec<PerfLink>) -> Self {
+        let cli = Arc::new(Mutex::new(PostStackClient::new(
+            &format!("http://{}:{}/api/stack", CONFIG.server.host, CONFIG.server.port),
+            CONFIG.server.batch_size,
+        )));
+
+        Self {
+            links,
+            cli,
+        }
+    }
+    pub async fn detach(self) {
         for link in self.links {
             link.detach().unwrap();
         }
-    }
-}
 
-pub struct WsAgent {
-    probes: HashMap<Probe, ProbeLinks>,
-    halt_tx: Option<watch::Sender<()>>,
-    is_task_running: bool,
-}
-
-impl WsAgent {
-    pub fn new() -> Self {
-        Self {
-            probes: Default::default(),
-            halt_tx: None,
-            is_task_running: false,
-        }
-    }
-}
-
-impl Default for WsAgent {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl WsAgent {
-    pub async fn on_new_msg(
-        &mut self,
-        diff: AgentMessage,
-        tx: UnboundedSender<AgentMessage>,
-        bpf: Arc<Mutex<Bpf>>,
-        cli: Arc<Mutex<PostStackClient>>,
-        module_cache: Arc<Mutex<ModuleCache>>,
-    ) {
-        match &diff {
-            AgentMessage::AddProbe { probe } => {
-                if self.probes.contains_key(probe) {
-                    tx.send(AgentMessage::AgentError {
-                        message: format!("Probe is already running: {probe:?}")
-                    }).unwrap();
-                    return;
-                }
-
-                let links = probe.attach(&mut *bpf.lock().await).unwrap();
-                self.probes.insert(probe.clone(), ProbeLinks { links });
-                info!("Probe attached: {:?}", &probe);
-
-                if !self.is_task_running {
-                    let (halt_tx, halt_rx) = watch::channel(());
-                    self.halt_tx = Some(halt_tx);
-                    tokio::spawn(
-                        run_until_exit(
-                            bpf,
-                            cli,
-                            module_cache,
-                            RunUntil::ExternalHalt(halt_rx),
-                            None)
-                    );
-                    self.is_task_running = true;
-                }
-
-                tx.send(diff).unwrap();
-            }
-            AgentMessage::StopProbe { probe } => {
-                if !self.probes.contains_key(probe) {
-                    tx.send(AgentMessage::AgentError {
-                        message: format!("Probe doesn't exist: {probe:?}")
-                    }).unwrap();
-                    return;
-                }
-
-                let links = self.probes.remove(probe).unwrap();
-                links.detach();
-
-                info!("Probe detached: {:?}", &probe);
-                tx.send(diff).unwrap();
-            },
-            AgentMessage::Halt => {
-                match &self.halt_tx {
-                    Some(halt_tx) => {
-                        halt_tx.send(()).unwrap();
-                        tx.send(AgentMessage::Halt).unwrap();
-                        self.probes.clear();
-                        self.is_task_running = false;
-                    }
-                    None => {
-                        tx.send(AgentMessage::AgentError {
-                            message: "Unable to halt".to_string()
-                        }).unwrap();
-                    }
-                }
-            }
-            AgentMessage::AgentError { message: _ } => unimplemented!(),
-        }
+        self.cli.lock().await.flush().await.unwrap();
     }
 }

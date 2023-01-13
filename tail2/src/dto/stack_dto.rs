@@ -111,7 +111,7 @@ impl StackBatchDto {
 
 fn from_native_stack(
     batch: &mut StackBatchDto,
-    native_stack: NativeStack,
+    native_stack: Box<NativeStack>,
     pid: u32,
     module_cache: &mut ModuleCache,
 ) -> Result<Vec<FrameDto>> {

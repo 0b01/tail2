@@ -1,29 +1,24 @@
-use std::sync::Arc;
-
 use crate::{
-    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto},
-    symbolication::module_cache::ModuleCache,
+    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto}, tail2::MOD_CACHE,
 };
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
-use tokio::sync::Mutex;
+use tracing::info;
 
 pub struct PostStackClient {
     client: Client,
     url: String,
     batch_size: usize,
     buf: Vec<ResolvedBpfSample>,
-    module_cache: Arc<Mutex<ModuleCache>>,
 }
 
 impl PostStackClient {
-    pub fn new(url: &str, module_cache: Arc<Mutex<ModuleCache>>, batch_size: usize) -> Self {
+    pub fn new(url: &str, batch_size: usize) -> Self {
         Self {
             client: reqwest::Client::new(),
             url: url.to_owned(),
             batch_size,
             buf: Vec::with_capacity(batch_size),
-            module_cache,
         }
     }
 
@@ -34,6 +29,7 @@ impl PostStackClient {
     }
 
     pub async fn flush(&mut self) -> Result<StatusCode> {
+        info!("flushing size {}", self.batch_size);
         let buf = std::mem::take(&mut self.buf);
         self.post_stacks(buf).await
     }
@@ -43,17 +39,18 @@ impl PostStackClient {
         if self.buf.len() == self.batch_size {
             let stacks = std::mem::replace(&mut self.buf, Vec::with_capacity(self.batch_size));
             self.post_stacks(stacks).await?;
+            self.buf.clear();
         }
         Ok(StatusCode::ACCEPTED)
     }
 
-    async fn post_stacks(&mut self, stacks: Vec<ResolvedBpfSample>) -> Result<StatusCode> {
+    async fn post_stacks(&self, stacks: Vec<ResolvedBpfSample>) -> Result<StatusCode> {
         // tracing::info!("posting stack len {}", stacks.len());
         if stacks.is_empty() {
             return Ok(StatusCode::ACCEPTED);
         }
 
-        let module_cache = &mut *self.module_cache.lock().await;
+        let module_cache = &mut *MOD_CACHE.lock().await;
         let dto = StackBatchDto::from_stacks(stacks, module_cache)?;
         let body = bincode::serialize(&dto).unwrap();
         self.post(&self.url, body).await

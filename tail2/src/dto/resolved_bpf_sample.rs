@@ -35,7 +35,7 @@ impl ResolvedPythonFrames {
 #[derive(Debug)]
 pub struct ResolvedBpfSample {
     pub pid_tgid: PidTgid,
-    pub native_stack: Option<NativeStack>,
+    pub native_stack: Option<Box<NativeStack>>,
     pub python_stack: Option<ResolvedPythonFrames>,
     pub kernel_frames: Option<Vec<Option<String>>>,
 }
@@ -61,7 +61,7 @@ impl ResolvedBpfSample {
 
         Self {
             pid_tgid: sample.pidtgid,
-            native_stack: sample.native_stack,
+            native_stack: sample.native_stack.map(Box::new),
             python_stack: sample.python_stack.map(ResolvedPythonFrames::resolve),
             kernel_frames,
         }

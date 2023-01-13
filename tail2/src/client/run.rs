@@ -24,7 +24,6 @@ use tokio::task::JoinHandle;
 
 use std::time::Duration;
 
-use crate::symbolication::module_cache::ModuleCache;
 use anyhow::Context;
 use aya::maps::MapData;
 use aya::{include_bytes_aligned, Bpf};
@@ -231,7 +230,6 @@ pub enum RunUntil {
 pub async fn run_until_exit(
     bpf: Arc<Mutex<Bpf>>,
     cli: Arc<Mutex<PostStackClient>>,
-    module_cache: Arc<Mutex<ModuleCache>>,
     run_until: RunUntil,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<()> {
@@ -243,7 +241,7 @@ pub async fn run_until_exit(
             (Some(tx), rx)
         };
 
-    spawn_proc_refresh(bpf.clone(), module_cache, stop_rx.clone()).await;
+    spawn_proc_refresh(bpf.clone(), stop_rx.clone()).await;
 
     let tasks = run_bpf(bpf.clone(), cli, stop_rx, output_tx).await?;
 
@@ -276,10 +274,8 @@ pub async fn run_until_exit(
 
 async fn proc_refresh_inner(
     pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>,
-    module_cache: Arc<Mutex<ModuleCache>>,
 ) {
-    let module_cache = Arc::clone(&module_cache);
-    let mut processes = Processes::new(module_cache);
+    let mut processes = Processes::new();
     if let Ok(()) = processes.refresh().await {
         dbg!(processes.processes.keys().len());
         // copy to maps
@@ -291,7 +287,7 @@ async fn proc_refresh_inner(
 }
 
 // TODO: don't refresh, listen to mmap and execve calls
-pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, module_cache: Arc<Mutex<ModuleCache>>, mut stop_rx: Receiver<()>) {
+pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiver<()>) {
     let bpf = &mut *bpf.lock().await;
     let pid_info: HashMap<_, u32, ProcInfo> =
         HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
@@ -303,13 +299,12 @@ pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, module_cache: Arc<M
         >(pid_info)
     };
 
-    proc_refresh_inner(&mut pid_info, Arc::clone(&module_cache)).await;
+    proc_refresh_inner(&mut pid_info).await;
 
     // refresh pid info table
-    let module_cache = Arc::clone(&module_cache);
     tokio::spawn(async move {
         loop {
-            proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
+            proc_refresh_inner(&mut pid_info).await;
 
             // sleep for 10 sec
             tokio::select! {

@@ -1,9 +1,9 @@
 use anyhow::Result;
 
 use crate::{
-    client::{run::{get_pid_child, run_until_exit, RunUntil}},
+    client::{run::{get_pid_child, run_until_exit, RunUntil}, ws_client::ProbeState},
     processes::Processes,
-    Tail2, probes::{Scope, Probe},
+    Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE,
 };
 use clap::{Parser, Subcommand};
 use tracing::info;
@@ -53,11 +53,11 @@ impl Commands {
     pub async fn run(self, t2: Tail2) -> Result<()> {
         match self {
             Commands::Table { pid } => {
-                let _ret = Processes::detect_pid(pid, &mut *t2.module_cache.lock().await);
+                let _ret = Processes::detect_pid(pid, &mut *MOD_CACHE.lock().await);
                 // dbg!(ret);
             }
             Commands::Processes {} => {
-                let mut p = Processes::new(t2.module_cache);
+                let mut p = Processes::new();
                 p.refresh().await.unwrap();
                 info!("{:#?}", p);
                 return Ok(());
@@ -83,9 +83,10 @@ impl Commands {
                     period,
                 };
 
-                let _links = probe.attach(&mut*t2.bpf.lock().await)?;
+                let links = probe.attach(&mut*t2.bpf.lock().await)?;
+                let probe_state = ProbeState::new(links);
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
-                run_until_exit(t2.bpf, t2.cli, t2.module_cache, run_until, None).await?;
+                run_until_exit(t2.bpf, probe_state.cli, run_until, None).await?;
             }
             Commands::Uprobe {
                 pid,
@@ -101,9 +102,10 @@ impl Commands {
                     uprobe,
                 };
 
-                let _links = probe.attach(&mut *t2.bpf.lock().await)?;
+                let links = probe.attach(&mut *t2.bpf.lock().await)?;
+                let probe_state = ProbeState::new(links);
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
-                run_until_exit(t2.bpf, t2.cli, t2.module_cache, run_until, None).await?;
+                run_until_exit(t2.bpf, probe_state.cli, run_until, None).await?;
             }
         }
 
