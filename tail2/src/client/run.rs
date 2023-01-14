@@ -2,6 +2,7 @@ use anyhow::Result;
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
+use tail2_common::metrics::Metrics;
 use tracing::{error, info};
 use nix::sys::ptrace;
 
@@ -29,7 +30,6 @@ use aya::maps::MapData;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
 use tail2_common::procinfo::ProcInfo;
-use tail2_common::RunStatsKey;
 use tokio::sync::watch::Receiver;
 use tokio::sync::Mutex;
 
@@ -72,7 +72,7 @@ pub(crate) async fn open_and_subcribe(
                         }
                     },
                     _ = stop_rx2.changed() => {
-                        tracing::error!("stopping");
+                        tracing::info!("stopping for cpu: {cpu_id}");
                         break;
                     },
                 };
@@ -222,8 +222,11 @@ pub async fn bpf_init() -> Result<Bpf> {
 }
 
 pub enum RunUntil {
+    /// Halt on Ctrl-C
     CtrlC,
+    /// Halt when child process exits
     ChildProcessExits(Child),
+    /// Halt when the sender of the contained receiver sends
     ExternalHalt(Receiver<()>),
 }
 
@@ -263,11 +266,12 @@ pub async fn run_until_exit(
     if let Some(stop_tx) = stop_tx {
         info!("exiting");
         stop_tx.send(())?;
-        for t in tasks {
-            let _ = tokio::join!(t);
-        }
-        print_stats(bpf).await?;
     }
+
+    for t in tasks {
+        let _ = tokio::join!(t);
+    }
+    print_stats(bpf).await?;
 
     Ok(())
 }
@@ -281,7 +285,7 @@ async fn proc_refresh_inner(
         // copy to maps
         for (pid, nfo) in &processes.processes {
             let nfo = nfo.as_ref();
-            pid_info.insert(*pid as u32, nfo, 0).unwrap();
+            let _ = pid_info.insert(*pid as u32, nfo, 0);
         }
     }
 }
@@ -331,10 +335,13 @@ pub(crate) fn load_bpf() -> Result<Bpf> {
 pub(crate) async fn print_stats(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
     let bpf = &mut *bpf.lock().await;
     let info: HashMap<_, u32, u64> =
-        HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
-    info!(
-        "Sent: {} stacks",
-        info.get(&(RunStatsKey::SentStackCount as u32), 0)?
-    );
+        HashMap::try_from(bpf.map("METRICS").context("no such map")?)?;
+    
+    info!("Sent: {} stacks", info.get(&(Metrics::SentStackCount as u32), 0).unwrap_or(0));
+
+    for k in Metrics::iter() {
+        info!("{k:?} = {}", info.get(&(k as u32), 0).unwrap_or(0));
+    }
+
     Ok(())
 }

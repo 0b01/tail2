@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     symbolication::{module::Module, module_cache::ModuleCache, elf::SymbolCache},
-    utils::MMapPathExt, calltree::{ResolvedFrame, CodeType},
+    utils::MMapPathExt, calltree::{ResolvedFrame, CodeType}, probes::Probe, tail2::HOSTNAME,
 };
 
 use super::resolved_bpf_sample::ResolvedBpfSample;
@@ -60,12 +60,15 @@ impl StackDto {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct StackBatchDto {
+    pub hostname: String,
+    pub probe: String,
     pub stacks: Vec<StackDto>,
     pub modules: Vec<Arc<Module>>,
 }
 
+// TODO: remove
 pub fn proc_map(pid: u32) -> Result<Vec<MemoryMap>> {
     Process::new(pid as i32)?
         .maps()
@@ -73,11 +76,22 @@ pub fn proc_map(pid: u32) -> Result<Vec<MemoryMap>> {
 }
 
 impl StackBatchDto {
+    pub fn new(probe: Probe) -> Self {
+        let probe = serde_json::to_string(&probe).unwrap();
+        Self {
+            hostname: HOSTNAME.to_string(),
+            probe,
+            stacks: Default::default(),
+            modules: Default::default(),
+        }
+    }
+
     pub fn from_stacks(
+        probe: Probe,
         samples: Vec<ResolvedBpfSample>,
         module_cache: &mut ModuleCache,
     ) -> Result<StackBatchDto> {
-        let mut batch = StackBatchDto::default();
+        let mut batch = StackBatchDto::new(probe);
         for bpf_sample in samples {
             let mut dto = StackDto::new();
             if let Some(s) = bpf_sample.python_stack {

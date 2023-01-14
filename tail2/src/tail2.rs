@@ -28,10 +28,13 @@ use futures_util::{StreamExt, SinkExt};
 
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
-pub static MOD_CACHE: Lazy<Arc<Mutex<ModuleCache>>> = Lazy::new(|| {
-    let module_cache = Arc::new(Mutex::new(ModuleCache::new()));
-    module_cache
-});
+pub static MOD_CACHE: Lazy<Arc<Mutex<ModuleCache>>> = Lazy::new(|| 
+    Arc::new(Mutex::new(ModuleCache::new()))
+);
+
+pub static HOSTNAME: Lazy<String> = Lazy::new(||
+    gethostname::gethostname().to_string_lossy().to_string()
+);
 
 pub struct Tail2 {
     pub bpf: Arc<Mutex<aya::Bpf>>,
@@ -61,7 +64,7 @@ impl Tail2 {
     ) {
         match &diff {
             AgentMessage::AddProbe { probe } => {
-                if probes.lock().await.contains_key(probe) {
+                if probes.lock().await.contains_key(&probe) {
                     tx.send(AgentMessage::AgentError {
                         message: format!("Probe is already running: {probe:?}")
                     }).unwrap();
@@ -69,10 +72,10 @@ impl Tail2 {
                 }
 
                 let links = probe.attach(&mut *bpf.lock().await).unwrap();
-                let probe_state= ProbeState::new(links);
+                let probe_state= ProbeState::new(probe.clone(), links);
                 let cli = Arc::clone(&probe_state.cli);
                 probes.lock().await.insert(probe.clone(), probe_state);
-                info!("Probe attached: {:?}", &probe);
+                info!("Probe attached: {:?}", probe);
 
                 if halt_tx.lock().await.is_none() {
                     let (tx, rx) = watch::channel(());
@@ -89,14 +92,14 @@ impl Tail2 {
                 tx.send(diff).unwrap();
             }
             AgentMessage::StopProbe { probe } => {
-                if !probes.lock().await.contains_key(probe) {
+                if !probes.lock().await.contains_key(&probe) {
                     tx.send(AgentMessage::AgentError {
                         message: format!("Probe doesn't exist: {probe:?}")
                     }).unwrap();
                     return;
                 }
 
-                let links = probes.lock().await.remove(probe).unwrap();
+                let links = probes.lock().await.remove(&probe).unwrap();
                 links.detach().await;
 
                 info!("Probe detached: {:?}", &probe);
@@ -120,9 +123,7 @@ impl Tail2 {
     }
 
     pub async fn run_agent(&self) -> Result<()> {
-        let new_connection = NewConnection {
-            name: gethostname::gethostname().to_string_lossy().to_string(),
-        };
+        let new_connection = NewConnection { hostname: HOSTNAME.to_string() };
 
         let payload = serde_qs::to_string(&new_connection)?;
         let connect_addr = format!("ws://{}:{}/api/connect?{}", self.config.server.host, self.config.server.port, payload);
@@ -133,7 +134,7 @@ impl Tail2 {
         let (mut write, mut read) = ws_stream.split();
 
         let probes = self.probes.clone();
-        let bpf = self.bpf.clone();
+        let bpf  = self.bpf.clone();
         let halt_tx = self.halt_tx.clone();
         let t = tokio::spawn(async move {
             while let Some(Ok(Message::Text(msg))) = read.next().await {

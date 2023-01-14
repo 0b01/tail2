@@ -21,9 +21,9 @@ pub(crate) async fn agents(State(st): State<ServerState>) -> Result<String> {
 pub(crate) async fn on_connect(ws: WebSocketUpgrade, State(state): State<ServerState>, new_conn: Query<NewConnection>) -> impl IntoResponse {
     let (tx, rx) = mpsc::unbounded_channel::<AgentMessage>();
     let config = Tail2Agent::new(tx);
-    tracing::info!("new agent: {}", new_conn.name);
+    tracing::info!("new agent: {}", new_conn.hostname);
     let mut agents = state.agents.as_ref().lock().await;
-    let name = new_conn.name.to_owned();
+    let name = new_conn.hostname.to_owned();
     let _i = agents.insert(name.clone(), config);
     drop(agents);
 

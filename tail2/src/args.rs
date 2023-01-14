@@ -84,7 +84,7 @@ impl Commands {
                 };
 
                 let links = probe.attach(&mut*t2.bpf.lock().await)?;
-                let probe_state = ProbeState::new(links);
+                let probe_state = ProbeState::new(probe, links);
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
                 run_until_exit(t2.bpf, probe_state.cli, run_until, None).await?;
             }
@@ -103,7 +103,7 @@ impl Commands {
                 };
 
                 let links = probe.attach(&mut *t2.bpf.lock().await)?;
-                let probe_state = ProbeState::new(links);
+                let probe_state = ProbeState::new(probe, links);
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
                 run_until_exit(t2.bpf, probe_state.cli, run_until, None).await?;
             }

@@ -35,7 +35,7 @@ impl UnwindTableRow {
     pub fn invalid(start_address: usize) -> Self {
         Self {
             start_address,
-            rule: UnwindRuleAarch64::Invalid,
+            rule: UnwindRuleAarch64::InvalidRule,
         }
     }
 }

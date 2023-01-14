@@ -3,8 +3,7 @@ use axum::{
     http::{StatusCode, HeaderValue, Response},
     response::IntoResponse,
     routing::{get, post},
-    Router, extract::Path,
-};
+    Router, extract::Path};
 use reqwest::header;
 use tracing::debug;
 use std::{net::SocketAddr, time::Duration};
@@ -30,7 +29,12 @@ async fn main() {
     //     ..Default::default()
     // }));
 
-    tracing_subscriber::fmt::init();
+    let appender = tracing_appender::rolling::never("./", "output.log");
+    let (non_blocking_appender, _guard) = tracing_appender::non_blocking(appender);
+    tracing_subscriber::fmt()
+        .with_writer(non_blocking_appender)
+        .with_ansi(false)
+        .init();
 
     // Build our middleware stack
     let middleware = ServiceBuilder::new()

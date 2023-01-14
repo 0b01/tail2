@@ -1,5 +1,5 @@
 use crate::{
-    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto}, tail2::MOD_CACHE,
+    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto}, tail2::MOD_CACHE, config::CONFIG, probes::Probe,
 };
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
@@ -7,15 +7,20 @@ use tracing::info;
 
 pub struct PostStackClient {
     client: Client,
+    probe: Probe,
     url: String,
     batch_size: usize,
     buf: Vec<ResolvedBpfSample>,
 }
 
 impl PostStackClient {
-    pub fn new(url: &str, batch_size: usize) -> Self {
+    pub fn new(probe: Probe) -> Self {
+        let url = format!("http://{}:{}/api/stack", CONFIG.server.host, CONFIG.server.port);
+        let batch_size = CONFIG.server.batch_size;
+
         Self {
             client: reqwest::Client::new(),
+            probe,
             url: url.to_owned(),
             batch_size,
             buf: Vec::with_capacity(batch_size),
@@ -29,7 +34,7 @@ impl PostStackClient {
     }
 
     pub async fn flush(&mut self) -> Result<StatusCode> {
-        info!("flushing size {}", self.batch_size);
+        info!("flushing: {} items.", self.buf.len());
         let buf = std::mem::take(&mut self.buf);
         self.post_stacks(buf).await
     }
@@ -51,7 +56,7 @@ impl PostStackClient {
         }
 
         let module_cache = &mut *MOD_CACHE.lock().await;
-        let dto = StackBatchDto::from_stacks(stacks, module_cache)?;
+        let dto = StackBatchDto::from_stacks(self.probe.clone(), stacks, module_cache)?;
         let body = bincode::serialize(&dto).unwrap();
         self.post(&self.url, body).await
     }

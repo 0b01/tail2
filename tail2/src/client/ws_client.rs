@@ -5,7 +5,7 @@ use serde::{Serialize, Deserialize};
 use aya::programs::{perf_attach::PerfLink, Link};
 use tokio::sync::Mutex;
 
-use crate::config::CONFIG;
+use crate::probes::Probe;
 
 use super::PostStackClient;
 
@@ -30,7 +30,7 @@ pub mod messages {
 
     #[derive(Serialize, Deserialize)] 
     pub struct NewConnection {
-        pub name: String,
+        pub hostname: String,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -47,18 +47,20 @@ pub mod messages {
 
 // TODO: currently dropping PerfLink is broken, alessandrod will change to PerfEventLink
 pub struct ProbeState {
+    pub probe: Probe,
     pub links: Vec<PerfLink>,
     pub cli: Arc<Mutex<PostStackClient>>,
 }
 
 impl ProbeState {
-    pub fn new(links: Vec<PerfLink>) -> Self {
-        let cli = Arc::new(Mutex::new(PostStackClient::new(
-            &format!("http://{}:{}/api/stack", CONFIG.server.host, CONFIG.server.port),
-            CONFIG.server.batch_size,
-        )));
+    pub fn new(probe: Probe, links: Vec<PerfLink>) -> Self {
+        let cli =
+            Arc::new(
+                Mutex::new(
+                    PostStackClient::new(probe.clone())));
 
         Self {
+            probe,
             links,
             cli,
         }

@@ -1,5 +1,6 @@
 use anyhow::Context;
 use axum::{response::Result};
+use tracing::{debug, info};
 use std::{sync::Arc};
 use axum::{body::Bytes, extract::State};
 
@@ -8,13 +9,14 @@ use crate::{state::{ServerState}, error::AppError};
 use tail2::{
     calltree::{inner::CallTreeInner},
     dto::{StackBatchDto, build_stack},
-    Mergeable
+    Mergeable, probes::Probe
 };
 
 pub(crate) async fn stack(State(st): State<ServerState>, var: Bytes) -> Result<(), AppError> {
-    // info!("{:#?}", var);
     let st = &st.calltree;
     let var: StackBatchDto = bincode::deserialize(&var).context("cant deserialize")?;
+    let probe: Probe = serde_json::from_str(&var.probe).unwrap();
+    info!("hostname: {}, {:#?}", &var.hostname, probe);
     let notify = st.notify();
 
     let ct_ = Arc::clone(&st.as_ref().ct);

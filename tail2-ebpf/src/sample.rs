@@ -5,7 +5,7 @@ use aya_bpf::{
     maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
     bindings::{bpf_pidns_info, pt_regs, BPF_F_REUSE_STACKID}, BpfContext
 };
-use tail2_common::{bpf_sample::BpfSample, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey, NativeStack, python::state::PythonStack, pidtgid::PidTgid};
+use tail2_common::{bpf_sample::BpfSample, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, NativeStack, python::state::PythonStack, pidtgid::PidTgid, metrics::Metrics};
 use aya_log_ebpf::{error, info};
 
 use crate::{pyperf::pyperf::sample_python, user::sample_user, helpers::get_pid_tgid, kernel::sample_kernel};
@@ -19,14 +19,14 @@ pub(crate) static mut STACK_BUF: PerCpuArray<BpfSample> = PerCpuArray::with_max_
 #[map(name="CONFIG")]
 pub(crate) static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
-#[map(name="RUN_STATS")]
-pub(crate) static RUN_STATS: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
-
 #[map(name="KERNEL_STACKS")]
 pub(crate) static KERNEL_STACKS: StackTrace = StackTrace::with_max_entries(10, 0);
 
 #[map(name="PIDS")]
 pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(512, 0);
+
+#[map(name="METRICS")]
+pub(crate) static METRICS: HashMap<u32, u64> = HashMap::with_max_entries(Metrics::Max as u32, 0);
 
 #[uprobe(name="malloc_enter")]
 fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
@@ -61,15 +61,15 @@ fn sample<C: BpfContext>(ctx: &C) -> Option<u32> {
 
     unsafe {
         STACKS.output(ctx, st, 0);
-        incr_sent_stacks();
+        incr_metric(Metrics::SentStackCount);
     }
 
     Some(0)
 }
 
-pub fn incr_sent_stacks() {
-    let cnt = unsafe { RUN_STATS.get(&(RunStatsKey::SentStackCount as u32)) }.copied().unwrap_or(0);
-    let _ = RUN_STATS.insert(&(RunStatsKey::SentStackCount as u32), &(cnt+1), 0);
+pub fn incr_metric(key: Metrics) {
+    let cnt = unsafe { METRICS.get(&(key as u32)) }.copied().unwrap_or(0);
+    let _ = METRICS.insert(&(key as u32), &(cnt+1), 0);
 }
 
 #[panic_handler]

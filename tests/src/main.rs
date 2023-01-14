@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
                 period: 400000,
             };
             let links = probe.attach(&mut *t2.bpf.lock().await).unwrap();
-            let probe_state = ProbeState::new(links);
+            let probe_state = ProbeState::new(probe, links);
             let cli = probe_state.cli;
 
             run_until_exit(t2.bpf, cli, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
