@@ -3,7 +3,7 @@ use std::{sync::Arc, path::PathBuf};
 use anyhow::{Context, Result};
 use procfs::process::{MemoryMap, Process};
 use serde::{Deserialize, Serialize};
-use tail2_common::NativeStack;
+use tail2_common::{NativeStack, pidtgid::PidTgid};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -37,21 +37,17 @@ impl FrameDto {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StackDto {
+    pub pid_tgid: PidTgid,
     pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
     pub python_frames: Vec<FrameDto>,
     pub err: Option<()>,
 }
 
-impl Default for StackDto {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl StackDto {
-    pub fn new() -> Self {
+    pub fn new(pid_tgid: PidTgid) -> Self {
         Self {
+            pid_tgid,
             kernel_frames: vec![],
             native_frames: vec![],
             python_frames: vec![],
@@ -93,7 +89,7 @@ impl StackBatchDto {
     ) -> Result<StackBatchDto> {
         let mut batch = StackBatchDto::new(probe);
         for bpf_sample in samples {
-            let mut dto = StackDto::new();
+            let mut dto = StackDto::new(bpf_sample.pid_tgid);
             if let Some(s) = bpf_sample.python_stack {
                 dto.python_frames = s
                     .frames
@@ -102,13 +98,12 @@ impl StackBatchDto {
                     .map(|name| FrameDto::Python { name })
                     .collect();
             }
-            if let Some(s) = bpf_sample.native_stack {
-                if let Ok(native_frames) =
-                    from_native_stack(&mut batch, s, bpf_sample.pid_tgid.pid(), module_cache)
-                {
-                    dto.native_frames = native_frames;
-                }
+            if let Ok(native_frames) =
+                from_native_stack(&mut batch, bpf_sample.native_stack, bpf_sample.pid_tgid.pid(), module_cache)
+            {
+                dto.native_frames = native_frames;
             }
+
             if let Some(s) = bpf_sample.kernel_frames {
                 dto.kernel_frames = s
                     .into_iter()
@@ -171,6 +166,13 @@ pub async fn build_stack(
 ) -> Vec<Option<ResolvedFrame>> {
     let mut ret = vec![];
     let mut python_frames = stack.python_frames.into_iter();
+
+    ret.push(Some(ResolvedFrame {
+        module_idx: 0,
+        offset: 0,
+        code_type: CodeType::ProcessRoot,
+        name: Some(stack.pid_tgid.pid().to_string()),
+    }));
 
     for f in stack.native_frames {
         match f {

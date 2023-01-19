@@ -124,13 +124,14 @@ pub(crate) async fn run_bpf(
             }
 
             let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
-
-            let cli2 = Arc::clone(&cli);
-            tokio::spawn(async move {
-                if let Err(e) = cli2.lock().await.post_stack(st).await {
-                    error!("sending stack failed: {}", e.to_string());
-                }
-            });
+            if let Some(st) = st {
+                let cli2 = Arc::clone(&cli);
+                tokio::spawn(async move {
+                    if let Err(e) = cli2.lock().await.post_stack(st).await {
+                        error!("sending stack failed: {}", e.to_string());
+                    }
+                });
+            }
 
             let elapsed = SystemTime::now().duration_since(start_time).unwrap();
             total_time += elapsed;

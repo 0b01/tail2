@@ -12,6 +12,7 @@ pub enum CodeType {
     Native = 0,
     Python = 1,
     Kernel = 2,
+    ProcessRoot = 3,
 }
 
 #[derive(Clone, Eq, Serialize, Deserialize, Debug)]

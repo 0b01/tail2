@@ -15,7 +15,7 @@ pub struct ProbeMetrics {
 pub struct ProbeInfo {
     pub is_running: bool,
     #[serde(skip)]
-    pub probe_metrics: ProbeMetrics,
+    pub metrics: ProbeMetrics,
 }
 
 #[derive(Serialize, Deserialize)]

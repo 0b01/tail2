@@ -2,12 +2,12 @@ use core::{mem::{size_of, self, transmute}};
 
 use aya_bpf::{BpfContext, helpers::{bpf_probe_read_user}, cty::c_void, memset};
 use aya_log_ebpf::info;
-use tail2_common::python::{state::{PYTHON_STACK_FRAMES_PER_PROG, PythonSymbol, ErrorCode, CLASS_NAME_LEN, FILE_NAME_LEN, FRAME_MAX_LEN, PythonStack}, offsets::PythonOffsets};
+use tail2_common::{python::{state::{PYTHON_STACK_FRAMES_PER_PROG, PythonSymbol, CLASS_NAME_LEN, FILE_NAME_LEN, FRAME_MAX_LEN, PythonStack}, offsets::PythonOffsets}, metrics::Metrics};
 
 use super::pyperf::SampleState;
 
 #[inline(always)]
-pub fn read_python_stack<C: BpfContext>(ctx: &C, stack: &mut PythonStack, state: &mut SampleState, offsets: &PythonOffsets, frame_ptr: usize) -> Result<(), ErrorCode> {
+pub fn read_python_stack<C: BpfContext>(ctx: &C, stack: &mut PythonStack, state: &mut SampleState, offsets: &PythonOffsets, frame_ptr: usize) -> Result<(), Metrics> {
     let mut cur_frame = frame_ptr;
     stack.frames_len = 0;
     for _ in 0..PYTHON_STACK_FRAMES_PER_PROG {
@@ -28,15 +28,15 @@ pub fn read_python_stack<C: BpfContext>(ctx: &C, stack: &mut PythonStack, state:
 }
 
 #[inline(always)]
-unsafe fn read<T>(ptr: usize) -> Result<T, ErrorCode> {
-    bpf_probe_read_user(ptr as *const T).map_err(|_| ErrorCode::ERROR_READ_FRAME)
+unsafe fn read<T>(ptr: usize) -> Result<T, Metrics> {
+    bpf_probe_read_user(ptr as *const T).map_err(|_| Metrics::ErrPy_READ_FRAME)
 }
 
 #[inline(always)]
-pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame: usize, sym: &mut PythonSymbol) -> Result<(), ErrorCode> {
+pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame: usize, sym: &mut PythonSymbol) -> Result<(), Metrics> {
     let code_ptr: usize = read(frame + offsets.py_frame_object.f_code).unwrap_or_default();
     if (code_ptr == 0) {
-        return Err(ErrorCode::ERROR_FRAME_CODE_IS_NULL);
+        return Err(Metrics::ErrPy_FRAME_CODE_IS_NULL);
     }
     sym.lineno = read(code_ptr + offsets.py_code_object.co_firstlineno)?;
     // info!(ctx, "lineno: {}", sym.lineno);
@@ -59,7 +59,7 @@ pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame
 #[inline(always)]
 /// Read the name of the class wherein a code object is defined.
 /// For global functions, sets an empty string.
-unsafe fn get_classname(offsets: &PythonOffsets, cur_frame: usize, code_ptr: usize, class_name: &mut [u8; CLASS_NAME_LEN]) -> Result<(), ErrorCode> {
+unsafe fn get_classname(offsets: &PythonOffsets, cur_frame: usize, code_ptr: usize, class_name: &mut [u8; CLASS_NAME_LEN]) -> Result<(), Metrics> {
     // Figure out if we want to parse class name, basically checking the name of
     // the first argument. If it's 'self', we get the type and its name, if it's
     // 'cls', we just get the name. This is not perfect but there is no better way
@@ -71,14 +71,14 @@ unsafe fn get_classname(offsets: &PythonOffsets, cur_frame: usize, code_ptr: usi
     let first_self = &argname == self_str;
     let first_cls = &argname == cls_str;
     if !first_self && !first_cls {
-        return Err(ErrorCode::FIRST_ARG_NOT_FOUND);
+        return Err(Metrics::ErrPy_FIRST_ARG_NOT_FOUND);
     }
     // Read class name from $frame->f_localsplus[0]->ob_type->tp_name.
     // read f_localsplus[0]:
     let mut tmp: usize = read(cur_frame + offsets.py_frame_object.f_localsplus)?;
     if (tmp == 0) {
         // self/cls is a cellvar, deleted, or not an argument. tough luck :/
-        return Err(ErrorCode::FIRST_ARG_NOT_FOUND);
+        return Err(Metrics::ErrPy_FIRST_ARG_NOT_FOUND);
     }
     if first_self {
         // we are working with an instance, first we need to get type
@@ -91,13 +91,13 @@ unsafe fn get_classname(offsets: &PythonOffsets, cur_frame: usize, code_ptr: usi
 
 #[inline(always)]
 /// Reads the name of the first argument of a PyCodeObject.
-unsafe fn get_first_arg_name(offsets: &PythonOffsets, code_ptr: usize) -> Result<[u8; 4], ErrorCode> {
+unsafe fn get_first_arg_name(offsets: &PythonOffsets, code_ptr: usize) -> Result<[u8; 4], Metrics> {
     // gdb:  ((PyTupleObject*)$frame->f_code->co_varnames)->ob_item[0]
     let args_ptr: usize = read(code_ptr + offsets.py_code_object.co_varnames)?;
     // String.size is PyVarObject.ob_size
     // let ob_size: usize = read((args_ptr as i64 + offsets.string.size) as usize)?;
     // if ob_size <= 0 {
-    //     return Err(ErrorCode::ERROR_GET_FIRST_ARG);
+    //     return Err(Metrics::ErrPy_GET_FIRST_ARG);
     // }
     let args_ptr: usize = read((args_ptr + offsets.py_tuple_object.ob_item) as usize)?;
     read(args_ptr + offsets.string.data)

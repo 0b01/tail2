@@ -2,7 +2,7 @@ use core::mem::{size_of, transmute};
 
 use aya_bpf::{maps::{ProgramArray, PerCpuArray, PerfEventArray, HashMap}, programs::PerfEventContext, macros::{perf_event, map}, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_probe_read_kernel, bpf_get_current_task, bpf_probe_read, bpf_get_smp_processor_id}, bindings::BPF_F_REUSE_STACKID, BpfContext, memset};
 use aya_log_ebpf::{info, error};
-use tail2_common::python::{state::{PythonSymbol, PythonStack, pid_data, StackStatus, ErrorCode, pthreads_impl}, offsets::PythonOffsets};
+use tail2_common::{python::{state::{PythonSymbol, PythonStack, pid_data, StackStatus, pthreads_impl}, offsets::PythonOffsets}, metrics::Metrics};
 use crate::{vmlinux::task_struct, sample::PIDS};
 
 use crate::{helpers::get_pid_tgid};
@@ -45,25 +45,25 @@ static STATE_HEAP: PerCpuArray<SampleState> = PerCpuArray::with_max_entries(1, 0
 static EVENTS: PerfEventArray<PythonStack> = PerfEventArray::new(0);
 
 #[inline(always)]
-pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> Result<u32, ErrorCode> {
+pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> Result<u32, Metrics> {
     let task: *const task_struct = unsafe { bpf_get_current_task() as *const _ };
     let ns = get_pid_tgid();
-    let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(ErrorCode::NO_PID)? };
+    let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(Metrics::ErrPy_NO_PID)? };
 
     if !proc_info.runtime_type.is_python() {
-        return Err(ErrorCode::NOT_PYTHON);
+        return Err(Metrics::ErrPy_NOT_PYTHON);
     }
 
     let pid_data = &mut proc_info.runtime_type.python_pid_data();
 
-    let Some(buf_ptr) = STATE_HEAP.get_ptr_mut(0) else { return Err(ErrorCode::CANT_ALLOC); };
+    let Some(buf_ptr) = STATE_HEAP.get_ptr_mut(0) else { return Err(Metrics::ErrPy_CANT_ALLOC); };
     let state = unsafe { &mut *buf_ptr };
     if let Ok(comm) = bpf_get_current_comm() {
         stack.comm = comm;
     }
 
     stack.stack_status = StackStatus::STACK_STATUS_ERROR;
-    stack.error_code = ErrorCode::ERROR_NONE;
+    stack.error_code = Metrics::ErrPy_NONE;
 
     let offsets = proc_info.runtime_type.python_version().offsets();
 
@@ -75,7 +75,7 @@ pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> 
             pid_data.globals._PyRuntime + offsets.py_runtime_state.interp_main
         } else {
             if pid_data.globals._PyThreadState_Current == 0 {
-                return Err(ErrorCode::ERROR_MISSING_PYSTATE);
+                return Err(Metrics::ErrPy_MISSING_PYSTATE);
             }
 
             // Get PyThreadState of the thread that currently holds the GIL
@@ -87,14 +87,14 @@ pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> 
                 // The GIL is released, we can only get native stacks
                 // until it is held again.
                 // TODO: mark GIL state = released in event
-                return Err(ErrorCode::ERROR_THREAD_STATE_NULL);
+                return Err(Metrics::ErrPy_THREAD_STATE_NULL);
             }
             // Read the interpreter pointer from the ThreadState:
             _PyThreadState_Current + offsets.py_thread_state.interp
         };
-        pid_data.interp = unsafe { bpf_probe_read_user(interp_ptr as *const _) }.map_err(|_|ErrorCode::ERROR_INTERPRETER_NULL)?;
+        pid_data.interp = unsafe { bpf_probe_read_user(interp_ptr as *const _) }.map_err(|_|Metrics::ErrPy_INTERPRETER_NULL)?;
         if pid_data.interp == 0 {
-            return Err(ErrorCode::ERROR_INTERPRETER_NULL);
+            return Err(Metrics::ErrPy_INTERPRETER_NULL);
         }
     }
 
@@ -106,9 +106,9 @@ pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> 
     state.thread_state = unsafe { bpf_probe_read_user(
         (state.interp_head +
             offsets.py_interpreter_state.tstate_head) as *const _)}
-        .map_err(|i| {info!(ctx, "{}", i); ErrorCode::ERROR_NONE} )? ;
+        .map_err(|i| {info!(ctx, "{}", i); Metrics::ErrPy_NONE} )? ;
     if (state.thread_state == 0) {
-        return Err(ErrorCode::ERROR_THREAD_STATE_HEAD_NULL);
+        return Err(Metrics::ErrPy_THREAD_STATE_HEAD_NULL);
     }
 
     // Call get_thread_state to find the PyThreadState of this thread:
@@ -118,7 +118,7 @@ pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> 
 
     unsafe { read_python_stack(ctx, stack, state, &offsets, frame_ptr) };
 
-    // event.error_code = ErrorCode::ERROR_CALL_FAILED;
+    // event.error_code = Metrics::ErrPy_CALL_FAILED;
     // EVENTS.output(ctx, &state.event, 0);
     Ok(0)
 }

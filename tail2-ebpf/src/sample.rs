@@ -29,42 +29,44 @@ pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(512, 
 pub(crate) static METRICS: HashMap<u32, u64> = HashMap::with_max_entries(Metrics::Max as u32, 0);
 
 #[uprobe(name="malloc_enter")]
-fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
+fn malloc_enter(ctx: ProbeContext) {
     // let sz = ctx.arg(0).unwrap();
-    sample(&ctx)
+    sample(&ctx);
 }
 
 #[perf_event(name="capture_stack")]
-fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
-    sample(&ctx)
+fn capture_stack(ctx: PerfEventContext) {
+    sample(&ctx);
 }
 
-fn sample<C: BpfContext>(ctx: &C) -> Option<u32> {
-    let st: &mut BpfSample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
-    st.clear();
+fn sample<C: BpfContext>(ctx: &C) {
+    if let Err(e) = sample_inner(ctx) {
+        incr_metric(e);
+    }
+}
 
+fn sample_inner<C: BpfContext>(ctx: &C) -> Result<(), Metrics> {
+    let st = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::Err_Sample)?) };
     let ns: bpf_pidns_info = get_pid_tgid();
     st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
-    st.native_stack = Some(NativeStack::uninit());
-    sample_user(ctx, st.native_stack.as_mut().unwrap(), ns.pid);
+    st.native_stack = NativeStack::uninit();
+    sample_user(ctx, &mut st.native_stack, ns.pid);
 
     st.python_stack = Some(PythonStack::uninit());
-    let result = sample_python(ctx, st.python_stack.as_mut().unwrap());
+    let result = sample_python(ctx, st.python_stack.as_mut().ok_or(Metrics::Err_Sample)?);
+    if let Err(e) = result {
+        incr_metric(e);
+    }
 
     st.kernel_stack_id = sample_kernel(ctx);
-
-    // match result {
-    //     Ok(v) => info!(ctx, "ok: {}", v as usize),
-    //     Err(e) => (), //info!(ctx, "err: {}", e as usize),
-    // }
 
     unsafe {
         STACKS.output(ctx, st, 0);
         incr_metric(Metrics::SentStackCount);
     }
 
-    Some(0)
+    Ok(())
 }
 
 pub fn incr_metric(key: Metrics) {
