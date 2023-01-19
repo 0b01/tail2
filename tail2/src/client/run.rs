@@ -64,7 +64,7 @@ pub(crate) async fn open_and_subcribe(
                         let events = evts.unwrap();
                         for buf in buffers.iter_mut().take(events.read) {
                             let st: BpfSample = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
-                            // dbg!(&st);
+                            // dbg!(&st.native_stack.unwind_success);
 
                             if tx.try_send(st).is_err() {
                                 error!("slow");
@@ -118,7 +118,6 @@ pub(crate) async fn run_bpf(
         while let Some(st) = rx.recv().await {
             let start_time = SystemTime::now();
 
-            // dbg!(&st);
             if let Some(ref output_tx) = output_tx {
                 output_tx.send(st).await.unwrap();
             }

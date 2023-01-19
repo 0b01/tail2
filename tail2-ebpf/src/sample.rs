@@ -46,15 +46,16 @@ fn sample<C: BpfContext>(ctx: &C) {
 }
 
 fn sample_inner<C: BpfContext>(ctx: &C) -> Result<(), Metrics> {
-    let st = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::Err_Sample)?) };
+    let st = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::ErrSample_CantAlloc)?) };
     let ns: bpf_pidns_info = get_pid_tgid();
     st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
 
     st.native_stack = NativeStack::uninit();
-    sample_user(ctx, &mut st.native_stack, ns.pid);
+    sample_user(ctx, &mut st.native_stack, ns.pid)?;
 
     st.python_stack = Some(PythonStack::uninit());
-    let result = sample_python(ctx, st.python_stack.as_mut().ok_or(Metrics::Err_Sample)?);
+    let stack = st.python_stack.as_mut().ok_or(Metrics::ErrPy_NoStack)?;
+    let result = sample_python(ctx, stack);
     if let Err(e) = result {
         incr_metric(e);
     }

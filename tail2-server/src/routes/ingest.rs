@@ -1,6 +1,6 @@
 use anyhow::Context;
 use axum::{response::Result};
-use tracing::{debug, info};
+use tracing::info;
 use std::{sync::Arc};
 use axum::{body::Bytes, extract::State};
 

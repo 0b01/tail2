@@ -27,7 +27,11 @@ iterable_enum! {
     #[repr(u32)]
     vis pub enum Metrics {
         SentStackCount,
-        Err_Sample,
+
+        ErrSample_CantAlloc,
+        ErrSample_NoPidInfo,
+        ErrSample_BinarySearch,
+
         ErrUnw_InvalidRule,
         ErrUnw_CouldNotReadStack,
         ErrUnw_FramepointerUnwindingMovedBackwards,
@@ -35,6 +39,7 @@ iterable_enum! {
         ErrUnw_IntegerOverflow,
         ErrUnw_ReturnAddressIsNull,
 
+        ErrPy_NoStack,
         /// No error
         ErrPy_NONE,
         /// Expected one of _PyThreadState_Current/_PyRuntime to be set, but both are NULL.

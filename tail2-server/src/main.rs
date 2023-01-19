@@ -13,7 +13,6 @@ use tower_http::{
 };
 use state::ServerState;
 
-
 pub mod error;
 pub mod routes;
 pub mod state;

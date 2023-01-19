@@ -102,6 +102,8 @@ impl StackBatchDto {
                 from_native_stack(&mut batch, bpf_sample.native_stack, bpf_sample.pid_tgid.pid(), module_cache)
             {
                 dto.native_frames = native_frames;
+            } else {
+                continue;
             }
 
             if let Some(s) = bpf_sample.kernel_frames {
@@ -111,6 +113,7 @@ impl StackBatchDto {
                     .map(|name| FrameDto::Kernel { name })
                     .collect();
             }
+
             batch.stacks.push(dto);
         }
 
