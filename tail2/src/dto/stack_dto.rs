@@ -209,10 +209,17 @@ fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)>
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum UnsymbolizedFrame {
+    None,
     ProcessRoot { pid: u32 },
     Native { module_idx: u32, offset: u32 },
     Python { name: String },
     Kernel { name: String },
+}
+
+impl Default for UnsymbolizedFrame {
+    fn default() -> Self {
+        UnsymbolizedFrame::None
+    }
 }
 
 impl From<FrameDto> for UnsymbolizedFrame {
@@ -228,6 +235,7 @@ impl From<FrameDto> for UnsymbolizedFrame {
 impl UnsymbolizedFrame {
     pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut ModuleMap) -> SymbolizedFrame {
         match self {
+            UnsymbolizedFrame::None => Default::default(), // TODO: rethink this
             UnsymbolizedFrame::ProcessRoot { pid } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(pid.to_string()), code_type: crate::calltree::CodeType::ProcessRoot },
             UnsymbolizedFrame::Native { module_idx, offset } => {
                 let module = Arc::clone(&modules[module_idx as usize]);

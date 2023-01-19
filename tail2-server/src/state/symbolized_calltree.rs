@@ -25,7 +25,7 @@ impl Default for SymbolizedCallTree {
 }
 
 impl SymbolizedCallTree {
-    pub fn add_stacks(&mut self, batch: StackBatchDto, notify: Arc<Notify>) {
+    pub fn add_stack_batch(&mut self, batch: StackBatchDto) {
         for stack in batch.stacks {
             let unsym = stack.mix(&batch.modules, &mut self.modules);
             let sym = unsym
@@ -35,6 +35,5 @@ impl SymbolizedCallTree {
             let ct = CallTree::from_frames(&sym);
             self.calltree.merge(&ct);
         }
-        notify.notify_one();
     }
 }

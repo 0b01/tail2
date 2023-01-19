@@ -36,8 +36,9 @@ async fn main() -> Result<()> {
             let cli = probe_state.cli;
 
             run_until_exit(t2.bpf, cli, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
-            println!("{:?}", rx.recv().await.unwrap());
-            println!("{:?}", rx.recv().await.unwrap());
+            while let Some(e) = rx.recv().await {
+                println!("{:?}", e.native_stack);
+            }
         }
         _ => {
             panic!();

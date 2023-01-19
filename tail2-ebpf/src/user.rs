@@ -3,7 +3,7 @@ use aya_log_ebpf::{error, info};
 use tail2_common::{NativeStack, ConfigMapKey, pidtgid::PidTgid, procinfo::{ProcInfo, MAX_ROWS_PER_PROC}, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwind_rule::UnwindRuleX86_64}, MAX_USER_STACK, bpf_sample::BpfSample, native::unwinding::x86_64::unwindregs::UnwindRegsX86_64, metrics::Metrics};
 use aya_bpf::bindings::pt_regs;
 
-use crate::{vmlinux::task_struct, helpers::get_pid_tgid, sample::incr_metric};
+use crate::{vmlinux::task_struct, helpers::get_pid_tgid};
 use crate::sample::PIDS;
 
 #[cfg(feature = "x86_64")]

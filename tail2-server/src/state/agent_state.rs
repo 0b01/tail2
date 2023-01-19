@@ -3,13 +3,15 @@ use std::collections::HashMap;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use tail2::{client::ws_client::messages::AgentMessage, probes::Probe};
+use tail2_db::db;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::error;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ProbeInfo {
     pub is_running: bool,
-    // TODO:
+    // #[serde(skip)]
+    // pub db: db::Tail2DB,
 }
 
 #[derive(Serialize, Deserialize)]

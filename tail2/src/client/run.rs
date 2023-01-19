@@ -206,6 +206,14 @@ pub fn get_pid_child(
 }
 
 pub async fn bpf_init() -> Result<Bpf> {
+    tracing_subscriber::fmt()
+        // Configure formatting settings.
+        .with_target(false)
+        .with_timer(tracing_subscriber::fmt::time::uptime())
+        .with_level(true)
+        // Set the subscriber as the default.
+        .init();
+
     ensure_root();
     bump_memlock_rlimit()?;
     let mut bpf = load_bpf()?;
