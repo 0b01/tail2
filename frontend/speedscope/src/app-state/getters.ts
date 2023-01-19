@@ -64,8 +64,10 @@ export const getFrameToColorBucket = memoizeByReference(
     // for (let i = 0; i < frames.length; i++) {
     //   frameToColorBucket.set(frames[i].color_key, Math.floor((255 * i) / frames.length))
     // }
+    frameToColorBucket.set(CodeType.Unknown, 10)
     frameToColorBucket.set(CodeType.Native, 100)
     frameToColorBucket.set(CodeType.Python, 255)
+    frameToColorBucket.set(CodeType.ProcessRoot, 150)
     console.log(frameToColorBucket);
 
     return frameToColorBucket

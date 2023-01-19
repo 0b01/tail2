@@ -6,9 +6,11 @@ export interface ICallTree<T> {
 }
 
 export enum CodeType {
+    Unknown = "Unknown",
     Native = "Native",
     Python = "Python",
     Kernel = "Kernel",
+    ProcessRoot = "ProcessRoot",
 }
 
 export interface IResolvedFrame {

@@ -15,14 +15,14 @@ use self::symbolized_calltree::SymbolizedCallTree;
 #[derive(Clone)]
 pub struct ServerState {
     pub agents: Notifiable<Arc<Mutex<HashMap<String, Tail2Agent>>>>,
-    pub calltree: Notifiable<SymbolizedCallTree>,
+    pub calltree: Notifiable<Arc<Mutex<SymbolizedCallTree>>>,
 }
 
 impl ServerState {
     pub fn new() -> Self {
         Self {
             agents: Notifiable::new(Arc::new(Mutex::new(HashMap::new()))),
-            calltree: Notifiable::new(SymbolizedCallTree::new()),
+            calltree: Notifiable::new(Arc::new(Mutex::new(SymbolizedCallTree::new()))),
         }
     }
 }

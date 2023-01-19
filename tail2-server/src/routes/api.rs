@@ -7,7 +7,7 @@ use crate::state::ServerState;
 use async_stream::{try_stream, AsyncStream};
 
 pub(crate) async fn current<'a>(State(ct): State<ServerState>) -> String {
-    let ct = ct.calltree.as_ref().calltree.lock().await;
+    let ct = &ct.calltree.as_ref().lock().await.calltree;
     let node = Node::new(ct.root, &ct.arena);
 
     serde_json::to_string(&node).unwrap()

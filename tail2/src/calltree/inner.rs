@@ -32,12 +32,12 @@ impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
         Self { arena, root }
     }
 
-    /// create a new call tree from stack
-    pub fn from_stack(stack: &[T]) -> Self {
+    /// create a new call tree from frames
+    pub fn from_frames(frames: &[T]) -> Self {
         let mut tree = Self::new();
         let mut prev = tree.root;
-        for (i, f) in stack.iter().enumerate() {
-            let is_last = i == (stack.len() - 1);
+        for (i, f) in frames.iter().enumerate() {
+            let is_last = i == (frames.len() - 1);
             let self_samples = if is_last { 1 } else { 0 };
             let new_node = tree.arena.new_node(CallTreeFrame {
                 item: f.clone(),
@@ -142,8 +142,8 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let mut ct1 = CallTreeInner::from_stack(&[0, 1, 2]);
-        let ct2 = CallTreeInner::from_stack(&[5, 6]);
+        let mut ct1 = CallTreeInner::from_frames(&[0, 1, 2]);
+        let ct2 = CallTreeInner::from_frames(&[5, 6]);
         ct1.merge(&ct2);
         dbg!(ct1.root.debug_pretty_print(&ct1.arena));
     }

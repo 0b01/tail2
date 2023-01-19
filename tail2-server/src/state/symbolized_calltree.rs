@@ -1,20 +1,20 @@
 use std::sync::Arc;
 
-use tail2::{calltree::CallTree, symbolication::elf::SymbolCache, Mergeable, dto::{build_mixed_frames, StackBatchDto}};
-use tokio::sync::{Mutex, Notify};
+use tail2::{calltree::CallTree, symbolication::elf::SymbolCache, Mergeable, dto::{StackBatchDto, ModuleMap}};
+use tokio::sync::Notify;
 
-#[derive(Clone)]
 pub struct SymbolizedCallTree {
-    pub calltree: Arc<Mutex<CallTree>>,
-    pub symbols: Arc<Mutex<SymbolCache>>,
+    pub calltree: CallTree,
+    pub modules: ModuleMap,
+    pub symbols: SymbolCache,
 }
 
 impl SymbolizedCallTree {
     pub fn new() -> Self {
-        let calltree = Arc::new(Mutex::new(CallTree::new()));
-        // let _changed = Arc::new(Notify::new());
-        let symbols = Arc::new(Mutex::new(SymbolCache::new()));
-        Self { calltree, symbols }
+        let calltree = CallTree::new();
+        let symbols = SymbolCache::new();
+        let modules = ModuleMap::new();
+        Self { calltree, symbols, modules }
     }
 }
 
@@ -25,18 +25,16 @@ impl Default for SymbolizedCallTree {
 }
 
 impl SymbolizedCallTree {
-    pub fn add_stacks(&self, batch: StackBatchDto, notify: Arc<Notify>) {
-        let ct_ = Arc::clone(&self.calltree);
-        let syms = Arc::clone(&self.symbols);
-        tokio::spawn(async move {
-            let mut ct = CallTree::new();
-            for stack in batch.stacks {
-                let mixed_stack = build_mixed_frames(stack, &syms, &batch.modules).await;
-                ct.merge(&CallTree::from_stack(&mixed_stack));
-            }
-            // info!("{:#?}", ct.root.debug_pretty_print(&ct.arena));
-            ct_.lock().await.merge(&ct);
-            notify.notify_one();
-        });
+    pub fn add_stacks(&mut self, batch: StackBatchDto, notify: Arc<Notify>) {
+        for stack in batch.stacks {
+            let unsym = stack.mix(&batch.modules, &mut self.modules);
+            let sym = unsym
+                .into_iter()
+                .map(|i| i.symbolize(&mut self.symbols, &mut self.modules))
+                .collect::<Vec<_>>();
+            let ct = CallTree::from_frames(&sym);
+            self.calltree.merge(&ct);
+        }
+        notify.notify_one();
     }
 }

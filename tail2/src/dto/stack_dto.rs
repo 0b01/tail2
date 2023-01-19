@@ -1,21 +1,20 @@
-use std::{sync::Arc, path::PathBuf};
+use std::{sync::Arc, ops::Index};
 
 use anyhow::{Context, Result};
 use procfs::process::{MemoryMap, Process};
 use serde::{Deserialize, Serialize};
 use tail2_common::{NativeStack, pidtgid::PidTgid};
-use tokio::sync::Mutex;
 
 use crate::{
     symbolication::{module::Module, module_cache::ModuleCache, elf::SymbolCache},
-    utils::MMapPathExt, calltree::{ResolvedFrame, CodeType}, probes::Probe, tail2::HOSTNAME,
+    utils::MMapPathExt, probes::Probe, tail2::HOSTNAME, calltree::SymbolizedFrame,
 };
 
 use super::resolved_bpf_sample::ResolvedBpfSample;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum FrameDto {
-    Native { module_idx: usize, offset: usize },
+    Native { module_idx: u32, offset: u32 },
     Python { name: String },
     Kernel { name: String },
 }
@@ -53,6 +52,52 @@ impl StackDto {
             python_frames: vec![],
             err: None,
         }
+    }
+
+    /// Mix native, python, kernel stack together into a unified call tree
+    pub fn mix( self, modules: &[Arc<Module>], new_modules: &mut ModuleMap) -> Vec<UnsymbolizedFrame> {
+        let mut ret = vec![];
+        let mut python_frames = self.python_frames.into_iter();
+
+        ret.push(UnsymbolizedFrame::ProcessRoot { pid: self.pid_tgid.pid() });
+
+        for f in self.native_frames {
+            match f {
+                FrameDto::Native { module_idx, offset } => {
+                    let module = &modules[module_idx as usize];
+                    let new_idx = new_modules.get_index_or_insert(Arc::clone(&module));
+                    match module.py_offset() {
+                        Some(py_offset) if py_offset == offset => {
+                            ret.push(
+                                python_frames.next()
+                                    .map(|i| i.into())
+                                    .unwrap_or_else(|| UnsymbolizedFrame::Native { module_idx: new_idx, offset })
+                            );
+                        }
+                        _ => {
+                            ret.push(UnsymbolizedFrame::Native { module_idx: new_idx, offset });
+                        }
+                    }
+                }
+                _ => {
+                    unreachable!()
+                }
+            }
+        }
+
+        // ret.append(&mut python_frames.map(|f| Some(ResolvedFrame {
+        //     module_idx: 0,
+        //     offset: 0,
+        //     code_type: CodeType::Python,
+        //     name: f.python_name(),
+        // })).collect());
+        if !ret.is_empty() {
+            for kernel_frame in self.kernel_frames {
+                ret.push(kernel_frame.into());
+            }
+        }
+
+        ret
     }
 }
 
@@ -147,7 +192,7 @@ fn from_native_stack(
             }
         };
 
-        native_frames.push(FrameDto::Native { module_idx, offset });
+        native_frames.push(FrameDto::Native { module_idx: module_idx as u32, offset: offset as u32 });
     }
     Ok(native_frames)
 }
@@ -162,81 +207,70 @@ fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)>
     None
 }
 
-pub async fn build_mixed_frames(
-    stack: StackDto,
-    syms: &Arc<Mutex<SymbolCache>>,
-    modules: &[Arc<Module>],
-) -> Vec<Option<ResolvedFrame>> {
-    let mut ret = vec![];
-    let mut python_frames = stack.python_frames.into_iter();
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub enum UnsymbolizedFrame {
+    ProcessRoot { pid: u32 },
+    Native { module_idx: u32, offset: u32 },
+    Python { name: String },
+    Kernel { name: String },
+}
 
-    ret.push(Some(ResolvedFrame {
-        module_idx: 0,
-        offset: 0,
-        code_type: CodeType::ProcessRoot,
-        name: Some(stack.pid_tgid.pid().to_string()),
-    }));
+impl From<FrameDto> for UnsymbolizedFrame {
+    fn from(value: FrameDto) -> Self {
+        match value {
+            FrameDto::Native { module_idx, offset } => Self::Native { module_idx, offset },
+            FrameDto::Python { name } => Self::Python { name },
+            FrameDto::Kernel { name } => Self::Kernel { name },
+        }
+    }
+}
 
-    for f in stack.native_frames {
-        match f {
-            FrameDto::Native { module_idx, offset } => {
-                let module = &modules[module_idx];
-                let mut syms = syms.lock().await;
-                match syms.entry(&module.path) {
-                    Some((module_idx, elf)) => {
-                        let name = elf.find(offset);
-                        match name.as_deref() {
-                            Some("_PyEval_EvalFrameDefault") => {
-                                ret.push(python_frames.next().map(|i| ResolvedFrame {
-                                    module_idx: 0,
-                                    offset: 0,
-                                    code_type: CodeType::Python,
-                                    name: i.python_name(),
-                                }));
-                            }
-                            _ => {
-                                let module_name = PathBuf::from(&module.path);
-                                let module_name = module_name
-                                    .file_name()
-                                    .map(|i| i.to_string_lossy().to_string())
-                                    .unwrap_or_default();
-                                let fn_name = name.unwrap_or_default();
-                                ret.push(Some(ResolvedFrame {
-                                    module_idx,
-                                    offset,
-                                    code_type: CodeType::Native,
-                                    name: Some(format!("{module_name}: {fn_name}")),
-                                }));
-                            }
-                        }
-                    }
-                    None => {
-                        ret.push(None);
-                    }
-                }
-            }
-            _ => {
-                unreachable!()
-            }
+impl UnsymbolizedFrame {
+    pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut ModuleMap) -> SymbolizedFrame {
+        match self {
+            UnsymbolizedFrame::ProcessRoot { pid } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(pid.to_string()), code_type: crate::calltree::CodeType::ProcessRoot },
+            UnsymbolizedFrame::Native { module_idx, offset } => {
+                let module = Arc::clone(&modules[module_idx as usize]);
+                let name = 
+                    symbols.entry(&module.path)
+                        .and_then(|(_idx, sym)|
+                            sym.find(offset as usize));
+                SymbolizedFrame { module_idx, offset, name, code_type: crate::calltree::CodeType::Native }
+            },
+            UnsymbolizedFrame::Python { name } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(name), code_type: crate::calltree::CodeType::Python },
+            UnsymbolizedFrame::Kernel { name } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(name), code_type: crate::calltree::CodeType::Kernel },
+        }
+    }
+}
+
+pub struct ModuleMap {
+    map: Vec<Arc<Module>>
+}
+
+impl ModuleMap {
+    pub fn new() -> Self {
+        Self {
+            map: vec![],
         }
     }
 
-    // ret.append(&mut python_frames.map(|f| Some(ResolvedFrame {
-    //     module_idx: 0,
-    //     offset: 0,
-    //     code_type: CodeType::Python,
-    //     name: f.python_name(),
-    // })).collect());
-    if !ret.is_empty() {
-        for kernel_frame in stack.kernel_frames {
-            ret.push(Some(ResolvedFrame {
-                module_idx: 0,
-                offset: 0,
-                code_type: CodeType::Kernel,
-                name: kernel_frame.kernel_name(),
-            }));
-        }
-    }
+    pub fn get_index_or_insert(&mut self, module: Arc<Module>) -> u32 {
+        let module_idx = match self.map.iter().position(|m| m.as_ref() == module.as_ref()) {
+            Some(idx) => idx,
+            None => {
+                self.map.push(module);
+                self.map.len() - 1
+            }
+        };
 
-    ret
+        module_idx as u32
+    }
+}
+
+impl Index<usize> for ModuleMap {
+    type Output = Arc<Module>;
+
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.map[idx]
+    }
 }

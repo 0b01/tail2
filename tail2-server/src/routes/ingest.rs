@@ -18,6 +18,6 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
         .get_mut(&probe).unwrap();
 
     let notify = calltree.notify();
-    calltree.as_ref().add_stacks(batch, notify);
+    calltree.as_ref().lock().await.add_stacks(batch, notify);
     Ok(())
 }
