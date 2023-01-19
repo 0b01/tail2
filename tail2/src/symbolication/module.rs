@@ -19,6 +19,7 @@ pub struct Module {
     pub arch: i32,
     pub kind: ObjectKind,
     pub debug_id: String,
+    pub is_python_module: bool,
 }
 
 impl Debug for Module {
@@ -37,12 +38,14 @@ impl Module {
         let buffer = ByteView::open(path)?;
         let obj = ElfObject::parse(&buffer)?;
         let unwind_table = Arc::new(UnwindTable::from_path(path)?);
+        let debug_id = obj.debug_id().to_string();
         Ok(Self {
             unwind_table: Some(unwind_table),
             path: path.to_owned(),
             arch: obj.arch() as i32,
             kind: obj.kind(),
-            debug_id: obj.debug_id().to_string(),
+            debug_id,
+            is_python_module: true, // TODO:
         })
     }
 }

@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{
     client::{run::{get_pid_child, run_until_exit, RunUntil}, ws_client::ProbeState},
     processes::Processes,
-    Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE,
+    Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE, symbolication::module::Module,
 };
 use clap::{Parser, Subcommand};
 use tracing::info;
@@ -63,8 +63,10 @@ impl Commands {
                 return Ok(());
             }
             Commands::Symbols { paths } => {
-                for _p in paths {
-                    // dump_elf(p)?;
+                dbg!(&paths);
+                for p in paths {
+                    let module = Module::from_path(&p).unwrap();
+                    println!("{:#?}", module);
                 }
                 return Ok(());
             }

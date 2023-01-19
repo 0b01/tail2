@@ -1,13 +1,13 @@
 use axum::{extract::State, response::IntoResponse, http::HeaderMap};
 use reqwest::header;
-use tail2::calltree::inner::serialize::Node;
+use tail2::calltree::serialize::Node;
 use axum::response::sse::{Event, Sse};
 use std::convert::Infallible;
 use crate::state::ServerState;
 use async_stream::{try_stream, AsyncStream};
 
 pub(crate) async fn current<'a>(State(ct): State<ServerState>) -> String {
-    let ct = ct.calltree.as_ref().ct.lock().await;
+    let ct = ct.calltree.as_ref().calltree.lock().await;
     let node = Node::new(ct.root, &ct.arena);
 
     serde_json::to_string(&node).unwrap()

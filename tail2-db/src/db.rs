@@ -7,8 +7,6 @@ use duckdb::Config;
 use duckdb::Connection;
 use duckdb::OptionalExt;
 use duckdb::Result;
-use tail2::calltree::inner::CallTreeFrame;
-use tail2::calltree::inner::CallTreeInner;
 use tail2::calltree::CallTree;
 use tail2::Mergeable;
 

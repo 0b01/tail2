@@ -7,15 +7,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use tracing::error;
 
 #[derive(Serialize, Deserialize, Default)]
-pub struct ProbeMetrics {
-
-}
-
-#[derive(Serialize, Deserialize, Default)]
 pub struct ProbeInfo {
     pub is_running: bool,
-    #[serde(skip)]
-    pub metrics: ProbeMetrics,
+    // TODO:
 }
 
 #[derive(Serialize, Deserialize)]

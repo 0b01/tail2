@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use self::inner::CallTreeInner;
 
-pub mod inner;
+pub mod serialize {
+    pub use super::inner::serialize::Node;
+}
+
+mod inner;
 pub mod traits;
 
 pub type CallTree = CallTreeInner<Option<ResolvedFrame>>;
@@ -19,8 +23,8 @@ pub enum CodeType {
 pub struct ResolvedFrame {
     pub module_idx: usize,
     pub offset: usize,
-    pub code_type: CodeType,
     pub name: Option<String>,
+    pub code_type: CodeType,
 }
 
 impl PartialEq for ResolvedFrame {

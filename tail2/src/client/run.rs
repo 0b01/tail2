@@ -206,12 +206,6 @@ pub fn get_pid_child(
 }
 
 pub async fn bpf_init() -> Result<Bpf> {
-    // init logger
-    let env = env_logger::Env::default()
-        .filter_or("LOG_LEVEL", "info")
-        .write_style_or("LOG_STYLE", "always");
-
-    env_logger::init_from_env(env);
     ensure_root();
     bump_memlock_rlimit()?;
     let mut bpf = load_bpf()?;

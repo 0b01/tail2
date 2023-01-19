@@ -162,7 +162,7 @@ fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)>
     None
 }
 
-pub async fn build_stack(
+pub async fn build_mixed_frames(
     stack: StackDto,
     syms: &Arc<Mutex<SymbolCache>>,
     modules: &[Arc<Module>],
