@@ -3,7 +3,7 @@ use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
 use tail2_common::metrics::Metrics;
-use tracing::{error, info};
+use tracing::Level;
 use nix::sys::ptrace;
 
 use nix::unistd::{getuid, Pid};
@@ -67,12 +67,12 @@ pub(crate) async fn open_and_subcribe(
                             // dbg!(&st.native_stack.unwind_success);
 
                             if tx.try_send(st).is_err() {
-                                error!("slow");
+                                tracing::error!("slow");
                             }
                         }
                     },
                     _ = stop_rx2.changed() => {
-                        tracing::info!("stopping for cpu: {cpu_id}");
+                        tracing::warn!("stopping for cpu: {cpu_id}");
                         break;
                     },
                 };
@@ -84,11 +84,11 @@ pub(crate) async fn open_and_subcribe(
 
 pub(crate) async fn run_bpf(
     bpf: Arc<Mutex<Bpf>>,
-    cli: Arc<Mutex<PostStackClient>>,
+    clis: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>,
     stop_rx: watch::Receiver<()>,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<Vec<JoinHandle<()>>> {
-    info!("run_bpf");
+    tracing::info!("run_bpf");
     // send device info
     {
         let bpf_ = &mut *bpf.lock().await;
@@ -112,7 +112,7 @@ pub(crate) async fn run_bpf(
     // receiver thread
     let mut ts = vec![];
     let mut total_time = Duration::new(0, 0);
-    let cli = Arc::clone(&cli);
+    let clis = Arc::clone(&clis);
     let t = tokio::spawn(async move {
         let mut c = 0;
         while let Some(st) = rx.recv().await {
@@ -122,12 +122,13 @@ pub(crate) async fn run_bpf(
                 output_tx.send(st).await.unwrap();
             }
 
+            let cli = Arc::clone(&clis.lock().await[st.idx]);
             let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
             if let Some(st) = st {
                 let cli2 = Arc::clone(&cli);
                 tokio::spawn(async move {
                     if let Err(e) = cli2.lock().await.post_stack(st).await {
-                        error!("sending stack failed: {}", e.to_string());
+                        tracing::error!("sending stack failed: {}", e.to_string());
                     }
                 });
             }
@@ -137,10 +138,10 @@ pub(crate) async fn run_bpf(
             c += 1;
         }
 
-        let _ = cli.lock().await.flush().await;
+        // let _ = cli.lock().await.flush().await;
 
         let avg_t = total_time / c;
-        info!("Processed: {c} stacks. {avg_t:?}/st");
+        tracing::info!("Processed: {c} stacks. {avg_t:?}/st");
     });
     ts.push(t);
 
@@ -153,7 +154,7 @@ pub(crate) async fn run_bpf(
 fn ensure_root() {
     let uid = getuid().as_raw();
     if uid != 0 {
-        error!("tail2 be be run with root privileges!");
+        tracing::error!("tail2 be be run with root privileges!");
         exit(-1);
     }
 }
@@ -178,7 +179,7 @@ pub fn get_pid_child(
     match (pid, command) {
         (None, None) => (None, None),
         (None, Some(cmd)) => {
-            info!("Launching child process: `{:?}`", cmd);
+            tracing::info!("Launching child process: `{:?}`", cmd);
             let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
             let path = PathBuf::from(cmd_split.next().unwrap());
             let mut cmd = Command::new(path);
@@ -205,13 +206,12 @@ pub fn get_pid_child(
     }
 }
 
-pub async fn bpf_init() -> Result<Bpf> {
+pub async fn init_bpf() -> Result<Bpf> {
     tracing_subscriber::fmt()
-        // Configure formatting settings.
         .with_target(false)
         .with_timer(tracing_subscriber::fmt::time::uptime())
         .with_level(true)
-        // Set the subscriber as the default.
+        .with_max_level(Level::INFO)
         .init();
 
     ensure_root();
@@ -234,7 +234,7 @@ pub enum RunUntil {
 
 pub async fn run_until_exit(
     bpf: Arc<Mutex<Bpf>>,
-    cli: Arc<Mutex<PostStackClient>>,
+    clis: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>,
     run_until: RunUntil,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<()> {
@@ -248,25 +248,25 @@ pub async fn run_until_exit(
 
     spawn_proc_refresh(bpf.clone(), stop_rx.clone()).await;
 
-    let tasks = run_bpf(bpf.clone(), cli, stop_rx, output_tx).await?;
+    let tasks = run_bpf(bpf.clone(), clis, stop_rx, output_tx).await?;
 
     match run_until {
         RunUntil::CtrlC => {
             signal::ctrl_c().await.expect("failed to listen for event");
         }
         RunUntil::ChildProcessExits(mut child) => {
-            info!("resuming child");
+            tracing::info!("resuming child");
             let pid = Pid::from_raw(child.id() as i32);
             // nix::sys::wait::waitpid(pid, None).unwrap();
             ptrace::cont(pid, None).unwrap();
             child.wait().expect("unable to execute child");
-            info!("child exited");
+            tracing::info!("child exited");
         }
         RunUntil::ExternalHalt(_) => (),
     }
 
     if let Some(stop_tx) = stop_tx {
-        info!("exiting");
+        tracing::info!("exiting");
         stop_tx.send(())?;
     }
 
@@ -283,7 +283,7 @@ async fn proc_refresh_inner(
 ) {
     let mut processes = Processes::new();
     if let Ok(()) = processes.refresh().await {
-        dbg!(processes.processes.keys().len());
+        tracing::warn!("# processes: {}", processes.processes.keys().len());
         // copy to maps
         for (pid, nfo) in &processes.processes {
             let nfo = nfo.as_ref();
@@ -339,10 +339,10 @@ pub(crate) async fn print_stats(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
     let info: HashMap<_, u32, u64> =
         HashMap::try_from(bpf.map("METRICS").context("no such map")?)?;
     
-    info!("Sent: {} stacks", info.get(&(Metrics::SentStackCount as u32), 0).unwrap_or(0));
+    tracing::info!("Sent: {} stacks", info.get(&(Metrics::SentStackCount as u32), 0).unwrap_or(0));
 
-    for k in Metrics::iter() {
-        info!("{k:?} = {}", info.get(&(k as u32), 0).unwrap_or(0));
+    for k in Metrics::iter().split_last().unwrap().1 {
+        tracing::info!("{k:?} = {}", info.get(&(*k as u32), 0).unwrap_or(0));
     }
 
     Ok(())

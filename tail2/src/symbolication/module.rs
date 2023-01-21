@@ -1,7 +1,7 @@
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc, collections::HashMap};
+use std::{fmt::Debug, sync::Arc, collections::HashMap, path::Path};
 
 use symbolic::{
     common::ByteView,
@@ -25,6 +25,7 @@ pub struct Module {
     #[serde(skip)]
     pub unwind_table: Option<Arc<UnwindTable>>,
     pub path: String,
+    pub name: String,
     pub arch: i32,
     pub kind: ObjectKind,
     pub debug_id: String,
@@ -49,10 +50,12 @@ impl Module {
         let unwind_table = Arc::new(UnwindTable::from_path(path)?);
         let debug_id = obj.debug_id().to_string();
         let is_python_module = PYTHON_DEBUG_IDS.contains_key(debug_id.as_str());
+        let name = Path::file_stem(&Path::new(path)).unwrap_or_default().to_string_lossy().to_string();
         Ok(Self {
             unwind_table: Some(unwind_table),
             path: path.to_owned(),
             arch: obj.arch() as i32,
+            name,
             kind: obj.kind(),
             debug_id,
             is_python_module,

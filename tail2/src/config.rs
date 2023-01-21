@@ -17,7 +17,7 @@ pub struct Tail2Config {
 pub struct Server {
     pub host: String,
     pub port: u16,
-    pub batch_size: usize,
+    pub batch_size: Option<usize>,
 }
 
 impl Tail2Config {

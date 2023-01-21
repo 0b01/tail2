@@ -11,16 +11,16 @@ use reqwest::Url;
 
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{Mutex, mpsc, watch};
-use tracing::info;
 
 
+use crate::client::PostStackClient;
 use crate::client::run::{run_until_exit, RunUntil};
-use crate::client::ws_client::{ProbeState};
 use crate::client::ws_client::messages::{AgentMessage, NewConnection};
 
 
 use crate::probes::Probe;
-use crate::{client::run::bpf_init, symbolication::module_cache::ModuleCache};
+use crate::probes::probe::{ProbePool, Attachment};
+use crate::{client::run::init_bpf, symbolication::module_cache::ModuleCache};
 
 use crate::{config::Tail2Config};
 
@@ -36,16 +36,32 @@ pub static HOSTNAME: Lazy<String> = Lazy::new(||
     gethostname::gethostname().to_string_lossy().to_string()
 );
 
+pub struct Probes {
+    probes: HashMap<Arc<Probe>, Attachment>,
+    pub probe_pool: ProbePool,
+    pub clients: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>
+}
+
+impl Default for Probes {
+    fn default() -> Self {
+        Self {
+            probes: Default::default(),
+            probe_pool: ProbePool::new(5),
+            clients: Default::default(),
+        }
+    }
+}
+
 pub struct Tail2 {
     pub bpf: Arc<Mutex<aya::Bpf>>,
     pub config: Tail2Config,
-    pub probes: Arc<Mutex<HashMap<Probe, ProbeState>>>,
+    pub probes: Arc<Mutex<Probes>>,
     halt_tx: Arc<Mutex<Option<watch::Sender<()>>>>,
 }
 
 impl Tail2 {
     pub async fn new() -> Result<Self> {
-        let bpf = Arc::new(Mutex::new(bpf_init().await?));
+        let bpf = Arc::new(Mutex::new(init_bpf().await?));
         let config = Tail2Config::new()?;
 
         let probe_links = Default::default();
@@ -56,60 +72,61 @@ impl Tail2 {
     }
 
     pub async fn on_new_msg(
-        diff: AgentMessage,
+        agent_msg: AgentMessage,
         tx: UnboundedSender<AgentMessage>,
-        probes: Arc<Mutex<HashMap<Probe, ProbeState>>>,
+        probes: Arc<Mutex<Probes>>,
         bpf: Arc<Mutex<Bpf>>,
         halt_tx: Arc<Mutex<Option<watch::Sender<()>>>>,
     ) {
-        match &diff {
+        match &agent_msg {
             AgentMessage::AddProbe { probe } => {
-                if probes.lock().await.contains_key(&probe) {
+                let probe = Arc::new(probe.to_owned());
+                if probes.lock().await.probes.contains_key(&probe) {
                     tx.send(AgentMessage::AgentError {
                         message: format!("Probe is already running: {probe:?}")
                     }).unwrap();
                     return;
                 }
 
-                let links = probe.attach(&mut *bpf.lock().await).unwrap();
-                let probe_state= ProbeState::new(probe.clone(), links);
-                let cli = Arc::clone(&probe_state.cli);
-                probes.lock().await.insert(probe.clone(), probe_state);
-                info!("Probe attached: {:?}", probe);
+                let attachment = probe.attach(&mut *bpf.lock().await, &*probes.lock().await).await.unwrap();
+                probes.lock().await.probes.insert(probe.clone(), attachment);
+                tracing::info!("Probe attached: {:?}", probe);
 
+                let clis = Arc::clone(&probes.lock().await.clients);
                 if halt_tx.lock().await.is_none() {
                     let (tx, rx) = watch::channel(());
                     *halt_tx.lock().await = Some(tx);
                     tokio::spawn(
                         run_until_exit(
                             bpf.clone(),
-                            cli,
+                            clis,
                             RunUntil::ExternalHalt(rx),
                             None)
                     );
                 }
 
-                tx.send(diff).unwrap();
+                tx.send(agent_msg).unwrap();
             }
             AgentMessage::StopProbe { probe } => {
-                if !probes.lock().await.contains_key(&probe) {
+                let probe = Arc::new(probe.to_owned());
+                if !probes.lock().await.probes.contains_key(&probe) {
                     tx.send(AgentMessage::AgentError {
                         message: format!("Probe doesn't exist: {probe:?}")
                     }).unwrap();
                     return;
                 }
 
-                let links = probes.lock().await.remove(&probe).unwrap();
+                let links = probes.lock().await.probes.remove(&probe).unwrap();
                 links.detach().await;
 
-                info!("Probe detached: {:?}", &probe);
-                tx.send(diff).unwrap();
+                tracing::info!("Probe detached: {:?}", &probe);
+                tx.send(agent_msg).unwrap();
             },
             AgentMessage::Halt => {
                 if let Some(halt_tx) = &mut *halt_tx.lock().await {
                     halt_tx.send(()).unwrap();
                     tx.send(AgentMessage::Halt).unwrap();
-                    probes.lock().await.clear();
+                    probes.lock().await.probes.clear();
                 } else {
                     tx.send(AgentMessage::AgentError {
                         message: "Unable to halt".to_string()

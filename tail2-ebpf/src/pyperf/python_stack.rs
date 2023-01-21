@@ -39,7 +39,7 @@ pub unsafe fn read_symbol<C: BpfContext>(ctx: &C, offsets: &PythonOffsets, frame
         return Err(Metrics::ErrPy_FRAME_CODE_IS_NULL);
     }
     sym.lineno = read(code_ptr + offsets.py_code_object.co_firstlineno)?;
-    // info!(ctx, "lineno: {}", sym.lineno);
+    // tracing::info!(ctx, "lineno: {}", sym.lineno);
     // get_classname(&offsets, frame, code_ptr, &mut sym.classname)?;
     let pystr_ptr: usize = read(code_ptr + offsets.py_code_object.co_filename)?;
     // TODO: too big for stack

@@ -241,17 +241,12 @@ export class Application extends StatelessComponent<ApplicationProps> {
 
     console.log("test");
     this.loadProfile(load);
-    const evtSource = new EventSource("/api/events");
-    console.log(evtSource);
-    evtSource.onmessage = (event) => {
-      this.loadProfile(load);
-    };
   }
 
 
-  loadFromApi(url?: string) {
+  loadFromApi(url: string) {
     var load = async () => {
-      let f = await fetch(url ?? "/api/current");
+      let f = await fetch(url);
       let j: CallTree = await f.json();
       let profile = convert(j);
       console.log(profile);
@@ -263,7 +258,8 @@ export class Application extends StatelessComponent<ApplicationProps> {
     };
 
     this.loadProfile(load);
-    const evtSource = new EventSource("/api/events");
+    const params = (new URL(url)).searchParams;
+    const evtSource = new EventSource("/api/events?"+params.toString());
     console.log(evtSource);
     evtSource.onmessage = (event) => {
       console.log(event);
@@ -315,7 +311,7 @@ export class Application extends StatelessComponent<ApplicationProps> {
       return this.loadFromApi(profileURL);
     }
 
-    return this.loadFromApi();
+    console.error("no profileURL specified in URL params")
   }
 
   renderLanding() {

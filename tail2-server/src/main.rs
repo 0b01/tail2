@@ -78,7 +78,7 @@ async fn main() {
         .with_state(ServerState::new());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
-    tracing::debug!("listening on {}", addr);
+    tracing::warn!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
@@ -94,7 +94,7 @@ async fn static_path(prefix: &str, Path(path): Path<String>) -> impl IntoRespons
         use std::{path::PathBuf, fs::File, io::Read};
         // dbg!(path);
         let path = PathBuf::from(format!("./tail2-server/static/{}/{}", prefix, path)).canonicalize().unwrap();
-        debug!("{path:?}");
+        tracing::warn!("{path:?}");
         if path.exists() {
             let mut buf = vec![];
             File::open(path).unwrap().read_to_end(&mut buf).unwrap();

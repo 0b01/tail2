@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Parser;
-use tracing::info;
 
 pub mod utils;
 
@@ -14,7 +13,7 @@ async fn main() -> Result<()> {
         None => t2.run_agent().await?,
     }
 
-    info!("tail2 exiting");
+    tracing::info!("tail2 exiting");
 
     Ok(())
 }

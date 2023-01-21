@@ -37,6 +37,7 @@ impl FrameDto {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StackDto {
     pub pid_tgid: PidTgid,
+    pub ts: u64,
     pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
     pub python_frames: Vec<FrameDto>,
@@ -44,9 +45,10 @@ pub struct StackDto {
 }
 
 impl StackDto {
-    pub fn new(pid_tgid: PidTgid) -> Self {
+    pub fn new(pid_tgid: PidTgid, ts: u64) -> Self {
         Self {
             pid_tgid,
+            ts,
             kernel_frames: vec![],
             native_frames: vec![],
             python_frames: vec![],
@@ -117,7 +119,7 @@ pub fn proc_map(pid: u32) -> Result<Vec<MemoryMap>> {
 }
 
 impl StackBatchDto {
-    pub fn new(probe: Probe) -> Self {
+    pub fn new(probe: Arc<Probe>) -> Self {
         let probe = serde_json::to_string(&probe).unwrap();
         Self {
             hostname: HOSTNAME.to_string(),
@@ -128,13 +130,13 @@ impl StackBatchDto {
     }
 
     pub fn from_stacks(
-        probe: Probe,
+        probe: Arc<Probe>,
         samples: Vec<ResolvedBpfSample>,
         module_cache: &mut ModuleCache,
     ) -> Result<StackBatchDto> {
         let mut batch = StackBatchDto::new(probe);
         for bpf_sample in samples {
-            let mut dto = StackDto::new(bpf_sample.pid_tgid);
+            let mut dto = StackDto::new(bpf_sample.pid_tgid, bpf_sample.ts);
             if let Some(s) = bpf_sample.python_stack {
                 dto.python_frames = s
                     .frames
@@ -243,6 +245,7 @@ impl UnsymbolizedFrame {
                     symbols.entry(&module.path)
                         .and_then(|(_idx, sym)|
                             sym.find(offset as usize));
+                let name = name.map(|s| format!("{}: {}", module.name, s));
                 SymbolizedFrame { module_idx, offset, name, code_type: crate::calltree::CodeType::Native }
             },
             UnsymbolizedFrame::Python { name } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(name), code_type: crate::calltree::CodeType::Python },

@@ -34,7 +34,7 @@ function Agents() {
     </Card>;
   }
   else {
-    let cards = Object.entries(agents).map(([k, v]) => <AgentCard name={k} agent={v} key={k}/>);
+    let cards = Object.entries(agents).map(([k, v]) => <AgentCard host_name={k} agent={v} key={k}/>);
     agent_grid = 
       <>
         <Grid item lg={12} xs={12} style={{minHeight: '800px'}}>

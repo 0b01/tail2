@@ -1,7 +1,7 @@
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
-    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task},
+    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task, bpf_ktime_get_ns},
     maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
     bindings::{bpf_pidns_info, pt_regs, BPF_F_REUSE_STACKID}, BpfContext
 };
@@ -28,42 +28,45 @@ pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(512, 
 #[map(name="METRICS")]
 pub(crate) static METRICS: HashMap<u32, u64> = HashMap::with_max_entries(Metrics::Max as u32, 0);
 
-#[uprobe(name="malloc_enter")]
-fn malloc_enter(ctx: ProbeContext) {
-    // let sz = ctx.arg(0).unwrap();
-    sample(&ctx);
-}
+#[uprobe(name="malloc_enter_0")] fn malloc_enter_0(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 0); }
+#[uprobe(name="malloc_enter_1")] fn malloc_enter_1(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 1); }
+#[uprobe(name="malloc_enter_2")] fn malloc_enter_2(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 2); }
+#[uprobe(name="malloc_enter_3")] fn malloc_enter_3(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 3); }
+#[uprobe(name="malloc_enter_4")] fn malloc_enter_4(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 4); }
 
-#[perf_event(name="capture_stack")]
-fn capture_stack(ctx: PerfEventContext) {
-    sample(&ctx);
-}
+#[perf_event(name="capture_stack_0")] fn capture_stack_0(ctx: PerfEventContext) { sample(&ctx, 0); }
+#[perf_event(name="capture_stack_1")] fn capture_stack_1(ctx: PerfEventContext) { sample(&ctx, 1); }
+#[perf_event(name="capture_stack_2")] fn capture_stack_2(ctx: PerfEventContext) { sample(&ctx, 2); }
+#[perf_event(name="capture_stack_3")] fn capture_stack_3(ctx: PerfEventContext) { sample(&ctx, 3); }
+#[perf_event(name="capture_stack_4")] fn capture_stack_4(ctx: PerfEventContext) { sample(&ctx, 4); }
 
-fn sample<C: BpfContext>(ctx: &C) {
-    if let Err(e) = sample_inner(ctx) {
+fn sample<C: BpfContext>(ctx: &C, idx: usize) {
+    if let Err(e) = sample_inner(ctx, idx) {
         incr_metric(e);
     }
 }
 
-fn sample_inner<C: BpfContext>(ctx: &C) -> Result<(), Metrics> {
-    let st = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::ErrSample_CantAlloc)?) };
+fn sample_inner<C: BpfContext>(ctx: &C, idx: usize) -> Result<(), Metrics> {
+    let sample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::ErrSample_CantAlloc)?) };
     let ns: bpf_pidns_info = get_pid_tgid();
-    st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+    sample.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+    sample.ts = unsafe { bpf_ktime_get_ns() };
+    sample.idx = idx;
 
-    st.native_stack = NativeStack::uninit();
-    sample_user(ctx, &mut st.native_stack, ns.pid)?;
+    sample.native_stack = NativeStack::uninit();
+    sample_user(ctx, &mut sample.native_stack, ns.pid)?;
 
-    st.python_stack = Some(PythonStack::uninit());
-    let stack = st.python_stack.as_mut().ok_or(Metrics::ErrPy_NoStack)?;
+    sample.python_stack = Some(PythonStack::uninit());
+    let stack = sample.python_stack.as_mut().ok_or(Metrics::ErrPy_NoStack)?;
     let result = sample_python(ctx, stack);
     if let Err(e) = result {
         incr_metric(e);
     }
 
-    st.kernel_stack_id = sample_kernel(ctx);
+    sample.kernel_stack_id = sample_kernel(ctx);
 
     unsafe {
-        STACKS.output(ctx, st, 0);
+        STACKS.output(ctx, sample, 0);
         incr_metric(Metrics::SentStackCount);
     }
 

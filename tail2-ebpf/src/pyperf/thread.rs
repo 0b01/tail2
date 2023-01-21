@@ -22,7 +22,7 @@ pub fn get_thread_state<C: BpfContext>(ctx: &C, state: &mut SampleState, offsets
             let thread_id = unsafe { bpf_probe_read_user((state.thread_state + offsets.py_thread_state.thread) as *const u64) };
             match thread_id {
                 Ok(id) => {
-                    // info!(ctx, "{} ?= {}", id, state.current_thread_id);
+                    // tracing::info!(ctx, "{} ?= {}", id, state.current_thread_id);
                     // if id == state.current_thread_id {
                     if id != state.current_thread_id { // Temp debug
                         found = true;
@@ -62,7 +62,7 @@ pub fn get_thread_state<C: BpfContext>(ctx: &C, state: &mut SampleState, offsets
 
     // // We are going to need this later
     // state.cur_cpu = unsafe { bpf_get_smp_processor_id() };
-    // info!(ctx, "found");
+    // tracing::info!(ctx, "found");
 }
 
 /// Get the thread id for a task just as Python would. Currently assumes Python uses pthreads.
@@ -73,7 +73,7 @@ pub unsafe fn get_task_thread_id<C: BpfContext>(ctx: &C, task: *const task_struc
     // HACK: Usually BCC would translate a deref of the field into `read_kernel` for us, but it
     //       doesn't detect it due to the macro (because it transforms before preprocessing).
     let fsbase = bpf_probe_read(&(*task).thread.uw.tp_value).unwrap();
-    // info!(ctx, "fsbase: {}", fsbase);
+    // tracing::info!(ctx, "fsbase: {}", fsbase);
     let ret = match pthreads_impl {
         pthreads_impl::PTI_GLIBC => {
             // 0x10 = offsetof(tcbhead_t, self)
@@ -83,7 +83,7 @@ pub unsafe fn get_task_thread_id<C: BpfContext>(ctx: &C, task: *const task_struc
             bpf_probe_read_user(fsbase as *const _).unwrap_or(903)
         }
     };
-    // info!(ctx, "ret: {}", ret);
+    // tracing::info!(ctx, "ret: {}", ret);
     Ok(ret)
 
     // Ok(ret)

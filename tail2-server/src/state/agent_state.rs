@@ -1,23 +1,39 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use tail2::{client::ws_client::messages::AgentMessage, probes::Probe};
 use tail2_db::db;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, Mutex};
 use tracing::error;
 
+use crate::Notifiable;
+
+use super::symbolized_calltree::SymbolizedCallTree;
+
 #[derive(Serialize, Deserialize, Default)]
-pub struct ProbeInfo {
+pub struct ProbeState {
     pub is_running: bool,
     // #[serde(skip)]
     // pub db: db::Tail2DB,
+
+    #[serde(skip)]
+    pub calltree: Notifiable<Arc<Mutex<SymbolizedCallTree>>>,
+}
+
+impl ProbeState {
+    pub fn new() -> Self {
+        Self {
+            is_running: false,
+            calltree: Notifiable::new(Arc::new(Mutex::new(SymbolizedCallTree::new()))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Tail2Agent {
     #[serde(with = "vectorize")]
-    pub probes: HashMap<Probe, ProbeInfo>,
+    pub probes: HashMap<Probe, ProbeState>,
     #[serde(skip)]
     pub tx: Option<UnboundedSender<AgentMessage>>,
     is_halted: bool,
@@ -44,7 +60,7 @@ impl Tail2Agent {
                 info.is_running = false;
             }
             AgentMessage::AgentError { message } => {
-                error!("error: {}", message);
+                tracing::error!("error: {}", message);
             }
             AgentMessage::Halt => {
                 self.is_halted = true;

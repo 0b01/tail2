@@ -1,12 +1,13 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 
 use crate::{
-    client::{run::{get_pid_child, run_until_exit, RunUntil}, ws_client::ProbeState},
+    client::{run::{get_pid_child, run_until_exit, RunUntil}},
     processes::Processes,
     Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE, symbolication::module::Module,
 };
 use clap::{Parser, Subcommand};
-use tracing::info;
 
 #[derive(Debug, Parser)]
 pub struct Opt {
@@ -59,7 +60,7 @@ impl Commands {
             Commands::Processes {} => {
                 let mut p = Processes::new();
                 p.refresh().await.unwrap();
-                info!("{:#?}", p);
+                tracing::info!("{:#?}", p);
                 return Ok(());
             }
             Commands::Symbols { paths } => {
@@ -77,18 +78,18 @@ impl Commands {
             } => {
                 let (pid, child) = get_pid_child(pid, command);
 
-                let probe = Probe::Perf{
+                let probe = Arc::new(Probe::Perf{
                     scope: match pid {
                         Some(pid) => Scope::Pid {pid},
                         None => Scope::SystemWide,
                     },
                     period,
-                };
+                });
 
-                let links = probe.attach(&mut*t2.bpf.lock().await)?;
-                let probe_state = ProbeState::new(probe, links);
+                let attachment = probe.attach(&mut*t2.bpf.lock().await, &*t2.probes.lock().await).await?;
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
-                run_until_exit(t2.bpf, probe_state.cli, run_until, None).await?;
+                let clis = Arc::clone(&t2.probes.lock().await.clients);
+                run_until_exit(t2.bpf, clis, run_until, None).await?;
             }
             Commands::Uprobe {
                 pid,
@@ -96,18 +97,18 @@ impl Commands {
                 command,
             } => {
                 let (pid, child) = get_pid_child(pid, command);
-                let probe = Probe::Uprobe{
+                let probe = Arc::new(Probe::Uprobe{
                     scope: match pid {
                         Some(pid) => Scope::Pid{pid},
                         None => Scope::SystemWide,
                     },
                     uprobe,
-                };
+                });
 
-                let links = probe.attach(&mut *t2.bpf.lock().await)?;
-                let probe_state = ProbeState::new(probe, links);
+                let attachment = probe.attach(&mut *t2.bpf.lock().await, &*t2.probes.lock().await).await?;
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
-                run_until_exit(t2.bpf, probe_state.cli, run_until, None).await?;
+                let clis = Arc::clone(&t2.probes.lock().await.clients);
+                run_until_exit(t2.bpf, clis, run_until, None).await?;
             }
         }
 

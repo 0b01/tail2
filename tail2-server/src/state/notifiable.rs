@@ -9,6 +9,15 @@ pub struct Notifiable<T> {
     notify: Arc<Notify>,
 }
 
+impl<T: Default> Default for Notifiable<T> {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(Default::default()),
+            notify: Arc::new(Notify::new())
+        }
+    }
+}
+
 impl<T> AsRef<T> for Notifiable<T> {
     fn as_ref(&self) -> &T {
         &self.inner

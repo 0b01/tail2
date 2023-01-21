@@ -70,7 +70,7 @@ pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> 
     if (pid_data.interp == 0) {
         // This is the first time we sample this process (or the GIL is still released).
         // Let's find PyInterpreterState:
-        // info!(ctx, "interp_ptr: {}", pid_data.globals._PyRuntime);
+        // tracing::info!(ctx, "interp_ptr: {}", pid_data.globals._PyRuntime);
         let interp_ptr = if pid_data.globals._PyRuntime != 0 {
             pid_data.globals._PyRuntime + offsets.py_runtime_state.interp_main
         } else {
