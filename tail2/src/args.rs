@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::{
     client::{run::{get_pid_child, run_until_exit, RunUntil}},
     processes::Processes,
-    Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE, symbolication::module::Module,
+    Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE, symbolication::{module::Module, elf::SymbolCache},
 };
 use clap::{Parser, Subcommand};
 
@@ -64,10 +64,14 @@ impl Commands {
                 return Ok(());
             }
             Commands::Symbols { paths } => {
-                dbg!(&paths);
+                let mut symbols = SymbolCache::new();
                 for p in paths {
                     let module = Module::from_path(&p).unwrap();
                     println!("{:#?}", module);
+
+                    if let Some((_, e)) = symbols.entry(&p) {
+                        println!("{:#?}", e);
+                    }
                 }
                 return Ok(());
             }
@@ -105,7 +109,7 @@ impl Commands {
                     uprobe,
                 });
 
-                let attachment = probe.attach(&mut *t2.bpf.lock().await, &*t2.probes.lock().await).await?;
+                let _attachment = probe.attach(&mut *t2.bpf.lock().await, &*t2.probes.lock().await).await?;
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
                 let clis = Arc::clone(&t2.probes.lock().await.clients);
                 run_until_exit(t2.bpf, clis, run_until, None).await?;

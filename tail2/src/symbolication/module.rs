@@ -12,11 +12,11 @@ use tail2_common::native::unwinding::aarch64::unwind_table::UnwindTable;
 #[cfg(target_arch = "x86_64")]
 use tail2_common::native::unwinding::x86_64::unwind_table::UnwindTable;
 
-/// a map from debug_id to the offset of symbol _PyEval_EvalFrameDefault
-pub static PYTHON_DEBUG_IDS: Lazy<HashMap<&'static str, u32>> = Lazy::new(|| {
+/// a map from debug_id to the offset and size of method _PyEval_EvalFrameDefault
+pub static PYTHON_DEBUG_IDS: Lazy<HashMap<&'static str, (u32, u32)>> = Lazy::new(|| {
     let mut ret = HashMap::new();
-    ret.insert("e41d84a1-ecf4-4594-a10b-ff638afa4c72", 0x0ebfe0); // 3.10
-    ret.insert("d719f365-a65f-1262-0654-ed39ed608b11", 0x4a3f10); // 3.11
+    ret.insert("e41d84a1-ecf4-4594-a10b-ff638afa4c72", (966624, 42316)); // 3.10
+    ret.insert("d719f365-a65f-1262-0654-ed39ed608b11", (0x4a3f10, 0)); // 3.11
     ret
 });
 
@@ -29,7 +29,7 @@ pub struct Module {
     pub arch: i32,
     pub kind: ObjectKind,
     pub debug_id: String,
-    pub is_python_module: bool,
+    pub py_offset: Option<(u32, u32)>,
 }
 
 impl Debug for Module {
@@ -49,7 +49,7 @@ impl Module {
         let obj = ElfObject::parse(&buffer)?;
         let unwind_table = Arc::new(UnwindTable::from_path(path)?);
         let debug_id = obj.debug_id().to_string();
-        let is_python_module = PYTHON_DEBUG_IDS.contains_key(debug_id.as_str());
+        let py_offset = PYTHON_DEBUG_IDS.get(debug_id.as_str()).copied();
         let name = Path::file_stem(&Path::new(path)).unwrap_or_default().to_string_lossy().to_string();
         Ok(Self {
             unwind_table: Some(unwind_table),
@@ -58,16 +58,7 @@ impl Module {
             name,
             kind: obj.kind(),
             debug_id,
-            is_python_module,
+            py_offset,
         })
-    }
-
-    pub fn py_offset(&self) -> Option<u32> {
-        if self.is_python_module {
-            let ret = PYTHON_DEBUG_IDS.get(self.debug_id.as_str()).unwrap();
-            Some(*ret)
-        } else {
-            None
-        }
     }
 }

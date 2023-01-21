@@ -68,8 +68,8 @@ impl StackDto {
                 FrameDto::Native { module_idx, offset } => {
                     let module = &modules[module_idx as usize];
                     let new_idx = new_modules.get_index_or_insert(Arc::clone(&module));
-                    match module.py_offset() {
-                        Some(py_offset) if py_offset == offset => {
+                    match module.py_offset {
+                        Some((py_offset, sz)) if py_offset <= offset && offset <= py_offset + sz => {
                             ret.push(
                                 python_frames.next()
                                     .map(|i| i.into())
@@ -245,6 +245,9 @@ impl UnsymbolizedFrame {
                     symbols.entry(&module.path)
                         .and_then(|(_idx, sym)|
                             sym.find(offset as usize));
+                if let Some("_PyEval_EvalFrameDefault") = name.as_deref() {
+                    dbg!(offset);
+                }
                 let name = name.map(|s| format!("{}: {}", module.name, s));
                 SymbolizedFrame { module_idx, offset, name, code_type: crate::calltree::CodeType::Native }
             },
