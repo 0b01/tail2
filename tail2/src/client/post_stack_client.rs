@@ -18,8 +18,6 @@ impl PostStackClient {
     pub fn new(probe: Arc<Probe>) -> Self {
         let url = format!("http://{}:{}/api/stack", CONFIG.server.host, CONFIG.server.port);
         let batch_size = CONFIG.server.batch_size.unwrap_or(1000);
-        dbg!(&probe);
-
         Self {
             client: reqwest::Client::new(),
             probe,

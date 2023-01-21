@@ -22,8 +22,7 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
         .get(&probe).unwrap()
         .calltree
         .as_ref()
-        .lock()
-        .await
+        .lock().await
         .calltree;
     let node = Node::new(calltree.root, &calltree.arena);
 

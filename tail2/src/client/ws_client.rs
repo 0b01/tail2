@@ -1,8 +1,4 @@
-use std::sync::Arc;
-
 use serde::{Serialize, Deserialize};
-
-use crate::probes::{Probe, probe::Attachment};
 
 pub mod messages {
     use crate::probes::Probe;

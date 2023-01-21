@@ -4,7 +4,8 @@ use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use tail2::{client::ws_client::messages::AgentMessage, probes::Probe};
 use tail2_db::db;
-use tokio::sync::{mpsc::UnboundedSender, Mutex};
+use tokio::sync::{mpsc::UnboundedSender};
+use tokio::sync::Mutex;
 use tracing::error;
 
 use crate::Notifiable;

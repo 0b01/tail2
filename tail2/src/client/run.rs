@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
@@ -25,7 +25,6 @@ use tokio::task::JoinHandle;
 
 use std::time::Duration;
 
-use anyhow::Context;
 use aya::maps::MapData;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
@@ -37,12 +36,69 @@ use crate::processes::Processes;
 
 use super::post_stack_client::PostStackClient;
 
-pub(crate) async fn open_and_subcribe(
+pub(crate) async fn run_bpf(
     bpf: Arc<Mutex<Bpf>>,
-    tx: mpsc::Sender<BpfSample>,
+    clis: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>,
     stop_rx: watch::Receiver<()>,
-    ts: &mut Vec<JoinHandle<()>>,
-) {
+    output_tx: Option<mpsc::Sender<BpfSample>>,
+) -> Result<Vec<JoinHandle<()>>> {
+    tracing::info!("run_bpf");
+    // send device info
+    {
+        let bpf_ = &mut *bpf.lock().await;
+        let mut config: HashMap<_, u32, u64> =
+            HashMap::try_from(bpf_.map_mut("CONFIG").unwrap()).unwrap();
+        let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
+        config
+            .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
+            .unwrap();
+        config
+            .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
+            .unwrap();
+    }
+
+    let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
+
+    let kernel_stacks =
+        StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap();
+    let ksyms = aya::util::kernel_symbols().unwrap();
+
+    // receiver task
+    let mut ts = vec![];
+    let mut total_time = Duration::new(0, 0);
+    let clis = Arc::clone(&clis);
+    let t = tokio::spawn(async move {
+        let mut c = 0;
+        while let Some(st) = rx.recv().await {
+            let start_time = SystemTime::now();
+
+            if let Some(ref output_tx) = output_tx {
+                output_tx.send(st).await.unwrap();
+            }
+
+            let cli = Arc::clone(&clis.lock().await[st.idx]);
+            let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
+            if let Some(st) = st {
+                let cli2 = Arc::clone(&cli);
+                tokio::spawn(async move {
+                    if let Err(e) = cli2.lock().await.post_stack(st).await {
+                        tracing::error!("sending stack failed: {}", e.to_string());
+                    }
+                });
+            }
+
+            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
+            total_time += elapsed;
+            c += 1;
+        }
+
+        // let _ = cli.lock().await.flush().await;
+
+        let avg_t = total_time / c;
+        tracing::info!("Processed: {c} stacks. {avg_t:?}/st");
+    });
+    ts.push(t);
+
     // open bpf maps
     let mut stacks = AsyncPerfEventArray::try_from(bpf.lock().await.take_map("STACKS").unwrap()).unwrap();
 
@@ -80,72 +136,6 @@ pub(crate) async fn open_and_subcribe(
         });
         ts.push(t);
     }
-}
-
-pub(crate) async fn run_bpf(
-    bpf: Arc<Mutex<Bpf>>,
-    clis: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>,
-    stop_rx: watch::Receiver<()>,
-    output_tx: Option<mpsc::Sender<BpfSample>>,
-) -> Result<Vec<JoinHandle<()>>> {
-    tracing::info!("run_bpf");
-    // send device info
-    {
-        let bpf_ = &mut *bpf.lock().await;
-        let mut config: HashMap<_, u32, u64> =
-            HashMap::try_from(bpf_.map_mut("CONFIG").unwrap()).unwrap();
-        let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-        config
-            .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
-            .unwrap();
-        config
-            .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
-            .unwrap();
-    }
-
-    let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
-
-    let kernel_stacks =
-        StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap();
-    let ksyms = aya::util::kernel_symbols().unwrap();
-
-    // receiver thread
-    let mut ts = vec![];
-    let mut total_time = Duration::new(0, 0);
-    let clis = Arc::clone(&clis);
-    let t = tokio::spawn(async move {
-        let mut c = 0;
-        while let Some(st) = rx.recv().await {
-            let start_time = SystemTime::now();
-
-            if let Some(ref output_tx) = output_tx {
-                output_tx.send(st).await.unwrap();
-            }
-
-            let cli = Arc::clone(&clis.lock().await[st.idx]);
-            let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
-            if let Some(st) = st {
-                let cli2 = Arc::clone(&cli);
-                tokio::spawn(async move {
-                    if let Err(e) = cli2.lock().await.post_stack(st).await {
-                        tracing::error!("sending stack failed: {}", e.to_string());
-                    }
-                });
-            }
-
-            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
-            total_time += elapsed;
-            c += 1;
-        }
-
-        // let _ = cli.lock().await.flush().await;
-
-        let avg_t = total_time / c;
-        tracing::info!("Processed: {c} stacks. {avg_t:?}/st");
-    });
-    ts.push(t);
-
-    open_and_subcribe(bpf, tx, stop_rx, &mut ts).await;
 
     Ok(ts)
 }
@@ -246,9 +236,9 @@ pub async fn run_until_exit(
             (Some(tx), rx)
         };
 
-    spawn_proc_refresh(bpf.clone(), stop_rx.clone()).await;
+    spawn_proc_refresh(Arc::clone(&bpf), stop_rx.clone()).await;
 
-    let tasks = run_bpf(bpf.clone(), clis, stop_rx, output_tx).await?;
+    let tasks = run_bpf(Arc::clone(&bpf), clis, stop_rx, output_tx).await?;
 
     match run_until {
         RunUntil::CtrlC => {

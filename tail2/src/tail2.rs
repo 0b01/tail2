@@ -10,7 +10,9 @@ use reqwest::Url;
 
 
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::{Mutex, mpsc, watch};
+use tokio::sync::{mpsc, watch};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 
 use crate::client::PostStackClient;
@@ -73,16 +75,17 @@ impl Tail2 {
 
     pub async fn on_new_msg(
         agent_msg: AgentMessage,
-        tx: UnboundedSender<AgentMessage>,
+        ws_tx: UnboundedSender<AgentMessage>,
         probes: Arc<Mutex<Probes>>,
         bpf: Arc<Mutex<Bpf>>,
         halt_tx: Arc<Mutex<Option<watch::Sender<()>>>>,
+        join_handle: Arc<Mutex<Option<JoinHandle<Result<()>>>>>,
     ) {
         match &agent_msg {
             AgentMessage::AddProbe { probe } => {
                 let probe = Arc::new(probe.to_owned());
                 if probes.lock().await.probes.contains_key(&probe) {
-                    tx.send(AgentMessage::AgentError {
+                    ws_tx.send(AgentMessage::AgentError {
                         message: format!("Probe is already running: {probe:?}")
                     }).unwrap();
                     return;
@@ -96,21 +99,22 @@ impl Tail2 {
                 if halt_tx.lock().await.is_none() {
                     let (tx, rx) = watch::channel(());
                     *halt_tx.lock().await = Some(tx);
-                    tokio::spawn(
+                    let j = tokio::spawn(
                         run_until_exit(
-                            bpf.clone(),
+                            Arc::clone(&bpf),
                             clis,
                             RunUntil::ExternalHalt(rx),
                             None)
                     );
+                    join_handle.lock().await.replace(j);
                 }
 
-                tx.send(agent_msg).unwrap();
+                ws_tx.send(agent_msg).unwrap();
             }
             AgentMessage::StopProbe { probe } => {
                 let probe = Arc::new(probe.to_owned());
                 if !probes.lock().await.probes.contains_key(&probe) {
-                    tx.send(AgentMessage::AgentError {
+                    ws_tx.send(AgentMessage::AgentError {
                         message: format!("Probe doesn't exist: {probe:?}")
                     }).unwrap();
                     return;
@@ -120,20 +124,24 @@ impl Tail2 {
                 links.detach().await;
 
                 tracing::info!("Probe detached: {:?}", &probe);
-                tx.send(agent_msg).unwrap();
+                ws_tx.send(agent_msg).unwrap();
             },
             AgentMessage::Halt => {
                 if let Some(halt_tx) = &mut *halt_tx.lock().await {
                     halt_tx.send(()).unwrap();
-                    tx.send(AgentMessage::Halt).unwrap();
+                    ws_tx.send(AgentMessage::Halt).unwrap();
                     probes.lock().await.probes.clear();
                 } else {
-                    tx.send(AgentMessage::AgentError {
+                    ws_tx.send(AgentMessage::AgentError {
                         message: "Unable to halt".to_string()
                     }).unwrap();
                 }
 
+                if let Some(jh) = join_handle.lock().await.take() {
+                    jh.await.unwrap().unwrap();
+                }
                 *halt_tx.lock().await = None;
+                tracing::warn!("BPF ref count: {}", Arc::strong_count(&bpf));
             }
             AgentMessage::AgentError { message: _ } => unimplemented!(),
         }
@@ -150,22 +158,6 @@ impl Tail2 {
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
         let (mut write, mut read) = ws_stream.split();
 
-        let probes = self.probes.clone();
-        let bpf  = self.bpf.clone();
-        let halt_tx = self.halt_tx.clone();
-        let t = tokio::spawn(async move {
-            while let Some(Ok(Message::Text(msg))) = read.next().await {
-                let diff: AgentMessage = serde_json::from_str(&msg).unwrap();
-                Self::on_new_msg(
-                    diff,
-                    ws_tx.clone(),
-                    probes.clone(),
-                    bpf.clone(),
-                    halt_tx.clone(),
-                ).await
-            }
-        });
-
         tokio::spawn(async move {
             while let Some(msg) = ws_rx.recv().await {
                 let s = serde_json::to_string(&msg).unwrap();
@@ -173,7 +165,22 @@ impl Tail2 {
             }
         });
 
-        t.await.unwrap();
+        let probes = self.probes.clone();
+        let bpf  = Arc::clone(&self.bpf);
+        let halt_tx = self.halt_tx.clone();
+        let join_handle = Arc::new(Mutex::new(None));
+        while let Some(Ok(Message::Text(msg))) = read.next().await {
+            let diff: AgentMessage = serde_json::from_str(&msg).unwrap();
+            Self::on_new_msg(
+                diff,
+                ws_tx.clone(),
+                Arc::clone(&probes),
+                Arc::clone(&bpf),
+                Arc::clone(&halt_tx),
+                Arc::clone(&join_handle),
+            ).await
+        }
+
         Ok(())
     }
 }

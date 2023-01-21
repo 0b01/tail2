@@ -1,10 +1,10 @@
 use anyhow::Context;
-use axum::{response::Result};
+use axum::response::Result;
 use axum::{body::Bytes, extract::State};
 
-use crate::{state::{ServerState}, error::AppError};
+use crate::{state::ServerState, error::AppError};
 
-use tail2::{ dto::{StackBatchDto}, probes::Probe};
+use tail2::{ dto::StackBatchDto, probes::Probe};
 
 pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Result<(), AppError> {
     let batch: StackBatchDto = bincode::deserialize(&var).context("cant deserialize")?;

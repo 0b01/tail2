@@ -90,7 +90,7 @@ impl Commands {
                     period,
                 });
 
-                let attachment = probe.attach(&mut*t2.bpf.lock().await, &*t2.probes.lock().await).await?;
+                let _attachment = probe.attach(&mut*t2.bpf.lock().await, &*t2.probes.lock().await).await?;
                 let run_until = child.map(RunUntil::ChildProcessExits).unwrap_or(RunUntil::CtrlC);
                 let clis = Arc::clone(&t2.probes.lock().await.clients);
                 run_until_exit(t2.bpf, clis, run_until, None).await?;

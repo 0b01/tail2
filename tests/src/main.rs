@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
                 scope: Scope::Pid{pid: pid.unwrap()},
                 uprobe,
             });
-            let attachment = probe.attach(&mut *t2.bpf.lock().await, &*t2.probes.lock().await).await.unwrap();
+            let _attachment = probe.attach(&mut *t2.bpf.lock().await, &*t2.probes.lock().await).await.unwrap();
 
             let clis = Arc::clone(&t2.probes.lock().await.clients);
             run_until_exit(t2.bpf, clis, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
