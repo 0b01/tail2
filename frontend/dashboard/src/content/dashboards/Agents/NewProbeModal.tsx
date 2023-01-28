@@ -1,6 +1,6 @@
 import { Box, Button, Card, FormControl, FormGroup, InputLabel, MenuItem, Modal, Select, TextField, Typography } from "@mui/material";
 import { useState } from "react";
-import { INewProbeModalProps, IPerfProbe, IProbe, IScope, IUprobeProbe, make_perf_probe, make_uprobe_probe, ProbeTypes, start_probe } from "./types";
+import { INewProbeModalProps, IScope, make_perf_probe, make_uprobe_probe, ProbeTypes, start_probe } from "./types";
 
 
 export function NewProbeModal(props: INewProbeModalProps) {

@@ -7,9 +7,7 @@ use duckdb::Config;
 use duckdb::Connection;
 use duckdb::OptionalExt;
 use duckdb::Result;
-use tail2::calltree::inner::CallTreeFrame;
-use tail2::calltree::inner::CallTreeInner;
-use tail2::calltree::CallTree;
+use tail2::calltree::UnsymbolizedCallTree;
 use tail2::Mergeable;
 
 use crate::tile;
@@ -20,7 +18,7 @@ pub struct DbRow {
     /// timestamp
     pub ts: i64,
     /// call tree
-    pub ct: CallTree,
+    pub ct: UnsymbolizedCallTree,
     /// count
     pub n: i32,
 }
@@ -53,7 +51,7 @@ pub struct DbResponse {
     /// end
     pub t1: i64,
     /// call tree
-    pub ct: CallTree,
+    pub ct: UnsymbolizedCallTree,
     /// count
     pub n: i32,
 }
@@ -279,7 +277,7 @@ mod tests {
                 .into_iter()
                 .map(|ts| DbRow {
                     ts,
-                    ct: CallTree::new(),
+                    ct: UnsymbolizedCallTree::new(),
                     n: 1,
                 })
                 .collect(),

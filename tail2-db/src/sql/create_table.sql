@@ -3,3 +3,8 @@ CREATE TABLE IF NOT EXISTS samples_{} (
     ct BLOB,
     n INT,
 );
+
+CREATE TABLE IF NOT EXISTS modules (
+    id INT PRIMARY KEY,
+    name VARCHAR,
+);

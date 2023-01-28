@@ -21,7 +21,8 @@ import {
   InputLabel,
   FormControl,
   Slider,
-  TextField
+  TextField,
+  Link
 } from '@mui/material';
 import LockTwoToneIcon from '@mui/icons-material/LockTwoTone';
 import PhoneLockedTwoToneIcon from '@mui/icons-material/PhoneLockedTwoTone';
@@ -79,7 +80,7 @@ function AgentCard(props: IAgentProps) {
     />
   </ListItemButton>
 
-  let modal = <NewProbeModal open={open} handleClose={handleClose} name={props.name} />;
+  let modal = <NewProbeModal open={open} handleClose={handleClose} name={props.host_name} />;
   let probes = agent.probes.map((nfo) => {
     let txt;
     let scope;
@@ -99,6 +100,12 @@ function AgentCard(props: IAgentProps) {
         break;
     };
 
+    var baseURL = window.document.URL;
+    const data_url = new URL("/api/current", baseURL);
+    data_url.search = new URLSearchParams({host_name: props.host_name, probe: JSON.stringify(nfo[0])}).toString();
+    const flamegraph_url = new URL("/flamegraph/app.html", baseURL);
+    flamegraph_url.searchParams.append("profileURL", data_url.toString());
+
           return <ListItem
             key={JSON.stringify(nfo[0])}
             sx={{
@@ -111,7 +118,7 @@ function AgentCard(props: IAgentProps) {
               </AvatarWrapperSuccess>
             </ListItemAvatar> */}
             <ListItemText
-              primary={<Text color="black">{txt}</Text>}
+              primary={<Link color="black" onClick={() => window.open(flamegraph_url)}>{txt}</Link>}
               primaryTypographyProps={{
                 variant: 'body1',
                 fontWeight: 'bold',
@@ -125,14 +132,14 @@ function AgentCard(props: IAgentProps) {
             <Switch
               edge="end"
               color="primary"
-              onChange={(e) => e.target.checked ? start_probe(props.name, nfo[0]) : stop_probe(props.name, nfo[0])}
+              onChange={(e) => e.target.checked ? start_probe(props.host_name, nfo[0]) : stop_probe(props.host_name, nfo[0])}
               checked={nfo[1].is_running}
             />
           </ListItem>
   });
 
   let stop_agent = async () => {
-    await fetch(`/api/agent/halt?name=${props.name}`);
+    await fetch(`/api/agent/halt?name=${props.host_name}`);
   }
 
   return (
@@ -151,7 +158,7 @@ function AgentCard(props: IAgentProps) {
               </AvatarWrapperSuccess>
           }
           action={agent.is_halted? null : <Button color="error" onClick={() => stop_agent()}>Stop</Button>}
-          title={props.name}
+          title={props.host_name}
           titleTypographyProps={{
             variant: 'body1',
             fontWeight: 'bold',

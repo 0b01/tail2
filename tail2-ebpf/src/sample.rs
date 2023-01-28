@@ -1,11 +1,11 @@
 use aya_bpf::{
     macros::{uprobe, map, perf_event},
     programs::{ProbeContext, PerfEventContext},
-    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task},
+    helpers::{bpf_get_ns_current_pid_tgid, bpf_get_current_task_btf, bpf_task_pt_regs, bpf_probe_read_user, bpf_get_current_task, bpf_ktime_get_ns},
     maps::{HashMap, PerCpuArray, PerfEventArray, StackTrace},
     bindings::{bpf_pidns_info, pt_regs, BPF_F_REUSE_STACKID}, BpfContext
 };
-use tail2_common::{bpf_sample::BpfSample, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, RunStatsKey, NativeStack, python::state::PythonStack, pidtgid::PidTgid};
+use tail2_common::{bpf_sample::BpfSample, procinfo::ProcInfo, native::unwinding::{aarch64::{unwind_rule::UnwindRuleAarch64, unwindregs::UnwindRegsAarch64}, x86_64::unwindregs::UnwindRegsX86_64}, NativeStack, python::state::PythonStack, pidtgid::PidTgid, metrics::Metrics};
 use aya_log_ebpf::{error, info};
 
 use crate::{pyperf::pyperf::sample_python, user::sample_user, helpers::get_pid_tgid, kernel::sample_kernel};
@@ -19,57 +19,63 @@ pub(crate) static mut STACK_BUF: PerCpuArray<BpfSample> = PerCpuArray::with_max_
 #[map(name="CONFIG")]
 pub(crate) static CONFIG: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
 
-#[map(name="RUN_STATS")]
-pub(crate) static RUN_STATS: HashMap<u32, u64> = HashMap::with_max_entries(10, 0);
-
 #[map(name="KERNEL_STACKS")]
 pub(crate) static KERNEL_STACKS: StackTrace = StackTrace::with_max_entries(10, 0);
 
 #[map(name="PIDS")]
 pub(crate) static PIDS: HashMap<u32, ProcInfo> = HashMap::with_max_entries(512, 0);
 
-#[uprobe(name="malloc_enter")]
-fn malloc_enter(ctx: ProbeContext) -> Option<u32> {
-    // let sz = ctx.arg(0).unwrap();
-    sample(&ctx)
+#[map(name="METRICS")]
+pub(crate) static METRICS: HashMap<u32, u64> = HashMap::with_max_entries(Metrics::Max as u32, 0);
+
+#[uprobe(name="malloc_enter_0")] fn malloc_enter_0(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 0); }
+#[uprobe(name="malloc_enter_1")] fn malloc_enter_1(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 1); }
+#[uprobe(name="malloc_enter_2")] fn malloc_enter_2(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 2); }
+#[uprobe(name="malloc_enter_3")] fn malloc_enter_3(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 3); }
+#[uprobe(name="malloc_enter_4")] fn malloc_enter_4(ctx: ProbeContext) { /* let sz = ctx.arg(0).unwrap(); */ sample(&ctx, 4); }
+
+#[perf_event(name="capture_stack_0")] fn capture_stack_0(ctx: PerfEventContext) { sample(&ctx, 0); }
+#[perf_event(name="capture_stack_1")] fn capture_stack_1(ctx: PerfEventContext) { sample(&ctx, 1); }
+#[perf_event(name="capture_stack_2")] fn capture_stack_2(ctx: PerfEventContext) { sample(&ctx, 2); }
+#[perf_event(name="capture_stack_3")] fn capture_stack_3(ctx: PerfEventContext) { sample(&ctx, 3); }
+#[perf_event(name="capture_stack_4")] fn capture_stack_4(ctx: PerfEventContext) { sample(&ctx, 4); }
+
+fn sample<C: BpfContext>(ctx: &C, idx: usize) {
+    if let Err(e) = sample_inner(ctx, idx) {
+        incr_metric(e);
+    }
 }
 
-#[perf_event(name="capture_stack")]
-fn capture_stack(ctx: PerfEventContext) -> Option<u32> {
-    sample(&ctx)
-}
-
-fn sample<C: BpfContext>(ctx: &C) -> Option<u32> {
-    let st: &mut BpfSample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0)?) };
-    st.clear();
-
+fn sample_inner<C: BpfContext>(ctx: &C, idx: usize) -> Result<(), Metrics> {
+    let sample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::ErrSample_CantAlloc)?) };
     let ns: bpf_pidns_info = get_pid_tgid();
-    st.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+    sample.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+    sample.ts = unsafe { bpf_ktime_get_ns() };
+    sample.idx = idx;
 
-    st.native_stack = Some(NativeStack::uninit());
-    sample_user(ctx, st.native_stack.as_mut().unwrap(), ns.pid);
+    sample.native_stack = NativeStack::uninit();
+    sample_user(ctx, &mut sample.native_stack, ns.pid)?;
 
-    st.python_stack = Some(PythonStack::uninit());
-    let result = sample_python(ctx, st.python_stack.as_mut().unwrap());
-
-    st.kernel_stack_id = sample_kernel(ctx);
-
-    // match result {
-    //     Ok(v) => info!(ctx, "ok: {}", v as usize),
-    //     Err(e) => (), //info!(ctx, "err: {}", e as usize),
-    // }
-
-    unsafe {
-        STACKS.output(ctx, st, 0);
-        incr_sent_stacks();
+    sample.python_stack = Some(PythonStack::uninit());
+    let stack = sample.python_stack.as_mut().ok_or(Metrics::ErrPy_NoStack)?;
+    let result = sample_python(ctx, stack);
+    if let Err(e) = result {
+        incr_metric(e);
     }
 
-    Some(0)
+    sample.kernel_stack_id = sample_kernel(ctx);
+
+    unsafe {
+        STACKS.output(ctx, sample, 0);
+        incr_metric(Metrics::SentStackCount);
+    }
+
+    Ok(())
 }
 
-pub fn incr_sent_stacks() {
-    let cnt = unsafe { RUN_STATS.get(&(RunStatsKey::SentStackCount as u32)) }.copied().unwrap_or(0);
-    let _ = RUN_STATS.insert(&(RunStatsKey::SentStackCount as u32), &(cnt+1), 0);
+pub fn incr_metric(key: Metrics) {
+    let cnt = unsafe { METRICS.get(&(key as u32)) }.copied().unwrap_or(0);
+    let _ = METRICS.insert(&(key as u32), &(cnt+1), 0);
 }
 
 #[panic_handler]

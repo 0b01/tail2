@@ -1,4 +1,4 @@
-use std::{env::args};
+use std::{env::args, sync::Arc};
 use tokio::sync::mpsc;
 
 use anyhow::Result;
@@ -19,23 +19,19 @@ async fn main() -> Result<()> {
             let (pid, child) = get_pid_child(pid, command);
 
             let (tx, mut rx) = mpsc::channel(10);
-            let state = Tail2::new().await?;
+            let t2 = Tail2::new().await?;
 
-            let probe = Probe::Uprobe {
+            let probe = Arc::new(Probe::Uprobe {
                 scope: Scope::Pid{pid: pid.unwrap()},
                 uprobe,
-            };
-            probe.attach(&mut *state.bpf.lock().await).unwrap();
+            });
+            let _attachment = probe.attach(&mut *t2.bpf.lock().await, &*t2.probes.lock().await).await.unwrap();
 
-            let probe = Probe::Perf {
-                scope: Scope::Pid{pid: pid.unwrap()},
-                period: 400000,
-            };
-            probe.attach(&mut *state.bpf.lock().await).unwrap();
-
-            run_until_exit(state.bpf, state.cli, state.module_cache, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
-            println!("{:?}", rx.recv().await.unwrap());
-            println!("{:?}", rx.recv().await.unwrap());
+            let clis = Arc::clone(&t2.probes.lock().await.clients);
+            run_until_exit(t2.bpf, clis, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
+            while let Some(e) = rx.recv().await {
+                println!("{:?}", e.native_stack);
+            }
         }
         _ => {
             panic!();

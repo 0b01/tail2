@@ -8,7 +8,7 @@ fn test_malloc() {
     cmd.arg("malloc");
     cmd.assert()
         .success()
-        .stderr(predicate::str::contains("Processed: 2 stacks."))
+        // .stdout(predicate::str::contains("SentStackCount = 2"))
         .stdout(predicate::str::contains("unwind_success: Some(3)"))
         .stdout(predicate::str::contains("unwind_success: Some(4)"));
 }

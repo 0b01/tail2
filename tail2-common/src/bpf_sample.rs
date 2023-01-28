@@ -4,18 +4,11 @@ use crate::{pidtgid::PidTgid, python::state::PythonStack, NativeStack, MAX_USER_
 #[derive(Clone, Copy, Debug)]
 pub struct BpfSample {
     pub pidtgid: PidTgid,
+    pub ts: u64,
     pub kernel_stack_id: i64,
-    pub native_stack: Option<NativeStack>,
+    pub native_stack: NativeStack,
     pub python_stack: Option<PythonStack>,
-}
-
-impl BpfSample {
-    pub fn clear(&mut self) {
-        self.pidtgid = PidTgid::new();
-        self.kernel_stack_id = -1;
-        self.native_stack = None;
-        self.python_stack = None;
-    }
+    pub idx: usize,
 }
 
 #[cfg(feature = "user")]

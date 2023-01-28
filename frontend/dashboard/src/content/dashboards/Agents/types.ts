@@ -1,12 +1,16 @@
 export type ProbeTypes = "Perf" | "Uprobe";
 
+interface IProbeState {
+  is_running: boolean;
+}
+
 interface IProbeInfo {
   0: IProbe;
-  1: {is_running: boolean};
+  1: IProbeState;
 }
 
 export interface IAgentProps {
-  name: string;
+  host_name: string;
   agent: IAgent;
 }
 
@@ -42,6 +46,11 @@ export type IUprobeProbe = {
   type: "Uprobe";
   scope: IScope;
   uprobe: string;
+}
+
+export type ICallTreeParams = {
+  probe: IProbe;
+  host_name: string;
 }
 
 export type IProbe = IPerfProbe | IUprobeProbe;

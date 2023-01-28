@@ -1,22 +1,20 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::symbolication::module_cache::ModuleCache;
+use crate::{symbolication::module_cache::ModuleCache, tail2::MOD_CACHE};
 use anyhow::Result;
 use procfs::process::Process;
 use tail2_common::procinfo::{user::ProcMapRow, ProcInfo};
-use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Processes {
     // TODO: use pid + starttime
     pub processes: HashMap<i32, Box<ProcInfo>>,
-    module_cache: Arc<Mutex<ModuleCache>>,
 }
 
 impl Processes {
     pub async fn refresh(&mut self) -> Result<()> {
         for prc in procfs::process::all_processes()?.flatten() {
-            let module_cache = &mut *self.module_cache.lock().await;
+            let module_cache = &mut *MOD_CACHE.lock().await;
             if let Ok(info) = Self::detect(&prc, module_cache) {
                 self.processes.insert(prc.pid, info);
             }
@@ -25,11 +23,10 @@ impl Processes {
         Ok(())
     }
 
-    pub fn new(module_cache: Arc<Mutex<ModuleCache>>) -> Self {
+    pub fn new() -> Self {
         let processes = HashMap::new();
         Self {
             processes,
-            module_cache,
         }
     }
 

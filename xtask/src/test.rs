@@ -11,7 +11,10 @@ pub struct Options {
 }
 
 pub fn test(opts: Options) -> Result<()> {
-    let mut args = vec!["+nightly", "test"];
+    let mut args = vec![
+        // "+nightly",
+        "test"
+    ];
     if opts.release {
         args.push("--release")
     }

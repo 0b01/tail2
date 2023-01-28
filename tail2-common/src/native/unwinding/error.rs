@@ -1,22 +1,14 @@
-/// The error type used in this crate.
-#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    #[error("Could not read stack memory at 0x{0:x}")]
+    InvalidRule,
     CouldNotReadStack(u64),
-
-    #[error("Frame pointer unwinding moved backwards")]
     FramepointerUnwindingMovedBackwards,
-
-    #[error("Neither the code address nor the stack pointer changed, would loop")]
     DidNotAdvance,
-
-    #[error("Unwinding caused integer overflow")]
     IntegerOverflow,
-
-    #[error("Return address is null")]
     ReturnAddressIsNull,
 }
 
+#[cfg(feature="user")]
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnwinderError {
     #[error("DWARF unwinding failed: {0}")]
@@ -35,6 +27,7 @@ pub enum UnwinderError {
     DwarfCfiIndexCouldNotFindAddress,
 }
 
+#[cfg(feature="user")]
 #[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DwarfUnwinderError {
     #[error("Could not get the FDE for the supplied offset: ")]
@@ -59,6 +52,7 @@ pub enum DwarfUnwinderError {
     CouldNotRecoverFramePointer,
 }
 
+#[cfg(feature="user")]
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum ConversionError {
     #[error("CfaIsExpression")]

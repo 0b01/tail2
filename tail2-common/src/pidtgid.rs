@@ -1,3 +1,4 @@
+#[cfg_attr(feature="user", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct PidTgid(u64);
 

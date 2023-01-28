@@ -1,29 +1,29 @@
 use std::sync::Arc;
 
 use crate::{
-    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto},
-    symbolication::module_cache::ModuleCache,
+    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto}, tail2::MOD_CACHE, config::CONFIG, probes::Probe,
 };
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
-use tokio::sync::Mutex;
 
 pub struct PostStackClient {
     client: Client,
+    probe: Arc<Probe>,
     url: String,
     batch_size: usize,
     buf: Vec<ResolvedBpfSample>,
-    module_cache: Arc<Mutex<ModuleCache>>,
 }
 
 impl PostStackClient {
-    pub fn new(url: &str, module_cache: Arc<Mutex<ModuleCache>>, batch_size: usize) -> Self {
+    pub fn new(probe: Arc<Probe>) -> Self {
+        let url = format!("http://{}:{}/api/stack", CONFIG.server.host, CONFIG.server.port);
+        let batch_size = CONFIG.server.batch_size.unwrap_or(1000);
         Self {
             client: reqwest::Client::new(),
+            probe,
             url: url.to_owned(),
             batch_size,
             buf: Vec::with_capacity(batch_size),
-            module_cache,
         }
     }
 
@@ -34,6 +34,7 @@ impl PostStackClient {
     }
 
     pub async fn flush(&mut self) -> Result<StatusCode> {
+        tracing::warn!("flushing post_stack_cli: {} items.", self.buf.len());
         let buf = std::mem::take(&mut self.buf);
         self.post_stacks(buf).await
     }
@@ -43,18 +44,19 @@ impl PostStackClient {
         if self.buf.len() == self.batch_size {
             let stacks = std::mem::replace(&mut self.buf, Vec::with_capacity(self.batch_size));
             self.post_stacks(stacks).await?;
+            self.buf.clear();
         }
         Ok(StatusCode::ACCEPTED)
     }
 
-    async fn post_stacks(&mut self, stacks: Vec<ResolvedBpfSample>) -> Result<StatusCode> {
-        tracing::info!("posting stack len {}", stacks.len());
+    async fn post_stacks(&self, stacks: Vec<ResolvedBpfSample>) -> Result<StatusCode> {
+        // tracing::::info!("posting stack len {}", stacks.len());
         if stacks.is_empty() {
             return Ok(StatusCode::ACCEPTED);
         }
 
-        let module_cache = &mut *self.module_cache.lock().await;
-        let dto = StackBatchDto::from_stacks(stacks, module_cache)?;
+        let module_cache = &mut *MOD_CACHE.lock().await;
+        let dto = StackBatchDto::from_stacks(self.probe.clone(), stacks, module_cache)?;
         let body = bincode::serialize(&dto).unwrap();
         self.post(&self.url, body).await
     }

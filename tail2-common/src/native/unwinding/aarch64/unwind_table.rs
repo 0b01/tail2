@@ -35,7 +35,7 @@ impl UnwindTableRow {
     pub fn invalid(start_address: usize) -> Self {
         Self {
             start_address,
-            rule: UnwindRuleAarch64::Invalid,
+            rule: UnwindRuleAarch64::InvalidRule,
         }
     }
 }
@@ -90,7 +90,7 @@ impl UnwindTable {
                         match UnwindTableRow::parse(row, encoding) {
                             Ok(r) => rows.push(r),
                             Err(e) => {
-                                // error!("err parsing: {}, error: {:?}", row.start_address(), e);
+                                // tracing::error!("err parsing: {}, error: {:?}", row.start_address(), e);
                                 rows.push(UnwindTableRow::invalid(row.start_address() as usize));
                             }
                         }

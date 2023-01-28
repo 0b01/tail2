@@ -1,8 +1,9 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
-use tracing::{error, info};
+use tail2_common::metrics::Metrics;
+use tracing::Level;
 use nix::sys::ptrace;
 
 use nix::unistd::{getuid, Pid};
@@ -24,13 +25,10 @@ use tokio::task::JoinHandle;
 
 use std::time::Duration;
 
-use crate::symbolication::module_cache::ModuleCache;
-use anyhow::Context;
 use aya::maps::MapData;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
 use tail2_common::procinfo::ProcInfo;
-use tail2_common::RunStatsKey;
 use tokio::sync::watch::Receiver;
 use tokio::sync::Mutex;
 
@@ -38,12 +36,69 @@ use crate::processes::Processes;
 
 use super::post_stack_client::PostStackClient;
 
-pub(crate) async fn open_and_subcribe(
+pub(crate) async fn run_bpf(
     bpf: Arc<Mutex<Bpf>>,
-    tx: mpsc::Sender<BpfSample>,
+    clis: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>,
     stop_rx: watch::Receiver<()>,
-    ts: &mut Vec<JoinHandle<()>>,
-) {
+    output_tx: Option<mpsc::Sender<BpfSample>>,
+) -> Result<Vec<JoinHandle<()>>> {
+    tracing::info!("run_bpf");
+    // send device info
+    {
+        let bpf_ = &mut *bpf.lock().await;
+        let mut config: HashMap<_, u32, u64> =
+            HashMap::try_from(bpf_.map_mut("CONFIG").unwrap()).unwrap();
+        let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
+        config
+            .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
+            .unwrap();
+        config
+            .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
+            .unwrap();
+    }
+
+    let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
+
+    let kernel_stacks =
+        StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap();
+    let ksyms = aya::util::kernel_symbols().unwrap();
+
+    // receiver task
+    let mut ts = vec![];
+    let mut total_time = Duration::new(0, 0);
+    let clis = Arc::clone(&clis);
+    let t = tokio::spawn(async move {
+        let mut c = 0;
+        while let Some(st) = rx.recv().await {
+            let start_time = SystemTime::now();
+
+            if let Some(ref output_tx) = output_tx {
+                output_tx.send(st).await.unwrap();
+            }
+
+            let cli = Arc::clone(&clis.lock().await[st.idx]);
+            let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
+            if let Some(st) = st {
+                let cli2 = Arc::clone(&cli);
+                tokio::spawn(async move {
+                    if let Err(e) = cli2.lock().await.post_stack(st).await {
+                        tracing::error!("sending stack failed: {}", e.to_string());
+                    }
+                });
+            }
+
+            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
+            total_time += elapsed;
+            c += 1;
+        }
+
+        // let _ = cli.lock().await.flush().await;
+
+        let avg_t = total_time / c;
+        tracing::info!("Processed: {c} stacks. {avg_t:?}/st");
+    });
+    ts.push(t);
+
     // open bpf maps
     let mut stacks = AsyncPerfEventArray::try_from(bpf.lock().await.take_map("STACKS").unwrap()).unwrap();
 
@@ -65,15 +120,15 @@ pub(crate) async fn open_and_subcribe(
                         let events = evts.unwrap();
                         for buf in buffers.iter_mut().take(events.read) {
                             let st: BpfSample = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
-                            // dbg!(&st);
+                            // dbg!(&st.native_stack.unwind_success);
 
                             if tx.try_send(st).is_err() {
-                                error!("slow");
+                                tracing::error!("slow");
                             }
                         }
                     },
                     _ = stop_rx2.changed() => {
-                        tracing::error!("stopping");
+                        tracing::warn!("stopping for cpu: {cpu_id}");
                         break;
                     },
                 };
@@ -81,71 +136,6 @@ pub(crate) async fn open_and_subcribe(
         });
         ts.push(t);
     }
-}
-
-pub(crate) async fn run_bpf(
-    bpf: Arc<Mutex<Bpf>>,
-    cli: Arc<Mutex<PostStackClient>>,
-    stop_rx: watch::Receiver<()>,
-    output_tx: Option<mpsc::Sender<BpfSample>>,
-) -> Result<Vec<JoinHandle<()>>> {
-    info!("run_bpf");
-    // send device info
-    {
-        let bpf_ = &mut *bpf.lock().await;
-        let mut config: HashMap<_, u32, u64> =
-            HashMap::try_from(bpf_.map_mut("CONFIG").unwrap()).unwrap();
-        let stats = std::fs::metadata("/proc/self/ns/pid").unwrap();
-        config
-            .insert(ConfigMapKey::DEV as u32, stats.dev(), 0)
-            .unwrap();
-        config
-            .insert(ConfigMapKey::INO as u32, stats.ino(), 0)
-            .unwrap();
-    }
-
-    let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
-
-    let kernel_stacks =
-        StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap();
-    let ksyms = aya::util::kernel_symbols().unwrap();
-
-    // receiver thread
-    let mut ts = vec![];
-    let mut total_time = Duration::new(0, 0);
-    let cli = Arc::clone(&cli);
-    let t = tokio::spawn(async move {
-        let mut c = 0;
-        while let Some(st) = rx.recv().await {
-            let start_time = SystemTime::now();
-
-            // dbg!(&st);
-            if let Some(ref output_tx) = output_tx {
-                output_tx.send(st).await.unwrap();
-            }
-
-            let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
-
-            let cli2 = Arc::clone(&cli);
-            tokio::spawn(async move {
-                if let Err(e) = cli2.lock().await.post_stack(st).await {
-                    error!("sending stack failed: {}", e.to_string());
-                }
-            });
-
-            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
-            total_time += elapsed;
-            c += 1;
-        }
-
-        let _ = cli.lock().await.flush().await;
-
-        let avg_t = total_time / c;
-        info!("Processed: {c} stacks. {avg_t:?}/st");
-    });
-    ts.push(t);
-
-    open_and_subcribe(bpf, tx, stop_rx, &mut ts).await;
 
     Ok(ts)
 }
@@ -154,7 +144,7 @@ pub(crate) async fn run_bpf(
 fn ensure_root() {
     let uid = getuid().as_raw();
     if uid != 0 {
-        error!("tail2 be be run with root privileges!");
+        tracing::error!("tail2 be be run with root privileges!");
         exit(-1);
     }
 }
@@ -179,7 +169,7 @@ pub fn get_pid_child(
     match (pid, command) {
         (None, None) => (None, None),
         (None, Some(cmd)) => {
-            info!("Launching child process: `{:?}`", cmd);
+            tracing::info!("Launching child process: `{:?}`", cmd);
             let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
             let path = PathBuf::from(cmd_split.next().unwrap());
             let mut cmd = Command::new(path);
@@ -206,13 +196,14 @@ pub fn get_pid_child(
     }
 }
 
-pub async fn bpf_init() -> Result<Bpf> {
-    // init logger
-    let env = env_logger::Env::default()
-        .filter_or("LOG_LEVEL", "info")
-        .write_style_or("LOG_STYLE", "always");
+pub async fn init_bpf() -> Result<Bpf> {
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .with_timer(tracing_subscriber::fmt::time::uptime())
+        .with_level(true)
+        .with_max_level(Level::INFO)
+        .init();
 
-    env_logger::init_from_env(env);
     ensure_root();
     bump_memlock_rlimit()?;
     let mut bpf = load_bpf()?;
@@ -223,15 +214,17 @@ pub async fn bpf_init() -> Result<Bpf> {
 }
 
 pub enum RunUntil {
+    /// Halt on Ctrl-C
     CtrlC,
+    /// Halt when child process exits
     ChildProcessExits(Child),
+    /// Halt when the sender of the contained receiver sends
     ExternalHalt(Receiver<()>),
 }
 
 pub async fn run_until_exit(
     bpf: Arc<Mutex<Bpf>>,
-    cli: Arc<Mutex<PostStackClient>>,
-    module_cache: Arc<Mutex<ModuleCache>>,
+    clis: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>,
     run_until: RunUntil,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<()> {
@@ -243,55 +236,54 @@ pub async fn run_until_exit(
             (Some(tx), rx)
         };
 
-    spawn_proc_refresh(bpf.clone(), module_cache, stop_rx.clone()).await;
+    spawn_proc_refresh(Arc::clone(&bpf), stop_rx.clone()).await;
 
-    let tasks = run_bpf(bpf.clone(), cli, stop_rx, output_tx).await?;
+    let tasks = run_bpf(Arc::clone(&bpf), clis, stop_rx, output_tx).await?;
 
     match run_until {
         RunUntil::CtrlC => {
             signal::ctrl_c().await.expect("failed to listen for event");
         }
         RunUntil::ChildProcessExits(mut child) => {
-            info!("resuming child");
+            tracing::info!("resuming child");
             let pid = Pid::from_raw(child.id() as i32);
             // nix::sys::wait::waitpid(pid, None).unwrap();
             ptrace::cont(pid, None).unwrap();
             child.wait().expect("unable to execute child");
-            info!("child exited");
+            tracing::info!("child exited");
         }
         RunUntil::ExternalHalt(_) => (),
     }
 
     if let Some(stop_tx) = stop_tx {
-        info!("exiting");
+        tracing::info!("exiting");
         stop_tx.send(())?;
-        for t in tasks {
-            let _ = tokio::join!(t);
-        }
-        print_stats(bpf).await?;
     }
+
+    for t in tasks {
+        let _ = tokio::join!(t);
+    }
+    print_stats(bpf).await?;
 
     Ok(())
 }
 
 async fn proc_refresh_inner(
     pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>,
-    module_cache: Arc<Mutex<ModuleCache>>,
 ) {
-    let module_cache = Arc::clone(&module_cache);
-    let mut processes = Processes::new(module_cache);
+    let mut processes = Processes::new();
     if let Ok(()) = processes.refresh().await {
-        dbg!(processes.processes.keys().len());
+        tracing::warn!("# processes: {}", processes.processes.keys().len());
         // copy to maps
         for (pid, nfo) in &processes.processes {
             let nfo = nfo.as_ref();
-            pid_info.insert(*pid as u32, nfo, 0).unwrap();
+            let _ = pid_info.insert(*pid as u32, nfo, 0);
         }
     }
 }
 
 // TODO: don't refresh, listen to mmap and execve calls
-pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, module_cache: Arc<Mutex<ModuleCache>>, mut stop_rx: Receiver<()>) {
+pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiver<()>) {
     let bpf = &mut *bpf.lock().await;
     let pid_info: HashMap<_, u32, ProcInfo> =
         HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
@@ -303,13 +295,12 @@ pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, module_cache: Arc<M
         >(pid_info)
     };
 
-    proc_refresh_inner(&mut pid_info, Arc::clone(&module_cache)).await;
+    proc_refresh_inner(&mut pid_info).await;
 
     // refresh pid info table
-    let module_cache = Arc::clone(&module_cache);
     tokio::spawn(async move {
         loop {
-            proc_refresh_inner(&mut pid_info, module_cache.clone()).await;
+            proc_refresh_inner(&mut pid_info).await;
 
             // sleep for 10 sec
             tokio::select! {
@@ -336,10 +327,13 @@ pub(crate) fn load_bpf() -> Result<Bpf> {
 pub(crate) async fn print_stats(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
     let bpf = &mut *bpf.lock().await;
     let info: HashMap<_, u32, u64> =
-        HashMap::try_from(bpf.map("RUN_STATS").context("no such map")?)?;
-    info!(
-        "Sent: {} stacks",
-        info.get(&(RunStatsKey::SentStackCount as u32), 0)?
-    );
+        HashMap::try_from(bpf.map("METRICS").context("no such map")?)?;
+    
+    tracing::info!("Sent: {} stacks", info.get(&(Metrics::SentStackCount as u32), 0).unwrap_or(0));
+
+    for k in Metrics::iter().split_last().unwrap().1 {
+        tracing::info!("{k:?} = {}", info.get(&(*k as u32), 0).unwrap_or(0));
+    }
+
     Ok(())
 }

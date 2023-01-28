@@ -1,11 +1,27 @@
-use std::sync::Arc;
+use std::{sync::Arc};
 
 use tokio::sync::Notify;
 use serde::{Serialize, Deserialize};
 
+#[derive(Clone)]
 pub struct Notifiable<T> {
-    pub inner: T,
-    pub changed: Arc<Notify>,
+    inner: Arc<T>,
+    notify: Arc<Notify>,
+}
+
+impl<T: Default> Default for Notifiable<T> {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(Default::default()),
+            notify: Arc::new(Notify::new())
+        }
+    }
+}
+
+impl<T> AsRef<T> for Notifiable<T> {
+    fn as_ref(&self) -> &T {
+        &self.inner
+    }
 }
 
 impl<T> Notifiable<T> {
@@ -13,16 +29,21 @@ impl<T> Notifiable<T> {
         let changed = Arc::new(Notify::new());
 
         Self {
-            changed,
-            inner,
+            notify: changed,
+            inner: Arc::new(inner),
         }
     }
 
-    pub async fn with_notify<F>(&mut self, f: F) 
-        where F: Fn(&mut T)
-    {
-        self.changed.notify_one();
-        f(&mut self.inner)
+    pub fn notify_one(&self) {
+        self.notify.notify_one()
+    }
+
+    pub fn notify_waiters(&self) {
+        self.notify.notify_waiters()
+    }
+
+    pub fn notify(&self) -> Arc<Notify> {
+        Arc::clone(&self.notify)
     }
 }
 
@@ -39,8 +60,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Notifiable<T> {
     where
         D: serde::Deserializer<'de> {
         Ok(Self {
-            changed: Arc::new(Notify::new()),
-            inner: T::deserialize(deserializer)?,
+            notify: Arc::new(Notify::new()),
+            inner: Arc::<T>::deserialize(deserializer)?,
         })
     }
 }

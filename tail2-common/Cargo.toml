@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = ["gimli/read-core"]
-user = ["aya", "anyhow", "memmap2", "object", "thiserror", "gimli/read", "lru", "tracing", "parking_lot"]
+user = ["aya", "anyhow", "memmap2", "object", "thiserror", "gimli/read", "lru", "tracing", "serde"]
 x86_64 = []
 aarch64 = []
 
@@ -13,14 +13,14 @@ aarch64 = []
 aya = { git = "https://github.com/aya-rs/aya", branch = "main", version = "0.11", optional = true}
 # aya = { path = "../../aya/aya", version = "0.11", optional = true}
 gimli = { version = "0.27.0", default-features = false, features = ["read-core"], optional = true }
-anyhow = { version = "1.0.66", optional = true }
+anyhow = { version = "1.0.68", optional = true }
 tracing = { version = "0.1.37", optional = true }
 memmap2 = { version = "0.5.8", optional = true }
-object = { version = "0.30.0", optional = true }
-thiserror = { version = "1.0.37", optional = true }
-lru = { version = "0.8.1", optional = true }
+object = { version = "0.30.2", optional = true }
+thiserror = { version = "1.0.38", optional = true }
+lru = { version = "0.9.0", optional = true }
 structstruck = "0.3.0"
-parking_lot = { version = "0.12.1", optional = true }
+serde = { version = "^1.0", features = ["derive", "rc"], optional = true }
 
 [lib]
 path = "src/lib.rs"

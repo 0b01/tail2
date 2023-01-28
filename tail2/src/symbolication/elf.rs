@@ -6,17 +6,17 @@ use std::sync::Arc;
 use symbolic::demangle::demangle;
 
 #[derive(Debug)]
-pub struct ElfCache {
+pub struct SymbolCache {
     pub map: IndexMap<String, Arc<ElfSymbols>>,
 }
 
-impl Default for ElfCache {
+impl Default for SymbolCache {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ElfCache {
+impl SymbolCache {
     pub fn new() -> Self {
         Self {
             map: Default::default(),

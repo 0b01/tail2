@@ -1,36 +1,49 @@
-use std::{sync::Arc};
-
-use axum::{extract::State, response::IntoResponse, http::HeaderMap};
+use axum::{extract::{State, Query}, response::IntoResponse, http::HeaderMap};
 use reqwest::header;
-use tail2::{
-    calltree::inner::{serialize::Node},
-};
-use axum::{
-    response::sse::{Event, Sse},
-};
-use std::{convert::Infallible};
+use serde::{Serialize, Deserialize};
+use tail2::{calltree::serialize::Node, probes::Probe};
+use axum::response::sse::{Event, Sse};
+use std::{convert::Infallible, sync::Arc};
+use crate::state::ServerState;
+use async_stream::{try_stream, AsyncStream};
 
+#[derive(Serialize, Deserialize)]
+pub struct CallTreeParams {
+    probe: String,
+    host_name: String,
+}
 
-
-
-use crate::{state::{ServerState}};
-
-pub(crate) async fn current<'a>(State(ct): State<Arc<ServerState>>) -> String {
-    let ct = ct.calltree.inner.ct.lock().await;
-    let node = Node::new(ct.root, &ct.arena);
+pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
+    let agents = state.agents.as_ref().lock().await;
+    let probe = serde_json::from_str(&params.probe).unwrap();
+    let calltree = &agents
+        .get(&params.host_name).unwrap()
+        .probes
+        .get(&probe).unwrap()
+        .calltree
+        .as_ref()
+        .lock().await
+        .calltree;
+    let node = Node::new(calltree.root, &calltree.arena);
 
     serde_json::to_string(&node).unwrap()
 }
 
-use async_stream::{try_stream, AsyncStream};
+pub(crate) async fn events(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> impl IntoResponse {
+    let agents = state.agents.as_ref().lock().await;
+    let probe = serde_json::from_str(&params.probe).unwrap();
+    let notify = agents
+        .get(&params.host_name).unwrap()
+        .probes
+        .get(&probe).unwrap()
+        .calltree
+        .notify();
+    notify.notify_one();
 
-pub(crate) async fn events(State(ct): State<Arc<ServerState>>) -> impl IntoResponse {
-    let changed = ct.calltree.changed.clone();
-    changed.notify_one();
     let stream = try_stream! {
         loop {
             yield Event::default().data("_");
-            changed.notified().await;
+            notify.notified().await;
         }
     };
 

@@ -1,10 +1,36 @@
-use anyhow::Result;
-use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program}, util::online_cpus, Bpf};
-use serde::{Deserialize, Serialize};
+use std::sync::{atomic::AtomicBool, Arc};
 
-use tracing::{info, error};
+use anyhow::{Result, Context};
+use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program, Link}, util::online_cpus, Bpf};
+use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
+
+use crate::{tail2::Probes, client::PostStackClient};
 
 use super::Scope;
+
+pub struct ProbePool {
+    available: Vec<Arc<AtomicBool>>,
+}
+
+impl ProbePool {
+    pub(crate) fn new(n: usize) -> ProbePool {
+        Self {
+            available: vec![true; n].into_iter().map(|i| Arc::new(AtomicBool::new(i))).collect(),
+        }
+    }
+
+    pub(crate) fn next_avail(&self) -> Option<(usize, Arc<AtomicBool>)> {
+        for (i, n) in self.available.iter().enumerate() {
+            if n.load(std::sync::atomic::Ordering::SeqCst) {
+                n.store(false, std::sync::atomic::Ordering::SeqCst);
+                return Some((i, n.clone()));
+            }
+        }
+
+        None
+    }
+}
 
 #[derive(Eq, Hash, PartialEq, Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
@@ -19,23 +45,49 @@ pub enum Probe {
     },
 }
 
-impl Probe {
-    pub fn to_program<'a>(&'a self, bpf: &'a mut Bpf) -> &mut Program {
-        match self {
-            Probe::Perf{ .. } => bpf.program_mut("capture_stack").unwrap(),
-            Probe::Uprobe { .. } => bpf.program_mut("malloc_enter").unwrap(),
+pub struct Attachment {
+    pub links: Vec<PerfLink>,
+    pub idx: usize,
+    pub avail: Arc<AtomicBool>,
+    pub cli: Arc<Mutex<PostStackClient>>,
+}
+
+impl Attachment {
+    pub async fn detach(self) {
+        self.avail.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        for link in self.links {
+            link.detach().unwrap();
         }
+
+        self.cli.lock().await.flush().await.unwrap();
+    }
+}
+
+impl Probe {
+    pub fn to_program<'a>(&'a self, bpf: &'a mut Bpf, probe_pool: &ProbePool) -> Option<(&mut Program, usize, Arc<AtomicBool>)> {
+        let (i, avail) = probe_pool.next_avail()?;
+        let ret = match self {
+            Probe::Perf{ .. } => bpf.program_mut(&format!("capture_stack_{}", i)).unwrap(),
+            Probe::Uprobe { .. } => bpf.program_mut(&format!("malloc_enter_{}", i)).unwrap(),
+        };
+
+        Some((ret, i, avail))
     }
 
-    pub fn attach(&self, bpf: &mut Bpf) -> Result<Vec<PerfLink>> {
-        let program = self.to_program(bpf);
+    pub async fn attach(&self, bpf: &mut Bpf, probes: &Probes) -> Result<Attachment> {
+        let (program, idx, avail) = self.to_program(bpf, &probes.probe_pool).context("No probe function available")?;
+
+        let cli = Arc::new(Mutex::new(PostStackClient::new(Arc::new(self.clone()))));
+        probes.clients.lock().await.insert(idx, Arc::clone(&cli));
+
         match self {
             Probe::Perf{ scope, period } => {
                 let program: &mut PerfEvent = program.try_into().unwrap();
                 match program.load() {
                     Ok(_) => {}
                     Err(e) => {
-                        error!("{}", e.to_string());
+                        tracing::error!("{}", e.to_string());
                     }
                 }
 
@@ -55,14 +107,14 @@ impl Probe {
                     let link = program.take_link(link_id)?;
                     links.push(link);
                 }
-                Ok(links)
+                Ok(Attachment{links, idx, cli, avail})
             }
             Probe::Uprobe{scope, uprobe} => {
                 let program: &mut UProbe = program.try_into().unwrap();
                 match program.load() {
                     Ok(_) => {}
                     Err(e) => {
-                        error!("{}", e.to_string());
+                        tracing::error!("{}", e.to_string());
                     }
                 }
 
@@ -78,8 +130,7 @@ impl Probe {
                     .attach(Some(func), 0, src, pid)
                     .unwrap();
                 let link = program.take_link(uprobe_linkid)?.into();
-                info!("loaded");
-                Ok(vec![link])
+                Ok(Attachment{links: vec![link], idx, avail, cli})
             }
         }
     }

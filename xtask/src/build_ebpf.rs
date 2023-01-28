@@ -40,20 +40,20 @@ pub struct Options {
     pub release: bool,
 }
 
-pub fn build_ebpf(opts: Options) -> Result<(), anyhow::Error> {
+pub fn build_ebpf(opts: Options, is_check: bool) -> Result<(), anyhow::Error> {
     let dir = PathBuf::from("tail2-ebpf");
     let target = (if cfg!(target_arch = "aarch64") {
         "aarch64"
     } else if cfg!(target_arch = "x86_64") {
         "x86_64"
     } else {
-        // compile_error!("unsupported target");
+        // compile_tracing::error!("unsupported target");
         ""
     })
     .to_string();
     let mut args = vec![
-        "+nightly",
-        "build",
+        // "+nightly",
+        if is_check { "check" } else { "build" },
         "--features",
         target.as_str(),
         "-Z",

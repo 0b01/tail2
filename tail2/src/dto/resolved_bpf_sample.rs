@@ -35,7 +35,8 @@ impl ResolvedPythonFrames {
 #[derive(Debug)]
 pub struct ResolvedBpfSample {
     pub pid_tgid: PidTgid,
-    pub native_stack: Option<NativeStack>,
+    pub ts: u64,
+    pub native_stack: Box<NativeStack>,
     pub python_stack: Option<ResolvedPythonFrames>,
     pub kernel_frames: Option<Vec<Option<String>>>,
 }
@@ -45,7 +46,7 @@ impl ResolvedBpfSample {
         sample: BpfSample,
         kernel_stacks: &StackTraceMap<MapData>,
         ksyms: &BTreeMap<u64, String>,
-    ) -> Self {
+    ) -> Option<Self> {
         let mut kernel_frames = None;
         let stack_id = sample.kernel_stack_id;
         if stack_id > 0 {
@@ -59,11 +60,16 @@ impl ResolvedBpfSample {
             kernel_frames = Some(kfs);
         }
 
-        Self {
+        if sample.native_stack.unwind_success.is_none() {
+            return None;
+        }
+
+        Some(Self {
             pid_tgid: sample.pidtgid,
-            native_stack: sample.native_stack,
+            ts: sample.ts,
+            native_stack: Box::new(sample.native_stack),
             python_stack: sample.python_stack.map(ResolvedPythonFrames::resolve),
             kernel_frames,
-        }
+        })
     }
 }

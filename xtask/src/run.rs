@@ -42,7 +42,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
     ];
     let features = format!("{}", features.join(" "));
     let args = vec![
-        "+nightly",
+        // "+nightly",
         "build",
         "-p",
         "tail2",
@@ -64,12 +64,21 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
 }
 
 /// Build and run the project
+pub fn check(opts: Options) -> Result<(), anyhow::Error> {
+    build_ebpf(BuildOptions {
+        target: opts.bpf_target,
+        release: opts.release,
+    }, true).unwrap();
+
+    Ok(())
+}
+
 pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     // build our ebpf program followed by our application
     build_ebpf(BuildOptions {
         target: opts.bpf_target,
         release: opts.release,
-    })
+    }, false)
     .context("Error while building eBPF program")?;
     build(&opts).context("Error while building userspace application")?;
 
