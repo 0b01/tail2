@@ -6,5 +6,8 @@ CREATE TABLE IF NOT EXISTS samples_{} (
 
 CREATE TABLE IF NOT EXISTS modules (
     id INT PRIMARY KEY,
-    name VARCHAR,
+    module BLOB,
+    debug_id TEXT,
 );
+
+CREATE SEQUENCE seq_module_id START 1;

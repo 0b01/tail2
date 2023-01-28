@@ -1,0 +1,157 @@
+name: test
+on:
+  push:
+    tags:
+      - v*
+    branches:
+      - main
+  pull_request:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: cargo generate-lockfile
+      - uses: actions/cache@v2
+        with:
+          path: |
+            target
+            ~/.cargo/registry
+          key: rust-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-build-
+      - run: make
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - run: cargo generate-lockfile
+      - uses: actions/cache@v2
+        with:
+          path: |
+            target
+            ~/.cargo/registry
+          key: rust-lint-rustfmt-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-lint-rustfmt-
+      - run: make lint-rustfmt
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: clippy
+      - run: cargo generate-lockfile
+      - uses: actions/cache@v2
+        with:
+          path: |
+            target
+            ~/.cargo/registry
+          key: rust-lint-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-lint-clippy-
+      - run: make lint-clippy
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - run: cargo generate-lockfile
+      - uses: actions/cache@v2
+        with:
+          path: |
+            target
+            ~/.cargo/registry
+          key: rust-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-test-
+      - run: make test
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - name: Install rustfmt
+        shell: bash
+        run: rustup component add rustfmt
+      - name: Unit tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --no-fail-fast
+        env:
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests'
+          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests'
+      - name: Coverage
+        uses: actions-rs/grcov@v0.1
+        with:
+          config: .github/grcov.yml
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v2
+
+  doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - run: cargo generate-lockfile
+      - uses: actions/cache@v2
+        with:
+          path: |
+            target
+            ~/.cargo/registry
+          key: rust-doc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-doc-
+      - run: make build-doc
+      - uses: actions/upload-artifact@v2
+        with:
+          name: docs
+          path: target/doc
+
+  doc-publish:
+    if: github.ref == 'refs/heads/main'
+    needs: doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: docs
+          path: target/doc
+      - name: Update gh-pages branch
+        run: |
+          git config --global user.email mail@saschagrunert.de
+          git config --global user.name "CircleCI"
+          git fetch origin gh-pages
+          git checkout -f gh-pages
+          rm -rf doc
+          mv target/doc .
+          git add .
+          git diff-index --quiet HEAD || git commit -m 'Update documentation'
+          git push -f origin gh-pages

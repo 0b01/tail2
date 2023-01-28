@@ -12,26 +12,29 @@ use crate::Notifiable;
 
 use super::symbolized_calltree::SymbolizedCallTree;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize)]
 pub struct ProbeState {
     pub is_running: bool,
-    // #[serde(skip)]
-    // pub db: db::Tail2DB,
 
     #[serde(skip)]
-    pub calltree: Notifiable<Arc<Mutex<SymbolizedCallTree>>>,
+    pub db: Notifiable<Arc<Mutex<db::Tail2DB>>>,
+
+    // #[serde(skip)]
+    // pub calltree: Notifiable<Arc<Mutex<SymbolizedCallTree>>>,
 }
 
 impl ProbeState {
     pub fn new() -> Self {
+        let db = Notifiable::new(Arc::new(Mutex::new(db::Tail2DB::new("test.db"))));
         Self {
+            db,
             is_running: false,
-            calltree: Notifiable::new(Arc::new(Mutex::new(SymbolizedCallTree::new()))),
+            // calltree: Notifiable::new(Arc::new(Mutex::new(SymbolizedCallTree::new()))),
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 pub struct Tail2Agent {
     #[serde(with = "vectorize")]
     pub probes: HashMap<Probe, ProbeState>,
@@ -53,11 +56,11 @@ impl Tail2Agent {
         match diff {
             AgentMessage::AddProbe { probe } => {
                 self.is_halted = false;
-                let info = self.probes.entry(probe.clone()).or_insert(Default::default());
+                let info = self.probes.entry(probe.clone()).or_insert(ProbeState::new());
                 info.is_running = true;
             }
             AgentMessage::StopProbe { probe } => {
-                let info = self.probes.entry(probe.clone()).or_insert(Default::default());
+                let info = self.probes.entry(probe.clone()).or_insert(ProbeState::new());
                 info.is_running = false;
             }
             AgentMessage::AgentError { message } => {

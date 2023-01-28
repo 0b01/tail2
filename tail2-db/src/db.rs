@@ -6,9 +6,10 @@ use duckdb::params;
 use duckdb::Config;
 use duckdb::Connection;
 use duckdb::OptionalExt;
-use duckdb::Result;
+use anyhow::Result;
 use tail2::calltree::UnsymbolizedCallTree;
 use tail2::Mergeable;
+use tail2::dto::ModuleMapping;
 
 use crate::tile;
 use crate::window::TimeWindow;
@@ -16,7 +17,7 @@ use crate::window::TimeWindow;
 /// A row in the database
 pub struct DbRow {
     /// timestamp
-    pub ts: i64,
+    pub ts_ms: i64,
     /// call tree
     pub ct: UnsymbolizedCallTree,
     /// count
@@ -27,7 +28,7 @@ impl Eq for DbRow {}
 
 impl PartialEq for DbRow {
     fn eq(&self, other: &Self) -> bool {
-        self.ts == other.ts
+        self.ts_ms == other.ts_ms
     }
 }
 
@@ -39,7 +40,7 @@ impl Ord for DbRow {
 
 impl PartialOrd for DbRow {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.ts.partial_cmp(&other.ts)
+        self.ts_ms.partial_cmp(&other.ts_ms)
     }
 }
 
@@ -51,7 +52,7 @@ pub struct DbResponse {
     /// end
     pub t1: i64,
     /// call tree
-    pub ct: UnsymbolizedCallTree,
+    pub calltree: UnsymbolizedCallTree,
     /// count
     pub n: i32,
 }
@@ -61,8 +62,37 @@ impl tail2::Mergeable for DbResponse {
     fn merge(&mut self, other: &Self) {
         self.t0 = self.t0.min(other.t0);
         self.t1 = self.t0.max(other.t1);
-        self.ct.merge(&other.ct);
+        self.calltree.merge(&other.calltree);
         self.n += other.n;
+    }
+}
+
+pub struct ModuleMapDb {
+    /// db connection
+    pub conn: Connection,
+}
+
+impl ModuleMapping for ModuleMapDb {
+    fn get_index_or_insert(&mut self, module: std::sync::Arc<tail2::symbolication::module::Module>) -> Option<i32> {
+        if let Ok(ret) = self.conn.query_row("SELECT id FROM modules WHERE debug_id = '?'",
+            params![module.debug_id],
+            |row| row.get(0))
+        {
+            return ret;
+        }
+
+        self.conn.execute("INSERT INTO modules (id, debug_id, module) VALUES (nextval('seq_module_id'), ?, ?)",
+            params![module.debug_id, bincode::serialize(&module).unwrap()]).unwrap();
+        self.conn.query_row("SELECT id FROM modules WHERE debug_id = ?",
+            params![module.debug_id],
+            |row| row.get(0)).ok()
+    }
+
+    fn get(&self, idx: usize) -> std::sync::Arc<tail2::symbolication::module::Module> {
+        self.conn.query_row("SELECT module FROM modules WHERE id = ?", params![idx], |row| {
+            let bytes: Vec<u8> = row.get(0)?;
+            Ok(bincode::deserialize(&bytes).unwrap())
+        }).unwrap()
     }
 }
 
@@ -101,6 +131,10 @@ impl Tail2DB {
         db
     }
 
+    pub fn modules(&self) -> ModuleMapDb {
+        ModuleMapDb { conn: self.conn.try_clone().unwrap() }
+    }
+
     fn create_tables(&mut self) {
         self.conn
             .execute_batch(&format!(include_str!("./sql/create_table.sql"), 1))
@@ -119,7 +153,7 @@ impl Tail2DB {
         for row in data {
             let ct_bytes = bincode::serialize(&row.ct).unwrap();
             app.append_row(params![
-                Duration::from_millis(row.ts as u64),
+                Duration::from_millis(row.ts_ms as u64),
                 ct_bytes,
                 row.n
             ])?;
@@ -151,7 +185,7 @@ impl Tail2DB {
 
     // TODO: batch tiles into multiple rows per timescale
     /// Get the [`DbResponse`] object associated with the given range
-    pub fn range_query(&mut self, range: (i64, i64)) -> Result<Option<DbResponse>> {
+    pub fn range_query(&self, range: (i64, i64)) -> Result<DbResponse> {
         let mut tiles = tile::tile(range, self.scales.as_slice());
 
         let mut trees = vec![];
@@ -167,7 +201,7 @@ impl Tail2DB {
         let merged = trees.into_iter().reduce(|mut a, b| {
             a.merge(&b);
             a
-        });
+        }).unwrap_or_default();
 
         Ok(merged)
     }
@@ -183,7 +217,7 @@ impl Tail2DB {
     }
 
     /// query samples_1 the most granular table
-    fn query_1(&mut self, t0: i64, t1: i64) -> Result<Vec<DbResponse>> {
+    fn query_1(&self, t0: i64, t1: i64) -> Result<Vec<DbResponse>> {
         assert!(t1 - t0 < self.scales[0]);
         let mut ret = vec![];
         let mut stmt = self
@@ -196,7 +230,7 @@ impl Tail2DB {
             ],
             |row| {
                 Ok(DbRow {
-                    ts: row.get::<_, i64>(0)? / 1000,
+                    ts_ms: row.get::<_, i64>(0)? / 1000,
                     ct: bincode::deserialize(&row.get::<_, Vec<_>>(1)?).unwrap(),
                     n: row.get(2)?,
                 })
@@ -207,7 +241,7 @@ impl Tail2DB {
             ret.push(DbResponse {
                 t0,
                 t1,
-                ct: row.ct,
+                calltree: row.ct,
                 n: row.n,
             });
         }
@@ -215,7 +249,7 @@ impl Tail2DB {
         Ok(ret)
     }
 
-    fn populate_rec(&mut self, scale: i64, start: i64) -> Result<DbResponse> {
+    fn populate_rec(&self, scale: i64, start: i64) -> Result<DbResponse> {
         // dbg!((scale, start));
         let ret: Option<(Vec<u8>, i32)> = self
             .conn
@@ -231,7 +265,7 @@ impl Tail2DB {
             return Ok(DbResponse {
                 t0: start,
                 t1: start + scale,
-                ct,
+                calltree: ct,
                 n,
             });
         }
@@ -257,7 +291,7 @@ impl Tail2DB {
             .prepare(&format!("INSERT INTO samples_{scale} VALUES (?, ?, ?)"))?;
         stmt.execute(params![
             Duration::from_millis(start as u64),
-            bincode::serialize(&merged.ct).unwrap(),
+            bincode::serialize(&merged.calltree).unwrap(),
             merged.n
         ])
         .unwrap();
@@ -276,7 +310,7 @@ mod tests {
             [100, 150, 950, 1000, 1050, 1900, 2150, 3001]
                 .into_iter()
                 .map(|ts| DbRow {
-                    ts,
+                    ts_ms: ts,
                     ct: UnsymbolizedCallTree::new(),
                     n: 1,
                 })
@@ -290,7 +324,7 @@ mod tests {
     fn test_db_0() -> Result<()> {
         let mut db = init_db();
 
-        let ret = db.range_query((0, 10_000)).unwrap().unwrap();
+        let ret = db.range_query((0, 10_000)).unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 10_000);
         assert_eq!(ret.n, 8);
@@ -300,7 +334,7 @@ mod tests {
     #[test]
     fn test_db_1() -> Result<()> {
         let mut db = init_db();
-        let ret = db.range_query((0, 1000)).unwrap().unwrap();
+        let ret = db.range_query((0, 1000)).unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 1_000);
         assert_eq!(ret.n, 3);
@@ -310,7 +344,7 @@ mod tests {
     #[test]
     fn test_db_2() -> Result<()> {
         let mut db = init_db();
-        let ret = db.range_query((0, 300)).unwrap().unwrap();
+        let ret = db.range_query((0, 300)).unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 300);
         assert_eq!(ret.n, 2);
@@ -320,7 +354,7 @@ mod tests {
     #[test]
     fn test_db_3() -> Result<()> {
         let mut db = init_db();
-        let ret = db.range_query((1000, 2000)).unwrap().unwrap();
+        let ret = db.range_query((1000, 2000)).unwrap();
         assert_eq!(ret.t0, 1000);
         assert_eq!(ret.t1, 2000);
         assert_eq!(ret.n, 3);

@@ -20,7 +20,7 @@ pub static PYTHON_DEBUG_IDS: Lazy<HashMap<&'static str, (u32, u32)>> = Lazy::new
     ret
 });
 
-#[derive(Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Serialize, Deserialize)]
 pub struct Module {
     #[serde(skip)]
     pub unwind_table: Option<Arc<UnwindTable>>,
@@ -30,6 +30,13 @@ pub struct Module {
     pub kind: ObjectKind,
     pub debug_id: String,
     pub py_offset: Option<(u32, u32)>,
+}
+
+impl Eq for Module {}
+impl PartialEq for Module {
+    fn eq(&self, other: &Self) -> bool {
+        self.debug_id == other.debug_id
+    }
 }
 
 impl Debug for Module {

@@ -14,7 +14,7 @@ use super::resolved_bpf_sample::ResolvedBpfSample;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum FrameDto {
-    Native { module_idx: u32, offset: u32 },
+    Native { module_idx: i32, offset: u32 },
     Python { name: String },
     Kernel { name: String },
 }
@@ -37,7 +37,7 @@ impl FrameDto {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StackDto {
     pub pid_tgid: PidTgid,
-    pub ts: u64,
+    pub ts_ms: u64,
     pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
     pub python_frames: Vec<FrameDto>,
@@ -45,10 +45,10 @@ pub struct StackDto {
 }
 
 impl StackDto {
-    pub fn new(pid_tgid: PidTgid, ts: u64) -> Self {
+    pub fn new(pid_tgid: PidTgid, ts_ms: u64) -> Self {
         Self {
             pid_tgid,
-            ts,
+            ts_ms,
             kernel_frames: vec![],
             native_frames: vec![],
             python_frames: vec![],
@@ -57,7 +57,7 @@ impl StackDto {
     }
 
     /// Mix native, python, kernel stack together into a unified call tree
-    pub fn mix( self, modules: &[Arc<Module>], new_modules: &mut ModuleMap) -> Vec<UnsymbolizedFrame> {
+    pub fn mix( self, modules: &[Arc<Module>], new_modules: &mut impl ModuleMapping) -> Vec<UnsymbolizedFrame> {
         let mut ret = vec![];
         let mut python_frames = self.python_frames.into_iter();
 
@@ -67,7 +67,7 @@ impl StackDto {
             match f {
                 FrameDto::Native { module_idx, offset } => {
                     let module = &modules[module_idx as usize];
-                    let new_idx = new_modules.get_index_or_insert(Arc::clone(&module));
+                    let new_idx = new_modules.get_index_or_insert(Arc::clone(&module)).unwrap();
                     match module.py_offset {
                         Some((py_offset, sz)) if py_offset <= offset && offset <= py_offset + sz => {
                             ret.push(
@@ -136,7 +136,7 @@ impl StackBatchDto {
     ) -> Result<StackBatchDto> {
         let mut batch = StackBatchDto::new(probe);
         for bpf_sample in samples {
-            let mut dto = StackDto::new(bpf_sample.pid_tgid, bpf_sample.ts);
+            let mut dto = StackDto::new(bpf_sample.pid_tgid, bpf_sample.ts_ms);
             if let Some(s) = bpf_sample.python_stack {
                 dto.python_frames = s
                     .frames
@@ -194,7 +194,7 @@ fn from_native_stack(
             }
         };
 
-        native_frames.push(FrameDto::Native { module_idx: module_idx as u32, offset: offset as u32 });
+        native_frames.push(FrameDto::Native { module_idx: module_idx as i32, offset: offset as u32 });
     }
     Ok(native_frames)
 }
@@ -213,7 +213,7 @@ fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)>
 pub enum UnsymbolizedFrame {
     None,
     ProcessRoot { pid: u32 },
-    Native { module_idx: u32, offset: u32 },
+    Native { module_idx: i32, offset: u32 },
     Python { name: String },
     Kernel { name: String },
 }
@@ -235,12 +235,12 @@ impl From<FrameDto> for UnsymbolizedFrame {
 }
 
 impl UnsymbolizedFrame {
-    pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut ModuleMap) -> SymbolizedFrame {
+    pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut impl ModuleMapping) -> SymbolizedFrame {
         match self {
             UnsymbolizedFrame::None => Default::default(), // TODO: rethink this
             UnsymbolizedFrame::ProcessRoot { pid } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(pid.to_string()), code_type: crate::calltree::CodeType::ProcessRoot },
             UnsymbolizedFrame::Native { module_idx, offset } => {
-                let module = Arc::clone(&modules[module_idx as usize]);
+                let module = Arc::clone(&modules.get(module_idx as usize));
                 let name = 
                     symbols.entry(&module.path)
                         .and_then(|(_idx, sym)|
@@ -267,8 +267,10 @@ impl ModuleMap {
             map: vec![],
         }
     }
+}
 
-    pub fn get_index_or_insert(&mut self, module: Arc<Module>) -> u32 {
+impl ModuleMapping for ModuleMap {
+    fn get_index_or_insert(&mut self, module: Arc<Module>) -> Option<i32> {
         let module_idx = match self.map.iter().position(|m| m.as_ref() == module.as_ref()) {
             Some(idx) => idx,
             None => {
@@ -277,14 +279,16 @@ impl ModuleMap {
             }
         };
 
-        module_idx as u32
+        Some(module_idx as i32)
+    }
+
+    fn get(&self, idx: usize) -> Arc<Module> {
+        Arc::clone(&self.map[idx])
     }
 }
 
-impl Index<usize> for ModuleMap {
-    type Output = Arc<Module>;
 
-    fn index(&self, idx: usize) -> &Self::Output {
-        &self.map[idx]
-    }
+pub trait ModuleMapping {
+    fn get_index_or_insert(&mut self, module: Arc<Module>) -> Option<i32>;
+    fn get(&self, idx: usize) -> Arc<Module>;
 }
