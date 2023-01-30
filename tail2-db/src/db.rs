@@ -2,7 +2,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-
 use duckdb::params;
 use duckdb::Config;
 use duckdb::Connection;
@@ -16,6 +15,7 @@ use tail2::symbolication::module::Module;
 use tokio::sync::Mutex;
 
 use crate::tile;
+use crate::tile::Tile;
 
 
 /// A row in the database
@@ -63,11 +63,12 @@ pub struct DbResponse {
 
 impl tail2::Mergeable for DbResponse {
     /// Merge two db response
-    fn merge(&mut self, other: &Self) {
+    fn merge(&mut self, other: &Self) -> &Self {
         self.t0 = self.t0.min(other.t0);
         self.t1 = self.t0.max(other.t1);
         self.calltree.merge(&other.calltree);
         self.n += other.n;
+        self
     }
 }
 
@@ -166,10 +167,12 @@ pub struct Tail2DB {
     pub path: String,
     /// db connection
     pub conn: Connection,
-    /// last timestamp in the table
+    /// last timestamp refreshed, may not be the latest ts in the table
     last_ts: i64,
     /// order of magnitude augmented tree node for fast call tree merge
     scales: Vec<i64>,
+    /// base scale is smallest augmentation scale
+    min_tile: i64,
     /// modules table
     modules: Arc<Mutex<DbBackedModuleMap>>,
 }
@@ -184,7 +187,8 @@ impl Tail2DB {
         let conn = Connection::open_with_flags(&path, config).unwrap();
 
         // 10^3 millis to 10^10
-        let scales = (3..10).rev().map(|i| 10_i64.pow(i)).collect();
+        let scales: Vec<_> = (3..10).rev().map(|i| 10_i64.pow(i)).collect();
+        let min_tile = *scales.last().unwrap();
 
         // modules table
         let modules = Arc::new(Mutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
@@ -194,6 +198,7 @@ impl Tail2DB {
             conn,
             last_ts: 0,
             scales,
+            min_tile,
             modules,
         };
 
@@ -234,10 +239,6 @@ impl Tail2DB {
         Ok(())
     }
 
-    // pub fn count_by_window(&mut self, range: (i64, i64), window: TimeWindow) {
-    //     todo!()
-    // }
-
     /// Refresh the samples_XXXX augmentation tables
     pub fn refresh_cache(&mut self) -> Result<()> {
         let latest_ts: i64 = self
@@ -249,7 +250,13 @@ impl Tail2DB {
             )
             .map(|i: i64| i / 1000)?;
 
-        self.refresh_range((self.last_ts, latest_ts))?;
+        let interval = (self.last_ts, latest_ts);
+
+        let tiles = tile::tile(interval, self.scales.as_slice());
+        for Tile{scale, start} in tiles {
+            self.get_tile_rec(scale, start)?;
+        }
+
         self.last_ts = latest_ts;
 
         Ok(())
@@ -257,16 +264,16 @@ impl Tail2DB {
 
     // TODO: batch tiles into multiple rows per timescale
     /// Get the [`DbResponse`] object associated with the given range
-    pub fn range_query(&self, range: (i64, i64)) -> Result<DbResponse> {
+    pub fn range_query(&self, range @ (t0, t1): (i64, i64)) -> Result<DbResponse> {
         let tiles = tile::tile(range, self.scales.as_slice());
 
         let mut trees = vec![];
 
         if tiles.is_empty() {
-            trees.extend(self.query_1(range.0, range.1)?);
+            trees.extend(self.query_1(t0, t1)?);
         } else {
-            for (scale, start) in tiles {
-                trees.push(self.populate_rec(scale, start)?);
+            for Tile{scale, start} in tiles {
+                trees.push(self.get_tile_rec(scale, start)?);
             }
         }
 
@@ -276,16 +283,6 @@ impl Tail2DB {
         }).unwrap_or_default();
 
         Ok(merged)
-    }
-
-    fn refresh_range(&mut self, range: (i64, i64)) -> Result<()> {
-        let tiles = tile::tile(range, self.scales.as_slice());
-
-        for (scale, start) in tiles {
-            self.populate_rec(scale, start)?;
-        }
-
-        Ok(())
     }
 
     /// query samples_1 the most granular table
@@ -321,8 +318,12 @@ impl Tail2DB {
         Ok(ret)
     }
 
-    fn populate_rec(&self, scale: i64, start: i64) -> Result<DbResponse> {
+    /// Get a single tile from the table of that scale
+    /// This is the main recursive algorithm that populates the tables as needed by the tiling algorithm.
+    fn get_tile_rec(&self, scale: i64, start: i64) -> Result<DbResponse> {
         // dbg!((scale, start));
+
+        // First, try to find a sample that matches our tile
         let ret: Option<(Vec<u8>, i32)> = self
             .conn
             .query_row(
@@ -332,6 +333,7 @@ impl Tail2DB {
             )
             .optional()?;
 
+        // If we found a matching sample, return it
         if let Some((ct_bytes, n)) = ret {
             let ct = bincode::deserialize(&ct_bytes).unwrap();
             return Ok(DbResponse {
@@ -343,21 +345,27 @@ impl Tail2DB {
         }
 
         let mut next_results = vec![];
-        if scale <= *self.scales.last().unwrap() {
+
+        // If we didn't find our result, let's build the cache for the tiling algorithm
+        // base case: if it's less then the least tile(1000), we have to use raw data (1)
+        if scale <= self.min_tile {
             next_results.extend(self.query_1(start, start + scale)?);
         } else {
+            // otherwise, let's recurse
             let next_scale = scale / 10;
             for next_start in (start..(start + scale)).step_by(next_scale as usize) {
-                next_results.push(self.populate_rec(next_scale, next_start)?);
+                next_results.push(self.get_tile_rec(next_scale, next_start)?);
             }
         }
 
-        let merged = next_results.into_iter().reduce(|mut a, b| {
-            a.merge(&b);
-            a
-        }).unwrap_or_default();
+        // Finally, we'll merge the results of each tile
+        let merged = next_results.into_iter()
+            .reduce(|mut a, b| {
+                a.merge(&b);
+                a
+            }).unwrap_or_default();
 
-
+        // Then, we'll insert our new sample into the database
         let mut stmt = self
             .conn
             .prepare(&format!("INSERT INTO samples_{scale} VALUES (?, ?, ?)"))?;
@@ -368,6 +376,7 @@ impl Tail2DB {
         ])
         .unwrap();
 
+        // Finally, we'll return the merged result
         Ok(merged)
     }
 }

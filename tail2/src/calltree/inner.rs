@@ -84,7 +84,7 @@ impl<T: Clone + Default + Eq + Serialize> Mergeable for CallTreeInner<T> {
     /// merge two trees
     /// TODO: skip this merge, add merge_frames functions directly
     /// TODO: better perf
-    fn merge(&mut self, other: &CallTreeInner<T>) {
+    fn merge(&mut self, other: &CallTreeInner<T>) -> &Self {
         let mut stack = Vec::new();
         stack.push((self.root, other.root));
         while !stack.is_empty() {
@@ -112,6 +112,8 @@ impl<T: Clone + Default + Eq + Serialize> Mergeable for CallTreeInner<T> {
                 }
             }
         }
+
+        self
     }
 }
 
