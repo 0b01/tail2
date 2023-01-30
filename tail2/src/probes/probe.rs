@@ -22,8 +22,8 @@ impl ProbePool {
 
     pub(crate) fn next_avail(&self) -> Option<(usize, Arc<AtomicBool>)> {
         for (i, n) in self.available.iter().enumerate() {
-            if n.load(std::sync::atomic::Ordering::SeqCst) {
-                n.store(false, std::sync::atomic::Ordering::SeqCst);
+            if n.load(std::sync::atomic::Ordering::Relaxed) {
+                n.store(false, std::sync::atomic::Ordering::Relaxed);
                 return Some((i, n.clone()));
             }
         }
@@ -54,7 +54,7 @@ pub struct Attachment {
 
 impl Attachment {
     pub async fn detach(self) {
-        self.avail.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.avail.store(true, std::sync::atomic::Ordering::Relaxed);
 
         for link in self.links {
             link.detach().unwrap();

@@ -25,6 +25,6 @@ jobs:
     - name: install bpf-linker
       run: cargo install bpf-linker
     - name: Build
-      run: cargo xtask run --build
-    # - name: Run tests
-    #   run: cargo test --verbose --all
+      run: cargo xtask run --build --release
+    - name: Run tests
+      run: cargo xtask test --release

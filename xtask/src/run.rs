@@ -41,7 +41,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
         if opts.deploy { "deploy" } else { "" },
     ];
     let features = features.join(" ");
-    let args = vec![
+    let mut args = vec![
         // "+nightly",
         "build",
         "-p",
@@ -50,8 +50,10 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
         "tail2-server",
         "--features",
         &features,
-        if opts.release { "--release" } else { "" },
     ];
+    if opts.release {
+        args.push("--release");
+    }
 
     // dbg!(&args);
 
@@ -109,10 +111,10 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     let r = running.clone();
 
     let _ = ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
+        r.store(false, Ordering::Relaxed);
     });
 
-    while running.load(Ordering::SeqCst) {
+    while running.load(Ordering::Relaxed) {
         thread::sleep(Duration::from_millis(100));
     }
 
