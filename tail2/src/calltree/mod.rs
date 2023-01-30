@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{dto::{UnsymbolizedFrame, ModuleMapping}, symbolication::elf::SymbolCache};
 
-use self::inner::{CallTreeInner, CallTreeFrame};
+use self::inner::CallTreeInner;
 
 pub mod serialize {
     pub use super::inner::serialize::Node;

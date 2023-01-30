@@ -1,4 +1,7 @@
 #![warn(missing_docs)]
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -10,6 +13,8 @@ use anyhow::Result;
 use tail2::calltree::UnsymbolizedCallTree;
 use tail2::Mergeable;
 use tail2::dto::ModuleMapping;
+use tail2::symbolication::module::Module;
+use tokio::sync::Mutex;
 
 use crate::tile;
 use crate::window::TimeWindow;
@@ -67,13 +72,55 @@ impl tail2::Mergeable for DbResponse {
     }
 }
 
-pub struct ModuleMapDb {
-    /// db connection
-    pub conn: Connection,
+struct ModuleCache {
+    modules: Vec<Option<Arc<Module>>>,
+    debug_ids: HashMap<String, i32>,
 }
 
-impl ModuleMapping for ModuleMapDb {
-    fn get_index_or_insert(&mut self, module: std::sync::Arc<tail2::symbolication::module::Module>) -> Option<i32> {
+impl ModuleCache {
+    fn new() -> Self {
+        Self { modules: vec![], debug_ids: HashMap::new() }
+    }
+
+    fn get_idx_by_debug_id(&self, debug_id: &str) -> Option<i32> {
+        self.debug_ids.get(debug_id).copied()
+    }
+
+    fn get(&self, idx: usize) -> Option<Arc<Module>> {
+        self.modules.get(idx).and_then(|x| x.clone())
+    }
+
+    fn insert(&mut self, idx: usize, module: Arc<Module>) {
+        if self.modules.len() <= idx {
+            self.modules.resize(idx + 1, None);
+        }
+        self.debug_ids.insert(module.debug_id.clone(), idx as i32);
+        self.modules[idx] = Some(module);
+    }
+}
+
+/// Module map backed
+pub struct DbBackedModuleMap {
+    /// db connection
+    conn: Connection,
+    cache: ModuleCache,
+}
+
+impl DbBackedModuleMap {
+    fn new(conn: Connection) -> Self {
+        Self {
+            conn,
+            cache: ModuleCache::new(),
+        }
+    }
+}
+
+impl ModuleMapping for DbBackedModuleMap {
+    fn get_index_or_insert(&mut self, module: Arc<Module>) -> Option<i32> {
+        if let Some(idx) = self.cache.get_idx_by_debug_id(&module.debug_id) {
+            return Some(idx);
+        }
+
         if let Ok(ret) = self.conn.query_row("SELECT id FROM modules WHERE debug_id = '?'",
             params![module.debug_id],
             |row| row.get(0))
@@ -83,16 +130,34 @@ impl ModuleMapping for ModuleMapDb {
 
         self.conn.execute("INSERT INTO modules (id, debug_id, module) VALUES (nextval('seq_module_id'), ?, ?)",
             params![module.debug_id, bincode::serialize(&module).unwrap()]).unwrap();
-        self.conn.query_row("SELECT id FROM modules WHERE debug_id = ?",
+        let idx = self.conn.query_row("SELECT id FROM modules WHERE debug_id = ?",
             params![module.debug_id],
-            |row| row.get(0)).ok()
+            |row| row.get(0)).ok();
+        if let Some(idx) = idx {
+            self.cache.insert(idx as usize, module);
+        }
+
+        idx
     }
 
-    fn get(&self, idx: usize) -> std::sync::Arc<tail2::symbolication::module::Module> {
-        self.conn.query_row("SELECT module FROM modules WHERE id = ?", params![idx], |row| {
+    fn get(&mut self, idx: usize) -> Arc<Module> {
+        // check if the value is cached
+        if let Some(m) = self.cache.get(idx) {
+            return m;
+        }
+
+        let ret: Option<Arc<Module>> = self.conn.query_row("SELECT module FROM modules WHERE id = ?", params![idx], |row| {
             let bytes: Vec<u8> = row.get(0)?;
             Ok(bincode::deserialize(&bytes).unwrap())
-        }).unwrap()
+        }).unwrap();
+
+        // update cache
+        if let Some(m) = ret {
+            self.cache.insert(idx, m.clone());
+            return m;
+        } else {
+            panic!("module not found");
+        }
     }
 }
 
@@ -102,9 +167,12 @@ pub struct Tail2DB {
     pub path: String,
     /// db connection
     pub conn: Connection,
+    /// last timestamp in the table
     last_ts: i64,
     /// order of magnitude augmented tree node for fast call tree merge
     scales: Vec<i64>,
+    /// modules table
+    modules: Arc<Mutex<DbBackedModuleMap>>,
 }
 
 impl Tail2DB {
@@ -119,11 +187,15 @@ impl Tail2DB {
         // 10^3 millis to 10^10
         let scales = (3..10).rev().map(|i| 10_i64.pow(i)).collect();
 
+        // modules table
+        let modules = Arc::new(Mutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
+
         let mut db = Self {
             path,
             conn,
             last_ts: 0,
             scales,
+            modules,
         };
 
         db.create_tables();
@@ -131,8 +203,9 @@ impl Tail2DB {
         db
     }
 
-    pub fn modules(&self) -> ModuleMapDb {
-        ModuleMapDb { conn: self.conn.try_clone().unwrap() }
+    /// Get the modules table
+    pub fn modules(&self) -> Arc<Mutex<DbBackedModuleMap>> {
+        self.modules.clone()
     }
 
     fn create_tables(&mut self) {

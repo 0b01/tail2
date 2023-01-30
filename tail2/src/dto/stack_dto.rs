@@ -1,4 +1,4 @@
-use std::{sync::Arc, ops::Index};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use procfs::process::{MemoryMap, Process};
@@ -282,13 +282,16 @@ impl ModuleMapping for ModuleMap {
         Some(module_idx as i32)
     }
 
-    fn get(&self, idx: usize) -> Arc<Module> {
+    fn get(&mut self, idx: usize) -> Arc<Module> {
         Arc::clone(&self.map[idx])
     }
 }
 
 
 pub trait ModuleMapping {
+    /// upsert module returning index
     fn get_index_or_insert(&mut self, module: Arc<Module>) -> Option<i32>;
-    fn get(&self, idx: usize) -> Arc<Module>;
+
+    /// get the module based on index
+    fn get(&mut self, idx: usize) -> Arc<Module>;
 }

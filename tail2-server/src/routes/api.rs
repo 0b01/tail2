@@ -3,7 +3,8 @@ use reqwest::header;
 use serde::{Serialize, Deserialize};
 use tail2::{calltree::serialize::Node, probes::Probe};
 use axum::response::sse::{Event, Sse};
-use std::{convert::Infallible, sync::Arc, time::SystemTime};
+use tracing::info;
+use std::{convert::Infallible, sync::Arc, time::SystemTime, alloc::System};
 use crate::state::ServerState;
 use async_stream::{try_stream, AsyncStream};
 
@@ -14,24 +15,28 @@ pub struct CallTreeParams {
 }
 
 pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
+    let t = SystemTime::now();
+
     let agents = state.agents.as_ref().lock().await;
     let probe = serde_json::from_str(&params.probe).unwrap();
-    let db = &agents
+    let db = agents
         .get(&params.host_name).unwrap()
         .probes
         .get(&probe).unwrap()
-        .db;
-    let syms = &state.symbols;
-    // curent timestamp
+        .db
+        .clone();
+    drop(agents);
+
     let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
     let calltree = db.as_ref().lock().await.range_query((now - 60 * 1000, now)).unwrap().calltree;
 
-    // let symbols = &mut *state.symbols.lock().await;
-    // let modules = &mut db.as_ref().lock().await.modules();
-    // let calltree = calltree.symbolize(symbols, modules);
+    let symbols = &mut *state.symbols.lock().await;
+    let mut modules = db.as_ref().lock().await.modules();
+    let calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
 
     let node = Node::new(calltree.root, &calltree.arena);
 
+    info!("current time: {}", SystemTime::now().duration_since(t).unwrap().as_millis());
     serde_json::to_string(&node).unwrap()
 }
 
@@ -44,6 +49,7 @@ pub(crate) async fn events(State(state): State<ServerState>, Query(params): Quer
         .get(&probe).unwrap()
         .db
         .notify();
+    drop(agents);
     notify.notify_one();
 
     let stream = try_stream! {
