@@ -17,6 +17,8 @@ use tokio::sync::Mutex;
 use crate::tile;
 use crate::tile::Tile;
 
+use self::module_table::DbBackedModuleMap;
+
 
 /// A row in the database
 pub struct DbRow {
@@ -72,93 +74,98 @@ impl tail2::Mergeable for DbResponse {
     }
 }
 
-struct ModuleCache {
-    modules: Vec<Option<Arc<Module>>>,
-    debug_ids: FnvHashMap<String, i32>,
-}
+pub(crate) mod module_table {
+    use super::*;
 
-impl ModuleCache {
-    fn new() -> Self {
-        Self { modules: vec![], debug_ids: FnvHashMap::default() }
+    pub(crate) struct ModuleCache {
+        modules: Vec<Option<Arc<Module>>>,
+        debug_ids: FnvHashMap<String, i32>,
     }
 
-    fn get_idx_by_debug_id(&self, debug_id: &str) -> Option<i32> {
-        self.debug_ids.get(debug_id).copied()
-    }
-
-    fn get(&self, idx: usize) -> Option<Arc<Module>> {
-        self.modules.get(idx).and_then(|x| x.clone())
-    }
-
-    fn insert(&mut self, idx: usize, module: Arc<Module>) {
-        if self.modules.len() <= idx {
-            self.modules.resize(idx + 1, None);
+    impl ModuleCache {
+        fn new() -> Self {
+            Self { modules: vec![], debug_ids: FnvHashMap::default() }
         }
-        self.debug_ids.insert(module.debug_id.clone(), idx as i32);
-        self.modules[idx] = Some(module);
-    }
-}
 
-/// Module map backed
-pub struct DbBackedModuleMap {
-    /// db connection
-    conn: Connection,
-    cache: ModuleCache,
-}
+        fn get_idx_by_debug_id(&self, debug_id: &str) -> Option<i32> {
+            self.debug_ids.get(debug_id).copied()
+        }
 
-impl DbBackedModuleMap {
-    fn new(conn: Connection) -> Self {
-        Self {
-            conn,
-            cache: ModuleCache::new(),
+        fn get(&self, idx: usize) -> Option<Arc<Module>> {
+            self.modules.get(idx).and_then(|x| x.clone())
+        }
+
+        fn insert(&mut self, idx: usize, module: Arc<Module>) {
+            if self.modules.len() <= idx {
+                self.modules.resize(idx + 1, None);
+            }
+            self.debug_ids.insert(module.debug_id.clone(), idx as i32);
+            self.modules[idx] = Some(module);
         }
     }
-}
 
-impl ModuleMapping for DbBackedModuleMap {
-    fn get_index_or_insert(&mut self, module: Arc<Module>) -> Option<i32> {
-        if let Some(idx) = self.cache.get_idx_by_debug_id(&module.debug_id) {
-            return Some(idx);
-        }
-
-        if let Ok(ret) = self.conn.query_row("SELECT id FROM modules WHERE debug_id = '?'",
-            params![module.debug_id],
-            |row| row.get(0))
-        {
-            return ret;
-        }
-
-        self.conn.execute("INSERT INTO modules (id, debug_id, module) VALUES (nextval('seq_module_id'), ?, ?)",
-            params![module.debug_id, bincode::serialize(&module).unwrap()]).unwrap();
-        let idx = self.conn.query_row("SELECT id FROM modules WHERE debug_id = ?",
-            params![module.debug_id],
-            |row| row.get(0)).ok();
-        if let Some(idx) = idx {
-            self.cache.insert(idx as usize, module);
-        }
-
-        idx
+    /// Module map backed
+    pub struct DbBackedModuleMap {
+        /// db connection
+        conn: Connection,
+        cache: ModuleCache,
     }
 
-    fn get(&mut self, idx: usize) -> Arc<Module> {
-        // check if the value is cached
-        if let Some(m) = self.cache.get(idx) {
-            return m;
-        }
-
-        let ret: Option<Arc<Module>> = self.conn.query_row("SELECT module FROM modules WHERE id = ?", params![idx], |row| {
-            let bytes: Vec<u8> = row.get(0)?;
-            Ok(bincode::deserialize(&bytes).unwrap())
-        }).unwrap();
-
-        // update cache
-        if let Some(m) = ret {
-            self.cache.insert(idx, m.clone());
-            m
-        } else {
-            panic!("module not found");
+    impl DbBackedModuleMap {
+        pub(crate) fn new(conn: Connection) -> Self {
+            Self {
+                conn,
+                cache: ModuleCache::new(),
+            }
         }
     }
+
+    impl ModuleMapping for DbBackedModuleMap {
+        fn get_index_or_insert(&mut self, module: Arc<Module>) -> Option<i32> {
+            if let Some(idx) = self.cache.get_idx_by_debug_id(&module.debug_id) {
+                return Some(idx);
+            }
+
+            if let Ok(ret) = self.conn.query_row("SELECT id FROM modules WHERE debug_id = '?'",
+                params![module.debug_id],
+                |row| row.get(0))
+            {
+                return ret;
+            }
+
+            self.conn.execute("INSERT INTO modules (id, debug_id, module) VALUES (nextval('seq_module_id'), ?, ?)",
+                params![module.debug_id, bincode::serialize(&module).unwrap()]).unwrap();
+            let idx = self.conn.query_row("SELECT id FROM modules WHERE debug_id = ?",
+                params![module.debug_id],
+                |row| row.get(0)).ok();
+            if let Some(idx) = idx {
+                self.cache.insert(idx as usize, module);
+            }
+
+            idx
+        }
+
+        fn get(&mut self, idx: usize) -> Arc<Module> {
+            // check if the value is cached
+            if let Some(m) = self.cache.get(idx) {
+                return m;
+            }
+
+            let ret: Option<Arc<Module>> = self.conn.query_row("SELECT module FROM modules WHERE id = ?", params![idx], |row| {
+                let bytes: Vec<u8> = row.get(0)?;
+                Ok(bincode::deserialize(&bytes).unwrap())
+            }).unwrap();
+
+            // update cache
+            if let Some(m) = ret {
+                self.cache.insert(idx, m.clone());
+                m
+            } else {
+                panic!("module not found");
+            }
+        }
+    }
+
 }
 
 /// Tail2 database file

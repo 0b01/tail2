@@ -36,7 +36,7 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
 
     let node = Node::new(calltree.root, &calltree.arena);
 
-    info!("current time: {}", SystemTime::now().duration_since(t).unwrap().as_millis());
+    info!("processed current() in {:?}", t.elapsed().unwrap());
     serde_json::to_string(&node).unwrap()
 }
 
