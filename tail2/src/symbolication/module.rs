@@ -8,9 +8,9 @@ use symbolic::{
     common::ByteView,
     debuginfo::{elf::ElfObject, ObjectKind},
 };
-#[cfg(target_arch = "aarch64")]
+#[cfg(feature = "aarch64")]
 use tail2_common::native::unwinding::aarch64::unwind_table::UnwindTable;
-#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "x86_64")]
 use tail2_common::native::unwinding::x86_64::unwind_table::UnwindTable;
 
 /// a map from debug_id to the offset and size of method _PyEval_EvalFrameDefault
