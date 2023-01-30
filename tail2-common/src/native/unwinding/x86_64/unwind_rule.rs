@@ -43,7 +43,7 @@ impl UnwindRuleX86_64 {
         UnwindRuleX86_64::UseFramePointer
     }
 
-    fn exec<F>(
+    pub fn exec<F>(
         self,
         is_first_frame: bool,
         regs: &mut UnwindRegsX86_64,
