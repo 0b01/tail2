@@ -67,10 +67,10 @@ impl Commands {
                 let mut symbols = SymbolCache::new();
                 for p in paths {
                     let module = Module::from_path(&p).unwrap();
-                    println!("{:#?}", module);
+                    println!("{module:#?}");
 
                     if let Some((_, e)) = symbols.entry(&p) {
-                        println!("{:#?}", e);
+                        println!("{e:#?}");
                     }
                 }
                 return Ok(());

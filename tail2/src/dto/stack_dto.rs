@@ -67,7 +67,7 @@ impl StackDto {
             match f {
                 FrameDto::Native { module_idx, offset } => {
                     let module = &modules[module_idx as usize];
-                    let new_idx = new_modules.get_index_or_insert(Arc::clone(&module)).unwrap();
+                    let new_idx = new_modules.get_index_or_insert(Arc::clone(module)).unwrap();
                     match module.py_offset {
                         Some((py_offset, sz)) if py_offset <= offset && offset <= py_offset + sz => {
                             ret.push(
@@ -266,6 +266,12 @@ impl ModuleMap {
         Self {
             map: vec![],
         }
+    }
+}
+
+impl Default for ModuleMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -21,13 +21,13 @@ impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut iter = self.0.iter();
         match iter.next() {
-            Some(v) => write!(f, "{}", v)?,
+            Some(v) => write!(f, "{v}")?,
             None => return write!(f, "root"),
         }
         if f.alternate() {
-            iter.try_for_each(|v| write!(f, " -> {}", v))
+            iter.try_for_each(|v| write!(f, " -> {v}"))
         } else {
-            iter.try_for_each(|v| write!(f, "/{}", v))
+            iter.try_for_each(|v| write!(f, "/{v}"))
         }
     }
 }

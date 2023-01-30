@@ -1,14 +1,21 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use crate::{symbolication::module_cache::ModuleCache, tail2::MOD_CACHE};
 use anyhow::Result;
+use fnv::FnvHashMap;
 use procfs::process::Process;
 use tail2_common::procinfo::{user::ProcMapRow, ProcInfo};
 
 #[derive(Debug)]
 pub struct Processes {
     // TODO: use pid + starttime
-    pub processes: HashMap<i32, Box<ProcInfo>>,
+    pub processes: FnvHashMap<i32, Box<ProcInfo>>,
+}
+
+impl Default for Processes {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Processes {
@@ -24,7 +31,7 @@ impl Processes {
     }
 
     pub fn new() -> Self {
-        let processes = HashMap::new();
+        let processes = FnvHashMap::default();
         Self {
             processes,
         }

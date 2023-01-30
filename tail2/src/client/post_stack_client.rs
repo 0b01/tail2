@@ -21,7 +21,7 @@ impl PostStackClient {
         Self {
             client: reqwest::Client::new(),
             probe,
-            url: url.to_owned(),
+            url,
             batch_size,
             buf: Vec::with_capacity(batch_size),
         }

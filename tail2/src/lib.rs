@@ -1,3 +1,5 @@
+#![deny(clippy::disallowed_types)]
+
 pub mod args;
 pub mod calltree;
 pub mod client;

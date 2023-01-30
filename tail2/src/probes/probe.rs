@@ -68,8 +68,8 @@ impl Probe {
     pub fn to_program<'a>(&'a self, bpf: &'a mut Bpf, probe_pool: &ProbePool) -> Option<(&mut Program, usize, Arc<AtomicBool>)> {
         let (i, avail) = probe_pool.next_avail()?;
         let ret = match self {
-            Probe::Perf{ .. } => bpf.program_mut(&format!("capture_stack_{}", i)).unwrap(),
-            Probe::Uprobe { .. } => bpf.program_mut(&format!("malloc_enter_{}", i)).unwrap(),
+            Probe::Perf{ .. } => bpf.program_mut(&format!("capture_stack_{i}")).unwrap(),
+            Probe::Uprobe { .. } => bpf.program_mut(&format!("malloc_enter_{i}")).unwrap(),
         };
 
         Some((ret, i, avail))

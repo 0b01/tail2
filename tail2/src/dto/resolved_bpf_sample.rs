@@ -64,9 +64,7 @@ impl ResolvedBpfSample {
             kernel_frames = Some(kfs);
         }
 
-        if sample.native_stack.unwind_success.is_none() {
-            return None;
-        }
+        sample.native_stack.unwind_success?;
 
         Some(Self {
             pid_tgid: sample.pidtgid,

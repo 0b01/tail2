@@ -40,7 +40,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
         if cfg!(target_arch = "aarch64") { "aarch64" } else if cfg!(target_arch = "x86_64") { "x86_64" } else { "" },
         if opts.deploy { "deploy" } else { "" },
     ];
-    let features = format!("{}", features.join(" "));
+    let features = features.join(" ");
     let args = vec![
         // "+nightly",
         "build",
@@ -56,7 +56,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
     // dbg!(&args);
 
     let status = Command::new("cargo")
-        .args(&args)
+        .args(args)
         .status()
         .expect("failed to build userspace");
     assert!(status.success());

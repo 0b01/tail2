@@ -65,7 +65,7 @@ pub fn build_ebpf(opts: Options, is_check: bool) -> Result<(), anyhow::Error> {
         args.push("--release")
     }
     let status = Command::new("cargo")
-        .current_dir(&dir)
+        .current_dir(dir)
         .args(&args)
         .status()
         .unwrap();

@@ -1,10 +1,10 @@
 use axum::{extract::{State, Query}, response::IntoResponse, http::HeaderMap};
 use reqwest::header;
 use serde::{Serialize, Deserialize};
-use tail2::{calltree::serialize::Node, probes::Probe};
+use tail2::{calltree::serialize::Node};
 use axum::response::sse::{Event, Sse};
 use tracing::info;
-use std::{convert::Infallible, sync::Arc, time::SystemTime, alloc::System};
+use std::{convert::Infallible, time::SystemTime};
 use crate::state::ServerState;
 use async_stream::{try_stream, AsyncStream};
 
@@ -31,7 +31,7 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
     let calltree = db.as_ref().lock().await.range_query((now - 60 * 1000, now)).unwrap().calltree;
 
     let symbols = &mut *state.symbols.lock().await;
-    let mut modules = db.as_ref().lock().await.modules();
+    let modules = db.as_ref().lock().await.modules();
     let calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
 
     let node = Node::new(calltree.root, &calltree.arena);

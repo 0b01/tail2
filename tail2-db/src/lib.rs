@@ -1,4 +1,5 @@
-#![allow(unused)]
+#![deny(clippy::disallowed_types)]
+#![warn(missing_docs)]
 
 /// Tail2 DB implementation
 pub mod db;

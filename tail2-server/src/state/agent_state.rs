@@ -1,16 +1,17 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
-use serde::{Serialize, Deserialize};
+use fnv::FnvHashMap;
+use serde::{Serialize};
 use tail2::{client::ws_client::messages::AgentMessage, probes::Probe};
 use tail2_db::db;
 use tokio::sync::{mpsc::UnboundedSender};
 use tokio::sync::Mutex;
-use tracing::error;
+
 
 use crate::Notifiable;
 
-use super::symbolized_calltree::SymbolizedCallTree;
+
 
 #[derive(Serialize)]
 pub struct ProbeState {
@@ -34,10 +35,16 @@ impl ProbeState {
     }
 }
 
+impl Default for ProbeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Serialize)]
 pub struct Tail2Agent {
     #[serde(with = "vectorize")]
-    pub probes: HashMap<Probe, ProbeState>,
+    pub probes: FnvHashMap<Probe, ProbeState>,
     #[serde(skip)]
     pub tx: Option<UnboundedSender<AgentMessage>>,
     is_halted: bool,
@@ -46,7 +53,7 @@ pub struct Tail2Agent {
 impl Tail2Agent {
     pub fn new(tx: UnboundedSender<AgentMessage>) -> Self {
         Self {
-            probes: HashMap::new(),
+            probes: FnvHashMap::default(),
             tx: Some(tx),
             is_halted: true,
         }

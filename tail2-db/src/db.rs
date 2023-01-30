@@ -1,15 +1,14 @@
 #![warn(missing_docs)]
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Context;
+
 use duckdb::params;
 use duckdb::Config;
 use duckdb::Connection;
 use duckdb::OptionalExt;
 use anyhow::Result;
+use fnv::FnvHashMap;
 use tail2::calltree::UnsymbolizedCallTree;
 use tail2::Mergeable;
 use tail2::dto::ModuleMapping;
@@ -17,7 +16,7 @@ use tail2::symbolication::module::Module;
 use tokio::sync::Mutex;
 
 use crate::tile;
-use crate::window::TimeWindow;
+
 
 /// A row in the database
 pub struct DbRow {
@@ -74,12 +73,12 @@ impl tail2::Mergeable for DbResponse {
 
 struct ModuleCache {
     modules: Vec<Option<Arc<Module>>>,
-    debug_ids: HashMap<String, i32>,
+    debug_ids: FnvHashMap<String, i32>,
 }
 
 impl ModuleCache {
     fn new() -> Self {
-        Self { modules: vec![], debug_ids: HashMap::new() }
+        Self { modules: vec![], debug_ids: FnvHashMap::default() }
     }
 
     fn get_idx_by_debug_id(&self, debug_id: &str) -> Option<i32> {
@@ -154,7 +153,7 @@ impl ModuleMapping for DbBackedModuleMap {
         // update cache
         if let Some(m) = ret {
             self.cache.insert(idx, m.clone());
-            return m;
+            m
         } else {
             panic!("module not found");
         }
@@ -259,7 +258,7 @@ impl Tail2DB {
     // TODO: batch tiles into multiple rows per timescale
     /// Get the [`DbResponse`] object associated with the given range
     pub fn range_query(&self, range: (i64, i64)) -> Result<DbResponse> {
-        let mut tiles = tile::tile(range, self.scales.as_slice());
+        let tiles = tile::tile(range, self.scales.as_slice());
 
         let mut trees = vec![];
 
@@ -296,7 +295,7 @@ impl Tail2DB {
         let mut stmt = self
             .conn
             .prepare("SELECT ts, ct, n FROM samples_1 WHERE ts >= (?) AND ts < (?)")?;
-        let mut rows = stmt.query_map(
+        let rows = stmt.query_map(
             [
                 Duration::from_millis(t0 as u64),
                 Duration::from_millis(t1 as u64),
@@ -395,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_db_0() -> Result<()> {
-        let mut db = init_db();
+        let db = init_db();
 
         let ret = db.range_query((0, 10_000)).unwrap();
         assert_eq!(ret.t0, 0);
@@ -406,7 +405,7 @@ mod tests {
 
     #[test]
     fn test_db_1() -> Result<()> {
-        let mut db = init_db();
+        let db = init_db();
         let ret = db.range_query((0, 1000)).unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 1_000);
@@ -416,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_db_2() -> Result<()> {
-        let mut db = init_db();
+        let db = init_db();
         let ret = db.range_query((0, 300)).unwrap();
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 300);
@@ -426,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_db_3() -> Result<()> {
-        let mut db = init_db();
+        let db = init_db();
         let ret = db.range_query((1000, 2000)).unwrap();
         assert_eq!(ret.t0, 1000);
         assert_eq!(ret.t1, 2000);
