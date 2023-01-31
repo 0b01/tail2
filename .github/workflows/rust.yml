@@ -23,7 +23,7 @@ jobs:
     - name: add src
       run: rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
     - name: download duckdb
-      run: wget https://github.com/duckdb/duckdb/releases/download/v0.6.1/libduckdb-linux-amd64.zip && unzip libduckdb-linux-amd64.zip && cp libduckdb.so /usr/lib/
+      run: wget https://github.com/duckdb/duckdb/releases/download/v0.6.1/libduckdb-linux-amd64.zip && unzip libduckdb-linux-amd64.zip && sudo cp libduckdb.so /usr/lib/
     - name: install bpf-linker
       run: cargo install bpf-linker
     - name: Build

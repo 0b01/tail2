@@ -413,8 +413,6 @@ mod tests {
         let db = init_db();
 
         let ret = db.range_query((0, 10_000)).unwrap();
-        dbg!(ret.t0);
-        dbg!(ret.t1);
         assert_eq!(ret.t0, 0);
         assert_eq!(ret.t1, 10_000);
         assert_eq!(ret.n, 8);
