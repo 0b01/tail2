@@ -48,6 +48,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
         "tail2",
         "-p",
         "tail2-server",
+        "--verbose",
         "--features",
         &features,
     ];
@@ -55,7 +56,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
         args.push("--release");
     }
 
-    // dbg!(&args);
+    dbg!(&args);
 
     let status = Command::new("cargo")
         .args(args)

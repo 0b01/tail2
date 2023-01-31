@@ -12,8 +12,9 @@ pub struct Options {
 
 pub fn test(opts: Options) -> Result<()> {
     let mut args = vec![
-        // "+nightly",
-        "test"
+        "test",
+        "--features",
+        if cfg!(target_arch = "aarch64") { "aarch64" } else if cfg!(target_arch = "x86_64") { "x86_64" } else { "" },
     ];
     if opts.release {
         args.push("--release")
@@ -22,6 +23,7 @@ pub fn test(opts: Options) -> Result<()> {
     args.push("--nocapture");
     let status = Command::new("cargo")
         .env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER", "sudo -E")
+        .env("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER", "sudo -E")
         .args(&args)
         .status()
         .expect("failed to build userspace");

@@ -4,6 +4,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 rustup install stable
 rustup install nightly
+rustup default nightly
 # rustup target add x86_64-unknown-linux-gnu
 rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
 rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
@@ -19,9 +20,11 @@ export NVM_DIR="$HOME/.nvm"
 
 nvm install 16
 nvm use 16
+pushd frontend
 pushd speedscope
 npm i
 npm run build
+popd
 popd
 
 # cargo xtask build-ebpf --release
