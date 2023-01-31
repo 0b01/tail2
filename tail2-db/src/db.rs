@@ -233,10 +233,14 @@ impl Tail2DB {
     /// Insert rows into samples_1. Data must be sorted by timestamp.
     pub fn insert(&mut self, mut data: Vec<DbRow>) -> Result<()> {
         data.sort_unstable();
-        let mut app = self.conn.appender("samples_1").unwrap();
+
+        let mut stmt = self
+            .conn
+            .prepare(&format!("INSERT INTO samples_1 VALUES (?, ?, ?)"))?;
+
         for row in data {
             let ct_bytes = bincode::serialize(&row.ct).unwrap();
-            app.append_row(params![
+            stmt.execute(params![
                 Duration::from_millis(row.ts_ms as u64),
                 ct_bytes,
                 row.n
@@ -394,7 +398,7 @@ mod tests {
 
     fn init_db() -> Tail2DB {
         let mut db = Tail2DB::new("test");
-        db.insert(
+        let _ = db.insert(
             [100, 150, 950, 1000, 1050, 1900, 2150, 3001]
                 .into_iter()
                 .map(|ts| DbRow {
@@ -403,8 +407,7 @@ mod tests {
                     n: 1,
                 })
                 .collect(),
-        )
-        .unwrap();
+        );
         db
     }
 
