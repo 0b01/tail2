@@ -9,7 +9,7 @@ path = "src/lib.rs"
 [dependencies]
 tokio = "1.24"
 anyhow = "*"
-duckdb = { version = "0.6.0", git = "https://github.com/wangfenjin/duckdb-rs" }
+duckdb = { version = "0.6.1", git = "https://github.com/wangfenjin/duckdb-rs", features = [] }
 tail2 = { path = "../tail2", version = "0.1.0", features = [], default-features = false}
 bincode = { version = "1.3.3" }
 serde = { version = "^1.0", features = ["derive", "rc"] }
