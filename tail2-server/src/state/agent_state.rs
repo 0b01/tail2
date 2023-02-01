@@ -26,7 +26,8 @@ pub struct ProbeState {
 
 impl ProbeState {
     pub fn new() -> Self {
-        let db = Notifiable::new(Arc::new(Mutex::new(db::Tail2DB::new("1"))));
+        let path = std::env::current_dir().unwrap().join("tail2.db");
+        let db = Notifiable::new(Arc::new(Mutex::new(db::Tail2DB::new(path))));
         Self {
             db,
             is_running: false,

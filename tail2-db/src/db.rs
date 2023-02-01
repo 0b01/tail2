@@ -13,6 +13,7 @@ use tail2::Mergeable;
 use tail2::dto::ModuleMapping;
 use tail2::symbolication::module::Module;
 use tokio::sync::Mutex;
+use std::path::PathBuf;
 
 use crate::tile;
 use crate::tile::Tile;
@@ -171,7 +172,7 @@ pub(crate) mod module_table {
 /// Tail2 database file
 pub struct Tail2DB {
     /// path to the db file
-    pub path: String,
+    pub path: PathBuf,
     /// db connection
     pub conn: Connection,
     /// last timestamp refreshed, may not be the latest ts in the table
@@ -186,8 +187,7 @@ pub struct Tail2DB {
 
 impl Tail2DB {
     /// Create a file based new database with name
-    pub fn new(db_name: &str) -> Self {
-        let path = format!("/home/g/tail2/db/{db_name}.t2db");
+    pub fn new(path: PathBuf) -> Self {
         let config = Config::default()
             .access_mode(duckdb::AccessMode::ReadWrite)
             .unwrap();
@@ -397,7 +397,13 @@ mod tests {
     use super::*;
 
     fn init_db() -> Tail2DB {
-        let mut db = Tail2DB::new("test");
+        let current_dir = std::env::current_dir().unwrap().join("..");
+        let file_path = "db/test.t2db";
+        let path = current_dir.join(file_path);
+        let parent = path.parent().unwrap();
+        std::fs::create_dir_all(parent).unwrap();
+
+        let mut db = Tail2DB::new(path);
         let _ = db.insert(
             [100, 150, 950, 1000, 1050, 1900, 2150, 3001]
                 .into_iter()
