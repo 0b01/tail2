@@ -60,6 +60,7 @@ path = "src/main.rs"
 [lib]
 name = "tail2"
 path = "src/lib.rs"
+doctest = false
 
 [profile.release]
 debug = true

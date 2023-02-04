@@ -186,7 +186,9 @@ pub struct Tail2DB {
     /// db connection
     pub conn: Connection,
     /// last timestamp refreshed, may not be the latest ts in the table
-    last_ts: i64,
+    last_refresh_ts: i64,
+    /// latest timestamp
+    latest_ts: i64,
     /// order of magnitude augmented tree node for fast call tree merge
     scales: Vec<i64>,
     /// base scale is smallest augmentation scale
@@ -210,34 +212,40 @@ impl Tail2DB {
         // modules table
         let modules = Arc::new(Mutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
 
-        let mut db = Self {
+        // create tables
+        conn
+            .execute_batch(&format!(include_str!("./sql/create_table.sql"), 1))
+            .unwrap();
+
+        for i in &scales {
+            conn
+                .execute_batch(&format!(include_str!("./sql/create_table.sql"), i))
+                .unwrap();
+        }
+
+        // update latest timestamp
+        let latest_ts: i64 = conn
+            .query_row(
+                "SELECT ts FROM samples_1 ORDER BY ts DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .map(|i: i64| i / 1000).unwrap_or_default();
+
+        Self {
             path,
             conn,
-            last_ts: 0,
+            latest_ts,
+            last_refresh_ts: 0,
             scales,
             min_tile,
             modules,
-        };
-
-        db.create_tables();
-
-        db
+        }
     }
 
     /// Get the modules table
     pub fn modules(&self) -> Arc<Mutex<DbBackedModuleMap>> {
         self.modules.clone()
-    }
-
-    fn create_tables(&mut self) {
-        self.conn
-            .execute_batch(&format!(include_str!("./sql/create_table.sql"), 1))
-            .unwrap();
-        for i in self.scales.iter() {
-            self.conn
-                .execute_batch(&format!(include_str!("./sql/create_table.sql"), i))
-                .unwrap();
-        }
     }
 
     /// Insert rows into samples_1. Data must be sorted by timestamp.
@@ -255,30 +263,24 @@ impl Tail2DB {
                 ct_bytes,
                 row.n
             ])?;
+
+            // update latest_ts
+            self.latest_ts = self.latest_ts.max(row.ts_ms);
         }
 
         Ok(())
     }
 
-    /// Refresh the samples_XXXX augmentation tables
+    /// Refresh samples_* augmentation tables
     pub fn refresh_cache(&mut self) -> Result<()> {
-        let latest_ts: i64 = self
-            .conn
-            .query_row(
-                "SELECT ts FROM samples_1 ORDER BY ts DESC LIMIT 1",
-                [],
-                |r| r.get(0),
-            )
-            .map(|i: i64| i / 1000)?;
-
-        let interval = (self.last_ts, latest_ts);
+        let interval = (self.last_refresh_ts, self.latest_ts);
 
         let tiles = tile::tile(interval, self.scales.as_slice());
         for Tile{scale, start} in tiles {
             self.get_tile_rec(scale, start)?;
         }
 
-        self.last_ts = latest_ts;
+        self.last_refresh_ts = self.latest_ts;
 
         Ok(())
     }
@@ -392,15 +394,20 @@ impl Tail2DB {
         merged.t1 = start + scale;
 
         // Then, we'll insert our new sample into the database
-        let mut stmt = self
-            .conn
-            .prepare(&format!("INSERT INTO samples_{scale} VALUES (?, ?, ?)"))?;
-        stmt.execute(params![
-            Duration::from_millis(start as u64),
-            bincode::serialize(&merged.calltree).unwrap(),
-            merged.n
-        ])
-        .unwrap();
+
+        // if the end time of the interval is less than the latest time, we'll insert the new sample
+        // meaning we'll only insert the new sample if we have a full interval
+        if self.latest_ts >= start + scale {
+            let mut stmt = self
+                .conn
+                .prepare(&format!("INSERT INTO samples_{scale} VALUES (?, ?, ?)"))?;
+            stmt.execute(params![
+                Duration::from_millis(start as u64),
+                bincode::serialize(&merged.calltree).unwrap(),
+                merged.n
+            ])
+            .unwrap();
+        }
 
         // Finally, we'll return the merged result
         Ok(merged)
