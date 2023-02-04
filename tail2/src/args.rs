@@ -54,7 +54,7 @@ impl Commands {
     pub async fn run(self, t2: Tail2) -> Result<()> {
         match self {
             Commands::Table { pid } => {
-                let _ret = Processes::detect_pid(pid, &mut *MOD_CACHE.lock().await);
+                let _ret = Processes::detect_pid(pid, &mut *MOD_CACHE.lock());
                 // dbg!(ret);
             }
             Commands::Processes {} => {

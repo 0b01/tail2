@@ -32,7 +32,7 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
 
     let symbols = &mut *state.symbols.lock().await;
     let modules = db.as_ref().lock().await.modules();
-    let calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
+    let calltree = calltree.symbolize(symbols, &mut *modules.lock());
 
     let node = Node::new(calltree.root, &calltree.arena);
 

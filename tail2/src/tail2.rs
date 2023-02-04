@@ -11,6 +11,7 @@ use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, watch};
 use tokio::sync::Mutex;
+use parking_lot::Mutex as PMutex;
 use tokio::task::JoinHandle;
 
 
@@ -29,8 +30,8 @@ use futures_util::{StreamExt, SinkExt};
 
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
-pub static MOD_CACHE: Lazy<Arc<Mutex<ModuleCache>>> = Lazy::new(|| 
-    Arc::new(Mutex::new(ModuleCache::new()))
+pub static MOD_CACHE: Lazy<Arc<PMutex<ModuleCache>>> = Lazy::new(|| 
+    Arc::new(PMutex::new(ModuleCache::new()))
 );
 
 pub static HOSTNAME: Lazy<String> = Lazy::new(||

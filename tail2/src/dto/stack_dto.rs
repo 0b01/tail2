@@ -57,7 +57,7 @@ impl StackDto {
     }
 
     /// Mix native, python, kernel stack together into a unified call tree
-    pub fn mix( self, modules: &[Arc<Module>], new_modules: &mut impl ModuleMapping) -> Vec<UnsymbolizedFrame> {
+    pub fn mix(self, modules: &[Arc<Module>], new_modules: &mut impl ModuleMapping) -> Vec<UnsymbolizedFrame> {
         let mut ret = vec![];
         let mut python_frames = self.python_frames.into_iter();
 

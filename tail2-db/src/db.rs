@@ -12,8 +12,8 @@ use tail2::calltree::UnsymbolizedCallTree;
 use tail2::Mergeable;
 use tail2::dto::ModuleMapping;
 use tail2::symbolication::module::Module;
-use tokio::sync::Mutex;
 use std::path::PathBuf;
+use parking_lot::Mutex as PMutex;
 
 use crate::tile;
 use crate::tile::Tile;
@@ -194,7 +194,7 @@ pub struct Tail2DB {
     /// base scale is smallest augmentation scale
     min_tile: i64,
     /// modules table
-    modules: Arc<Mutex<DbBackedModuleMap>>,
+    modules: Arc<PMutex<DbBackedModuleMap>>,
 }
 
 impl Tail2DB {
@@ -210,7 +210,7 @@ impl Tail2DB {
         let min_tile = *scales.last().unwrap();
 
         // modules table
-        let modules = Arc::new(Mutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
+        let modules = Arc::new(PMutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
 
         // create tables
         conn
@@ -244,7 +244,7 @@ impl Tail2DB {
     }
 
     /// Get the modules table
-    pub fn modules(&self) -> Arc<Mutex<DbBackedModuleMap>> {
+    pub fn modules(&self) -> Arc<PMutex<DbBackedModuleMap>> {
         self.modules.clone()
     }
 

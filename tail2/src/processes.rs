@@ -21,7 +21,7 @@ impl Default for Processes {
 impl Processes {
     pub async fn refresh(&mut self) -> Result<()> {
         for prc in procfs::process::all_processes()?.flatten() {
-            let module_cache = &mut *MOD_CACHE.lock().await;
+            let module_cache = &mut *MOD_CACHE.lock();
             if let Ok(info) = Self::detect(&prc, module_cache) {
                 self.processes.insert(prc.pid, info);
             }
