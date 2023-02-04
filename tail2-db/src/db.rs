@@ -480,4 +480,10 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_bincode() {
+        let bytes = bincode::serialize(&UnsymbolizedCallTree::new()).unwrap();
+        dbg!(&bytes.len());
+    }
 }

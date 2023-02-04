@@ -1,25 +1,26 @@
-use indextree::{Arena, NodeId};
+use indextree::{Arena, NodeId, NodeEdge};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 use super::traits::Mergeable;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
 pub struct CallTreeFrame<T>
 where
-    T: Clone + Default + Eq + Serialize,
+    T: Clone + Default + Eq + Serialize + Debug,
 {
     pub item: T,
-    pub total_samples: usize,
-    pub self_samples: usize,
+    pub total_samples: u64,
+    pub self_samples: u64,
 }
 
 impl<T> CallTreeFrame<T> 
     where
-        T: Clone + Default + Eq + Serialize
+        T: Clone + Default + Eq + Serialize + Debug
 {
     pub fn map<N>(self, f: &mut impl FnMut(T) -> N) -> CallTreeFrame<N>
         where
-            N: Clone + Default + Eq + Serialize
+            N: Clone + Default + Eq + Serialize + Debug
     {
         CallTreeFrame {
             item: f(self.item),
@@ -27,21 +28,29 @@ impl<T> CallTreeFrame<T>
             self_samples: self.self_samples,
         }
     }
+
+    pub fn new(item: T, total_samples: u64, self_samples: u64) -> Self {
+        Self {
+            item,
+            total_samples,
+            self_samples,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct CallTreeInner<T: Clone + Default + Eq + Serialize> {
+pub struct CallTreeInner<T: Clone + Default + Eq + Serialize + Debug> {
     pub arena: Arena<CallTreeFrame<T>>,
     pub root: NodeId,
 }
 
-impl<T: Clone + Default + Eq + Serialize> Default for CallTreeInner<T> {
+impl<T: Clone + Default + Eq + Serialize + Debug> Default for CallTreeInner<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
+impl<T: Clone + Default + Eq + Serialize + Debug> CallTreeInner<T> {
     pub fn new() -> Self {
         let mut arena = Arena::new();
         let root = arena.new_node(Default::default());
@@ -70,7 +79,7 @@ impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
     /// map from type T to type N
     pub fn map<N>(self, mut f: impl FnMut(T) -> N) -> CallTreeInner<N>
     where
-        N: Clone + Default + Eq + Serialize,
+        N: Clone + Default + Eq + Serialize + Debug,
     {
         let arena = self.arena.map(|i|i.map(&mut f));
         CallTreeInner {
@@ -78,9 +87,42 @@ impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
             root: self.root,
         }
     }
+
+    /// filter call tree, go through every node, if they match f, then add them into the tree, reparent if necessary
+    pub fn filter(&self, f: impl Fn(&T) -> bool) -> Self {
+        let mut new_tree = Self::new();
+        let mut new_parent_stack = vec![(self.root, new_tree.root)];
+        let mut traverse = self.root.traverse(&self.arena).skip(1); // skip root
+
+        while let Some(edge) = traverse.next() {
+            match edge {
+                NodeEdge::Start(node_id) => {
+                    let node = self.arena.get(node_id).unwrap();
+                    if f(&node.get().item) {
+                        let new_node_id = new_tree.arena.new_node(node.get().clone());
+                        new_parent_stack.last().unwrap().1.append(new_node_id, &mut new_tree.arena);
+                        new_parent_stack.push((node_id, new_node_id));
+                    }
+                }
+                NodeEdge::End(node_id) => {
+                    if node_id == new_parent_stack.last().unwrap().0 {
+                        let (_, new_node) = new_parent_stack.pop().unwrap();
+
+                        // if new node has no children, set self = total
+                        if new_node.children(&new_tree.arena).count() == 0 {
+                            let data = new_tree.arena.get_mut(new_node).unwrap().get_mut();
+                            data.self_samples = data.total_samples;
+                        }
+                    }
+                }
+            }
+        }
+
+        new_tree
+    }
 }
 
-impl<T: Clone + Default + Eq + Serialize> Mergeable for CallTreeInner<T> {
+impl<T: Clone + Default + Eq + Serialize + Debug> Mergeable for CallTreeInner<T> {
     /// merge two trees
     /// TODO: skip this merge, add merge_frames functions directly
     /// TODO: better perf
@@ -176,6 +218,50 @@ mod tests {
         let mut ct1 = CallTreeInner::from_frames(&[0, 1, 2]);
         let ct2 = CallTreeInner::from_frames(&[5, 6]);
         ct1.merge(&ct2);
-        dbg!(ct1.root.debug_pretty_print(&ct1.arena));
+
+        assert_eq!(ct1.root.children(&ct1.arena).count(), 2);
+
+        assert_eq!(ct1.arena.get(
+            ct1.root.children(&ct1.arena).nth(0).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(0, 1, 0));
+
+        assert_eq!(ct1.arena.get(
+            ct1.root
+                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).nth(0).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(1, 1, 0));
+
+        assert_eq!(ct1.arena.get(
+            ct1.root
+                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).nth(0).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(2, 1, 1));
+
+        assert_eq!(ct1.arena.get(
+            ct1.root.children(&ct1.arena).nth(1).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(5, 1, 0));
+
+        assert_eq!(ct1.arena.get(
+            ct1.root
+                .children(&ct1.arena).nth(1).unwrap()
+                .children(&ct1.arena).nth(0).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(6, 1, 1));
+    }
+
+    #[test]
+    fn test_filter() {
+        let ct1 = CallTreeInner::from_frames(&[1, 2, 3, 4, 5]);
+        let filtered = ct1.filter(|&n| n % 2 == 0);
+
+        assert_eq!(filtered.arena.get(
+            ct1.root.children(&ct1.arena).nth(0).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(2, 1, 0));
+
+        assert_eq!(filtered.arena.get(
+            ct1.root
+                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).nth(0).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(4, 1, 1));
     }
 }

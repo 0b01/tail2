@@ -7,6 +7,6 @@ builddebug:
 deploy:
 	cargo xtask run --release --build --deploy
 test:
-	cargo xtask test --release
+	cargo xtask test --release $(filter)
 ui:
 	+$(MAKE) -C frontend

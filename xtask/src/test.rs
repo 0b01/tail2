@@ -8,6 +8,7 @@ pub struct Options {
     /// Build and run the release target
     #[clap(long)]
     pub release: bool,
+    pub rest: Vec<String>,
 }
 
 pub fn test(opts: Options) -> Result<()> {
@@ -19,6 +20,8 @@ pub fn test(opts: Options) -> Result<()> {
     if opts.release {
         args.push("--release")
     }
+    args.append(&mut opts.rest.iter().map(|s| s.as_str()).collect());
+
     args.push("--");
     args.push("--nocapture");
     let status = Command::new("cargo")

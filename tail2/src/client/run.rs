@@ -120,8 +120,9 @@ pub(crate) async fn run_bpf(
                         }
                     },
                     _ = stop_rx2.changed() => {
-                        tracing::warn!("stopping for cpu: {cpu_id}");
-                        tracing::warn!("processed: {}, avg: {:?}", c.load(Ordering::Relaxed), total_time.load(Ordering::Relaxed) / c.load(Ordering::Relaxed));
+                        tracing::warn!("stopping cpu: {cpu_id}");
+                        // tracing::warn!("processed: {}, avg: {:?}", c.load(Ordering::Relaxed), total_time.load(Ordering::Relaxed) / c.load(Ordering::Relaxed));
+                        tracing::warn!("processed: {}", c.load(Ordering::Relaxed));
 
                         break;
                     },
