@@ -13,7 +13,7 @@ use tail2::Mergeable;
 use tail2::dto::ModuleMapping;
 use tail2::symbolication::module::Module;
 use std::path::PathBuf;
-use parking_lot::Mutex as PMutex;
+use tokio::sync::Mutex;
 
 use crate::tile;
 use crate::tile::Tile;
@@ -86,6 +86,8 @@ impl tail2::Mergeable for DbResponse {
 }
 
 pub(crate) mod module_table {
+    use duckdb::Error;
+
     use super::*;
 
     pub(crate) struct ModuleCache {
@@ -144,8 +146,9 @@ pub(crate) mod module_table {
                 return ret;
             }
 
+            let module_ref = module.as_ref();
             self.conn.execute("INSERT INTO modules (id, debug_id, module) VALUES (nextval('seq_module_id'), ?, ?)",
-                params![module.debug_id, bincode::serialize(&module).unwrap()]).unwrap();
+                params![module.debug_id, serde_json::to_string(module_ref).unwrap()]).unwrap();
             let idx = self.conn.query_row("SELECT id FROM modules WHERE debug_id = ?",
                 params![module.debug_id],
                 |row| row.get(0)).ok();
@@ -162,18 +165,14 @@ pub(crate) mod module_table {
                 return m;
             }
 
-            let ret: Option<Arc<Module>> = self.conn.query_row("SELECT module FROM modules WHERE id = ?", params![idx], |row| {
+            let ret: Arc<Module> = Arc::new(self.conn.query_row("SELECT module FROM modules WHERE id = ?", params![idx], |row| {
                 let bytes: Vec<u8> = row.get(0)?;
-                Ok(bincode::deserialize(&bytes).unwrap())
-            }).unwrap();
+                Ok(serde_json::from_slice::<Module>(&bytes).unwrap())
+            }).unwrap());
 
             // update cache
-            if let Some(m) = ret {
-                self.cache.insert(idx, m.clone());
-                m
-            } else {
-                panic!("module not found");
-            }
+            self.cache.insert(idx, ret.clone());
+            ret
         }
     }
 
@@ -194,7 +193,7 @@ pub struct Tail2DB {
     /// base scale is smallest augmentation scale
     min_tile: i64,
     /// modules table
-    modules: Arc<PMutex<DbBackedModuleMap>>,
+    modules: Arc<Mutex<DbBackedModuleMap>>,
 }
 
 impl Tail2DB {
@@ -210,7 +209,7 @@ impl Tail2DB {
         let min_tile = *scales.last().unwrap();
 
         // modules table
-        let modules = Arc::new(PMutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
+        let modules = Arc::new(Mutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
 
         // create tables
         conn
@@ -244,7 +243,7 @@ impl Tail2DB {
     }
 
     /// Get the modules table
-    pub fn modules(&self) -> Arc<PMutex<DbBackedModuleMap>> {
+    pub fn modules(&self) -> Arc<Mutex<DbBackedModuleMap>> {
         self.modules.clone()
     }
 

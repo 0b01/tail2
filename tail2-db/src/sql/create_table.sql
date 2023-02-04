@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS samples_{} (
 
 CREATE TABLE IF NOT EXISTS modules (
     id INT PRIMARY KEY,
-    module BLOB,
+    module TEXT,
     debug_id TEXT,
 );
 

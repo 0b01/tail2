@@ -54,14 +54,15 @@ impl ResolvedBpfSample {
         let mut kernel_frames = None;
         let stack_id = sample.kernel_stack_id;
         if stack_id > 0 {
-            let mut kernel_stack = kernel_stacks.get(&(stack_id as u32), 0).unwrap();
-            let kfs: Vec<_> = kernel_stack
-                .resolve(&KSYMS)
-                .frames()
-                .iter()
-                .map(|i| i.symbol_name.clone())
-                .collect();
-            kernel_frames = Some(kfs);
+            if let Some(mut kernel_stack) = kernel_stacks.get(&(stack_id as u32), 0).ok() {
+                let kfs: Vec<_> = kernel_stack
+                    .resolve(&KSYMS)
+                    .frames()
+                    .iter()
+                    .map(|i| i.symbol_name.clone())
+                    .collect();
+                kernel_frames = Some(kfs);
+            }
         }
 
         sample.native_stack.unwind_success?;

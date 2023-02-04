@@ -1,7 +1,7 @@
 use axum::{extract::{State, Query}, response::IntoResponse, http::HeaderMap};
 use reqwest::header;
 use serde::{Serialize, Deserialize};
-use tail2::{calltree::serialize::Node};
+use tail2::{calltree::{serialize::Node, CodeType}};
 use axum::response::sse::{Event, Sse};
 use tracing::info;
 use std::{convert::Infallible, time::SystemTime};
@@ -12,6 +12,7 @@ use async_stream::{try_stream, AsyncStream};
 pub struct CallTreeParams {
     probe: String,
     host_name: String,
+    filter: Option<String>,
 }
 
 pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
@@ -32,7 +33,11 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
 
     let symbols = &mut *state.symbols.lock().await;
     let modules = db.as_ref().lock().await.modules();
-    let calltree = calltree.symbolize(symbols, &mut *modules.lock());
+    let mut calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
+    if let Some(filter) = &params.filter {
+        dbg!(&filter);
+        calltree = calltree.filter(|i|i.code_type == CodeType::Python);
+    }
 
     let node = Node::new(calltree.root, &calltree.arena);
 

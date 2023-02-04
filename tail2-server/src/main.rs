@@ -83,8 +83,16 @@ async fn main() {
     tracing::warn!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+}
+
+async fn shutdown_signal() {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("expect tokio signal ctrl-c");
+    println!("signal shutdown");
 }
 
 async fn static_path(prefix: &str, Path(path): Path<String>) -> impl IntoResponse {

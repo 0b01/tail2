@@ -68,17 +68,16 @@ impl StackDto {
                 FrameDto::Native { module_idx, offset } => {
                     let module = &modules[module_idx as usize];
                     let new_idx = new_modules.get_index_or_insert(Arc::clone(module)).unwrap();
-                    match module.py_offset {
-                        Some((py_offset, sz)) if py_offset <= offset && offset <= py_offset + sz => {
-                            ret.push(
-                                python_frames.next()
-                                    .map(|i| i.into())
-                                    .unwrap_or_else(|| UnsymbolizedFrame::Native { module_idx: new_idx, offset })
-                            );
-                        }
-                        _ => {
-                            ret.push(UnsymbolizedFrame::Native { module_idx: new_idx, offset });
-                        }
+                    let (py_offset, sz) = module.py_offset;
+                    if py_offset <= offset && offset <= py_offset + sz {
+                        ret.push(
+                            python_frames.next()
+                                .map(|i| i.into())
+                                .unwrap_or_else(|| UnsymbolizedFrame::Native { module_idx: new_idx, offset })
+                        );
+                    }
+                    else {
+                        ret.push(UnsymbolizedFrame::Native { module_idx: new_idx, offset });
                     }
                 }
                 _ => {

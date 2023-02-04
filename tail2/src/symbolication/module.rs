@@ -6,7 +6,7 @@ use std::{fmt::Debug, sync::Arc, path::Path};
 
 use symbolic::{
     common::ByteView,
-    debuginfo::{elf::ElfObject, ObjectKind},
+    debuginfo::{elf::ElfObject},
 };
 #[cfg(feature = "aarch64")]
 use tail2_common::native::unwinding::aarch64::unwind_table::UnwindTable;
@@ -28,9 +28,8 @@ pub struct Module {
     pub path: String,
     pub name: String,
     pub arch: i32,
-    pub kind: ObjectKind,
     pub debug_id: String,
-    pub py_offset: Option<(u32, u32)>,
+    pub py_offset: (u32, u32),
 }
 
 impl Eq for Module {}
@@ -45,7 +44,6 @@ impl Debug for Module {
         f.debug_struct("Module")
             .field("path", &self.path)
             .field("arch", &self.arch)
-            .field("kind", &self.kind)
             .field("debug_id", &self.debug_id)
             .finish()
     }
@@ -57,14 +55,13 @@ impl Module {
         let obj = ElfObject::parse(&buffer)?;
         let unwind_table = Arc::new(UnwindTable::from_path(path)?);
         let debug_id = obj.debug_id().to_string();
-        let py_offset = PYTHON_DEBUG_IDS.get(debug_id.as_str()).copied();
+        let py_offset = PYTHON_DEBUG_IDS.get(debug_id.as_str()).copied().unwrap_or_default();
         let name = Path::file_stem(Path::new(path)).unwrap_or_default().to_string_lossy().to_string();
         Ok(Self {
             unwind_table: Some(unwind_table),
             path: path.to_owned(),
             arch: obj.arch() as i32,
             name,
-            kind: obj.kind(),
             debug_id,
             py_offset,
         })

@@ -29,7 +29,7 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
         .db.clone();
 
     let modules = db.as_ref().lock().await.modules();
-    let mut modules = modules.lock();
+    let mut modules = modules.lock().await;
 
     let mut ts = 0;
     let mut n = 0;
