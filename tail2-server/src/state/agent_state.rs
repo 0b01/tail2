@@ -19,9 +19,6 @@ pub struct ProbeState {
 
     #[serde(skip)]
     pub db: Notifiable<Arc<Mutex<db::Tail2DB>>>,
-
-    // #[serde(skip)]
-    // pub calltree: Notifiable<Arc<Mutex<SymbolizedCallTree>>>,
 }
 
 impl ProbeState {
@@ -31,7 +28,6 @@ impl ProbeState {
         Self {
             db,
             is_running: false,
-            // calltree: Notifiable::new(Arc::new(Mutex::new(SymbolizedCallTree::new()))),
         }
     }
 }
