@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::dto::UnsymbolizedFrame;
+use crate::{dto::{UnsymbolizedFrame, ModuleMapping}, symbolication::elf::SymbolCache};
 
 use self::inner::CallTreeInner;
 
@@ -13,6 +13,12 @@ pub mod traits;
 
 pub type UnsymbolizedCallTree = CallTreeInner<UnsymbolizedFrame>;
 pub type CallTree = CallTreeInner<SymbolizedFrame>;
+
+impl UnsymbolizedCallTree {
+    pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut impl ModuleMapping) -> CallTree {
+        self.map(|f| f.symbolize(symbols, modules))
+    }
+}
 
 #[repr(u8)]
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
@@ -32,7 +38,7 @@ impl Default for CodeType {
 
 #[derive(Default, Clone, Eq, Serialize, Deserialize, Debug)]
 pub struct SymbolizedFrame {
-    pub module_idx: u32,
+    pub module_idx: i32,
     pub offset: u32,
     pub name: Option<String>,
     pub code_type: CodeType,

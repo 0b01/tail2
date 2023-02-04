@@ -1,9 +1,10 @@
 use axum::{extract::{State, Query}, response::IntoResponse, http::HeaderMap};
 use reqwest::header;
 use serde::{Serialize, Deserialize};
-use tail2::{calltree::serialize::Node, probes::Probe};
+use tail2::{calltree::serialize::Node};
 use axum::response::sse::{Event, Sse};
-use std::{convert::Infallible, sync::Arc};
+use tracing::info;
+use std::{convert::Infallible, time::SystemTime};
 use crate::state::ServerState;
 use async_stream::{try_stream, AsyncStream};
 
@@ -14,18 +15,28 @@ pub struct CallTreeParams {
 }
 
 pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
+    let t = SystemTime::now();
+
     let agents = state.agents.as_ref().lock().await;
     let probe = serde_json::from_str(&params.probe).unwrap();
-    let calltree = &agents
+    let db = agents
         .get(&params.host_name).unwrap()
         .probes
         .get(&probe).unwrap()
-        .calltree
-        .as_ref()
-        .lock().await
-        .calltree;
+        .db
+        .clone();
+    drop(agents);
+
+    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
+    let calltree = db.as_ref().lock().await.range_query((now - 60 * 1000, now)).unwrap().calltree;
+
+    let symbols = &mut *state.symbols.lock().await;
+    let modules = db.as_ref().lock().await.modules();
+    let calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
+
     let node = Node::new(calltree.root, &calltree.arena);
 
+    info!("processed current() in {:?}", t.elapsed().unwrap());
     serde_json::to_string(&node).unwrap()
 }
 
@@ -36,8 +47,9 @@ pub(crate) async fn events(State(state): State<ServerState>, Query(params): Quer
         .get(&params.host_name).unwrap()
         .probes
         .get(&probe).unwrap()
-        .calltree
+        .db
         .notify();
+    drop(agents);
     notify.notify_one();
 
     let stream = try_stream! {

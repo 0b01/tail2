@@ -1,3 +1,5 @@
+#![deny(clippy::disallowed_types)]
+
 use ruzstd::StreamingDecoder;
 use sqlx::ConnectOptions;
 use anyhow::Result;

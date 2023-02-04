@@ -1,3 +1,4 @@
+#![deny(clippy::disallowed_types)]
 #![allow(unused, non_camel_case_types, non_snake_case)]
 #![cfg_attr(not(feature = "user"), no_std)]
 

@@ -1,3 +1,5 @@
+#![deny(clippy::disallowed_types)]
+
 use anyhow::Result;
 use clap::Parser;
 

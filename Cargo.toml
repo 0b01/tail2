@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "xtask",
+    "indextree",
     "tail2",
     "tail2-common",
     "tail2-db",

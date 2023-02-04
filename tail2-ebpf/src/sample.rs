@@ -50,7 +50,6 @@ fn sample_inner<C: BpfContext>(ctx: &C, idx: usize) -> Result<(), Metrics> {
     let sample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::ErrSample_CantAlloc)?) };
     let ns: bpf_pidns_info = get_pid_tgid();
     sample.pidtgid = PidTgid::current(ns.pid, ns.tgid);
-    sample.ts = unsafe { bpf_ktime_get_ns() };
     sample.idx = idx;
 
     sample.native_stack = NativeStack::uninit();

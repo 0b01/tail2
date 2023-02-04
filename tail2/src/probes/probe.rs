@@ -22,8 +22,8 @@ impl ProbePool {
 
     pub(crate) fn next_avail(&self) -> Option<(usize, Arc<AtomicBool>)> {
         for (i, n) in self.available.iter().enumerate() {
-            if n.load(std::sync::atomic::Ordering::SeqCst) {
-                n.store(false, std::sync::atomic::Ordering::SeqCst);
+            if n.load(std::sync::atomic::Ordering::Relaxed) {
+                n.store(false, std::sync::atomic::Ordering::Relaxed);
                 return Some((i, n.clone()));
             }
         }
@@ -54,7 +54,7 @@ pub struct Attachment {
 
 impl Attachment {
     pub async fn detach(self) {
-        self.avail.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.avail.store(true, std::sync::atomic::Ordering::Relaxed);
 
         for link in self.links {
             link.detach().unwrap();
@@ -68,8 +68,8 @@ impl Probe {
     pub fn to_program<'a>(&'a self, bpf: &'a mut Bpf, probe_pool: &ProbePool) -> Option<(&mut Program, usize, Arc<AtomicBool>)> {
         let (i, avail) = probe_pool.next_avail()?;
         let ret = match self {
-            Probe::Perf{ .. } => bpf.program_mut(&format!("capture_stack_{}", i)).unwrap(),
-            Probe::Uprobe { .. } => bpf.program_mut(&format!("malloc_enter_{}", i)).unwrap(),
+            Probe::Perf{ .. } => bpf.program_mut(&format!("capture_stack_{i}")).unwrap(),
+            Probe::Uprobe { .. } => bpf.program_mut(&format!("malloc_enter_{i}")).unwrap(),
         };
 
         Some((ret, i, avail))

@@ -1,10 +1,9 @@
-
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
 
 use aya::Bpf;
+use fnv::FnvHashMap;
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
@@ -39,7 +38,7 @@ pub static HOSTNAME: Lazy<String> = Lazy::new(||
 );
 
 pub struct Probes {
-    probes: HashMap<Arc<Probe>, Attachment>,
+    probes: FnvHashMap<Arc<Probe>, Attachment>,
     pub probe_pool: ProbePool,
     pub clients: Arc<Mutex<Vec<Arc<Mutex<PostStackClient>>>>>
 }
@@ -47,7 +46,7 @@ pub struct Probes {
 impl Default for Probes {
     fn default() -> Self {
         Self {
-            probes: Default::default(),
+            probes: FnvHashMap::default(),
             probe_pool: ProbePool::new(5),
             clients: Default::default(),
         }

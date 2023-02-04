@@ -3,6 +3,7 @@ use gimli::{CfaRule, RegisterRule, X86_64};
 use super::unwindregs::UnwindRegsX86_64;
 #[cfg(feature = "user")]
 use crate::native::unwinding::error::ConversionError;
+use crate::native::unwinding::error::Error;
 
 /// For all of these: return address is *(new_sp - 8)
 #[repr(u8)]
@@ -47,37 +48,35 @@ impl UnwindRuleX86_64 {
         is_first_frame: bool,
         regs: &mut UnwindRegsX86_64,
         read_stack: &mut F,
-    ) -> Option<Option<u64>>
+    ) -> Result<Option<u64>, Error>
     where
         F: FnMut(u64) -> Result<u64, ()>,
     {
         let sp = regs.sp();
         let (new_sp, new_bp) = match self {
-            UnwindRuleX86_64::Invalid => {
-                return None;
-            }
+            UnwindRuleX86_64::Invalid => return Err(Error::InvalidRule),
             UnwindRuleX86_64::JustReturn => {
-                let new_sp = sp.checked_add(8)?;
+                let new_sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
                 (new_sp, regs.bp())
             }
             UnwindRuleX86_64::JustReturnIfFirstFrameOtherwiseFp => {
                 if is_first_frame {
-                    let new_sp = sp.checked_add(8)?;
+                    let new_sp = sp.checked_add(8).ok_or(Error::IntegerOverflow)?;
                     (new_sp, regs.bp())
                 } else {
                     let sp = regs.sp();
                     let bp = regs.bp();
-                    let new_sp = bp.checked_add(16)?;
+                    let new_sp = bp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                     if new_sp <= sp {
-                        return None;
+                        return Err(Error::FramepointerUnwindingMovedBackwards);
                     }
-                    let new_bp = read_stack(bp).ok()?;
+                    let new_bp = read_stack(bp).map_err(|_| Error::CouldNotReadStack(bp))?;
                     (new_sp, new_bp)
                 }
             }
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8 } => {
                 let sp_offset = u64::from(sp_offset_by_8) * 8;
-                let new_sp = sp.checked_add(sp_offset)?;
+                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
                 (new_sp, regs.bp())
             }
             UnwindRuleX86_64::OffsetSpAndRestoreBp {
@@ -85,9 +84,10 @@ impl UnwindRuleX86_64 {
                 bp_storage_offset_from_sp_by_8,
             } => {
                 let sp_offset = u64::from(sp_offset_by_8) * 8;
-                let new_sp = sp.checked_add(sp_offset)?;
+                let new_sp = sp.checked_add(sp_offset).ok_or(Error::IntegerOverflow)?;
                 let bp_storage_offset_from_sp = i64::from(bp_storage_offset_from_sp_by_8) * 8;
-                let bp_location = sp.checked_add_signed(bp_storage_offset_from_sp)?;
+                let bp_location = sp.checked_add_signed(bp_storage_offset_from_sp)
+                    .ok_or(Error::IntegerOverflow)?;
                 let new_bp = match read_stack(bp_location) {
                     Ok(new_bp) => new_bp,
                     Err(()) if is_first_frame && bp_location < sp => {
@@ -101,7 +101,7 @@ impl UnwindRuleX86_64 {
                         // sample record, where the ustack bytes are copied starting from sp.
                         regs.bp()
                     }
-                    Err(()) => return None,
+                    Err(()) => return Err(Error::CouldNotReadStack(bp_location)),
                 };
                 (new_sp, new_bp)
             }
@@ -148,13 +148,13 @@ impl UnwindRuleX86_64 {
                 let sp = regs.sp();
                 let bp = regs.bp();
                 if bp == 0 {
-                    return Some(None);
+                    return Ok(None);
                 }
-                let new_sp = bp.checked_add(16)?;
+                let new_sp = bp.checked_add(16).ok_or(Error::IntegerOverflow)?;
                 if new_sp <= sp {
-                    return None;
+                    return Err(Error::FramepointerUnwindingMovedBackwards);
                 }
-                let new_bp = read_stack(bp).ok()?;
+                let new_bp = read_stack(bp).map_err(|_| Error::CouldNotReadStack(bp))?;
                 // new_bp is the caller's bp. If the caller uses frame pointers, then bp should be
                 // a valid frame pointer and we could do a coherency check on new_bp to make sure
                 // it's moving in the right direction. But if the caller is using bp as a general
@@ -164,17 +164,18 @@ impl UnwindRuleX86_64 {
                 (new_sp, new_bp)
             }
         };
-        let return_address = read_stack(new_sp - 8).ok()?;
+        let return_address =
+            read_stack(new_sp - 8).map_err(|_| Error::CouldNotReadStack(new_sp - 8))?;
         if return_address == 0 {
-            return Some(None);
+            return Ok(None);
         }
         if new_sp == sp && return_address == regs.ip() {
-            return None;
+            return Err(Error::DidNotAdvance);
         }
         regs.set_ip(return_address);
         regs.set_sp(new_sp);
         regs.set_bp(new_bp);
-        Some(Some(return_address))
+        Ok(Some(return_address))
     }
 
     pub fn to_num(&self) -> i32 {
@@ -266,6 +267,7 @@ pub(crate) fn register_rule_to_cfa_offset<R: gimli::Reader>(
     }
 }
 
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -279,22 +281,22 @@ mod test {
         let mut regs = UnwindRegsX86_64::new(0x100400, 0x10, 0x20);
         let res =
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Some(Some(0x100300)));
+        assert_eq!(res, Ok(Some(0x100300)));
         assert_eq!(regs.ip(), 0x100300);
         assert_eq!(regs.sp(), 0x18);
         assert_eq!(regs.bp(), 0x20);
         let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, Some(Some(0x100200)));
+        assert_eq!(res, Ok(Some(0x100200)));
         assert_eq!(regs.ip(), 0x100200);
         assert_eq!(regs.sp(), 0x30);
         assert_eq!(regs.bp(), 0x40);
         let res = UnwindRuleX86_64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
-        assert_eq!(res, Some(Some(0x100100)));
+        assert_eq!(res, Ok(Some(0x100100)));
         assert_eq!(regs.ip(), 0x100100);
         assert_eq!(regs.sp(), 0x50);
         assert_eq!(regs.bp(), 0x70);
         let res = UnwindRuleX86_64::UseFramePointer.exec(false, &mut regs, &mut read_stack);
-        assert_eq!(res, Some(None));
+        assert_eq!(res, Ok(None));
     }
 
     #[test]
@@ -308,17 +310,17 @@ mod test {
         let mut read_stack = |addr| Ok(stack[(addr / 8) as usize]);
         let mut regs = UnwindRegsX86_64::new(0x100400, u64::MAX / 8 * 8, u64::MAX);
         let res = UnwindRuleX86_64::JustReturn.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, None);
+        assert_eq!(res, Err(Error::IntegerOverflow));
         let res =
             UnwindRuleX86_64::OffsetSp { sp_offset_by_8: 1 }.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, None);
+        assert_eq!(res, Err(Error::IntegerOverflow));
         let res = UnwindRuleX86_64::OffsetSpAndRestoreBp {
             sp_offset_by_8: 1,
             bp_storage_offset_from_sp_by_8: 2,
         }
         .exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, None);
+        assert_eq!(res, Err(Error::IntegerOverflow));
         let res = UnwindRuleX86_64::UseFramePointer.exec(true, &mut regs, &mut read_stack);
-        assert_eq!(res, None);
+        assert_eq!(res, Err(Error::IntegerOverflow));
     }
 }

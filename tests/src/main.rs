@@ -7,13 +7,18 @@ use tail2::{
     Tail2, probes::{Probe, Scope},
 };
 
+#[cfg(feature = "aarch64")]
+const MALLOC_PATH: &'static str = "../tests/fixtures/aarch64/malloc";
+#[cfg(feature = "x86_64")]
+const MALLOC_PATH: &'static str = "../tests/fixtures/x86_64/malloc";
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let test = args().nth(1).expect("no input");
     match test.as_str() {
         "malloc" => {
             let pid = None;
-            let command = Some("../tests/fixtures/aarch64/malloc".to_owned());
+            let command = Some(MALLOC_PATH.to_owned());
             let uprobe = "libc:malloc".to_owned();
 
             let (pid, child) = get_pid_child(pid, command);

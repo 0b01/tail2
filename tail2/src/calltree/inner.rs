@@ -13,6 +13,22 @@ where
     pub self_samples: usize,
 }
 
+impl<T> CallTreeFrame<T> 
+    where
+        T: Clone + Default + Eq + Serialize
+{
+    pub fn map<N>(self, f: &mut impl FnMut(T) -> N) -> CallTreeFrame<N>
+        where
+            N: Clone + Default + Eq + Serialize
+    {
+        CallTreeFrame {
+            item: f(self.item),
+            total_samples: self.total_samples,
+            self_samples: self.self_samples,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct CallTreeInner<T: Clone + Default + Eq + Serialize> {
     pub arena: Arena<CallTreeFrame<T>>,
@@ -50,12 +66,25 @@ impl<T: Clone + Default + Eq + Serialize> CallTreeInner<T> {
 
         tree
     }
+
+    /// map from type T to type N
+    pub fn map<N>(self, mut f: impl FnMut(T) -> N) -> CallTreeInner<N>
+    where
+        N: Clone + Default + Eq + Serialize,
+    {
+        let arena = self.arena.map(|i|i.map(&mut f));
+        CallTreeInner {
+            arena,
+            root: self.root,
+        }
+    }
 }
 
 impl<T: Clone + Default + Eq + Serialize> Mergeable for CallTreeInner<T> {
     /// merge two trees
+    /// TODO: skip this merge, add merge_frames functions directly
     /// TODO: better perf
-    fn merge(&mut self, other: &CallTreeInner<T>) {
+    fn merge(&mut self, other: &CallTreeInner<T>) -> &Self {
         let mut stack = Vec::new();
         stack.push((self.root, other.root));
         while !stack.is_empty() {
@@ -83,6 +112,8 @@ impl<T: Clone + Default + Eq + Serialize> Mergeable for CallTreeInner<T> {
                 }
             }
         }
+
+        self
     }
 }
 

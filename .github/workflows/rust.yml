@@ -19,12 +19,14 @@ jobs:
     - name: info
       run: uname -a
     - name: +nightly
-      run: rustup install nightly-2023-01-10 && rustup default nightly-2023-01-10
+      run: rustup install nightly && rustup default nightly
     - name: add src
-      run: rustup component add rust-src --toolchain nightly-2023-01-10-x86_64-unknown-linux-gnu
+      run: rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+    - name: download duckdb
+      run: wget https://github.com/duckdb/duckdb/releases/download/v0.6.1/libduckdb-linux-amd64.zip && unzip libduckdb-linux-amd64.zip && sudo cp libduckdb.so /usr/lib/
     - name: install bpf-linker
       run: cargo install bpf-linker
     - name: Build
-      run: cargo xtask run --build
-    # - name: Run tests
-    #   run: cargo test --verbose --all
+      run: cargo xtask run --build --release
+    - name: Run tests
+      run: cargo xtask test --release

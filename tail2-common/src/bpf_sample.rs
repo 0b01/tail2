@@ -4,7 +4,7 @@ use crate::{pidtgid::PidTgid, python::state::PythonStack, NativeStack, MAX_USER_
 #[derive(Clone, Copy, Debug)]
 pub struct BpfSample {
     pub pidtgid: PidTgid,
-    pub ts: u64,
+    pub ts_ms: u64,
     pub kernel_stack_id: i64,
     pub native_stack: NativeStack,
     pub python_stack: Option<PythonStack>,

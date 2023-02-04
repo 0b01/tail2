@@ -1,3 +1,5 @@
+#![deny(clippy::disallowed_types)]
+
 use axum::{
     body::{Bytes, self, Full, Empty},
     http::{StatusCode, HeaderValue, Response},
@@ -5,7 +7,7 @@ use axum::{
     routing::{get, post},
     Router, extract::Path};
 use reqwest::header;
-use tracing::debug;
+
 use std::{net::SocketAddr, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::{
@@ -93,7 +95,7 @@ async fn static_path(prefix: &str, Path(path): Path<String>) -> impl IntoRespons
     {
         use std::{path::PathBuf, fs::File, io::Read};
         // dbg!(path);
-        let path = PathBuf::from(format!("./tail2-server/static/{}/{}", prefix, path)).canonicalize().unwrap();
+        let path = PathBuf::from(format!("./tail2-server/static/{prefix}/{path}")).canonicalize().unwrap();
         if path.exists() {
             let mut buf = vec![];
             File::open(path).unwrap().read_to_end(&mut buf).unwrap();

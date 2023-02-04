@@ -40,23 +40,26 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
         if cfg!(target_arch = "aarch64") { "aarch64" } else if cfg!(target_arch = "x86_64") { "x86_64" } else { "" },
         if opts.deploy { "deploy" } else { "" },
     ];
-    let features = format!("{}", features.join(" "));
-    let args = vec![
+    let features = features.join(" ");
+    let mut args = vec![
         // "+nightly",
         "build",
         "-p",
         "tail2",
         "-p",
         "tail2-server",
+        "--verbose",
         "--features",
         &features,
-        if opts.release { "--release" } else { "" },
     ];
+    if opts.release {
+        args.push("--release");
+    }
 
-    // dbg!(&args);
+    dbg!(&args);
 
     let status = Command::new("cargo")
-        .args(&args)
+        .args(args)
         .status()
         .expect("failed to build userspace");
     assert!(status.success());
@@ -109,10 +112,10 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
     let r = running.clone();
 
     let _ = ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
+        r.store(false, Ordering::Relaxed);
     });
 
-    while running.load(Ordering::SeqCst) {
+    while running.load(Ordering::Relaxed) {
         thread::sleep(Duration::from_millis(100));
     }
 

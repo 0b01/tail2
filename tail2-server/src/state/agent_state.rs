@@ -1,40 +1,51 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
-use serde::{Serialize, Deserialize};
+use fnv::FnvHashMap;
+use serde::{Serialize};
 use tail2::{client::ws_client::messages::AgentMessage, probes::Probe};
 use tail2_db::db;
 use tokio::sync::{mpsc::UnboundedSender};
 use tokio::sync::Mutex;
-use tracing::error;
+
 
 use crate::Notifiable;
 
-use super::symbolized_calltree::SymbolizedCallTree;
 
-#[derive(Serialize, Deserialize, Default)]
+
+#[derive(Serialize)]
 pub struct ProbeState {
     pub is_running: bool,
-    // #[serde(skip)]
-    // pub db: db::Tail2DB,
 
     #[serde(skip)]
-    pub calltree: Notifiable<Arc<Mutex<SymbolizedCallTree>>>,
+    pub db: Notifiable<Arc<Mutex<db::Tail2DB>>>,
+
+    // #[serde(skip)]
+    // pub calltree: Notifiable<Arc<Mutex<SymbolizedCallTree>>>,
 }
 
 impl ProbeState {
     pub fn new() -> Self {
+        let path = std::env::current_dir().unwrap().join("tail2.db");
+        let db = Notifiable::new(Arc::new(Mutex::new(db::Tail2DB::new(path))));
         Self {
+            db,
             is_running: false,
-            calltree: Notifiable::new(Arc::new(Mutex::new(SymbolizedCallTree::new()))),
+            // calltree: Notifiable::new(Arc::new(Mutex::new(SymbolizedCallTree::new()))),
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+impl Default for ProbeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Serialize)]
 pub struct Tail2Agent {
     #[serde(with = "vectorize")]
-    pub probes: HashMap<Probe, ProbeState>,
+    pub probes: FnvHashMap<Probe, ProbeState>,
     #[serde(skip)]
     pub tx: Option<UnboundedSender<AgentMessage>>,
     is_halted: bool,
@@ -43,7 +54,7 @@ pub struct Tail2Agent {
 impl Tail2Agent {
     pub fn new(tx: UnboundedSender<AgentMessage>) -> Self {
         Self {
-            probes: HashMap::new(),
+            probes: FnvHashMap::default(),
             tx: Some(tx),
             is_halted: true,
         }
@@ -53,11 +64,11 @@ impl Tail2Agent {
         match diff {
             AgentMessage::AddProbe { probe } => {
                 self.is_halted = false;
-                let info = self.probes.entry(probe.clone()).or_insert(Default::default());
+                let info = self.probes.entry(probe.clone()).or_insert(ProbeState::new());
                 info.is_running = true;
             }
             AgentMessage::StopProbe { probe } => {
-                let info = self.probes.entry(probe.clone()).or_insert(Default::default());
+                let info = self.probes.entry(probe.clone()).or_insert(ProbeState::new());
                 info.is_running = false;
             }
             AgentMessage::AgentError { message } => {

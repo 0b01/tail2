@@ -36,3 +36,8 @@ out
 __pycache__/
 *.t2db
 *.db
+*.db.*
+db/
+perf.data
+perf.data*
+*.old

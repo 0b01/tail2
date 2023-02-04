@@ -14,6 +14,7 @@ use std::os::unix::prelude::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{exit, Child, Command};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 use std::{mem::size_of, sync::Arc};
 use tail2_common::bpf_sample::BpfSample;
@@ -57,47 +58,14 @@ pub(crate) async fn run_bpf(
             .unwrap();
     }
 
-    let (tx, mut rx) = mpsc::channel::<BpfSample>(2048);
-
     let kernel_stacks =
-        StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap();
-    let ksyms = aya::util::kernel_symbols().unwrap();
+        Arc::new(StackTraceMap::try_from(bpf.lock().await.take_map("KERNEL_STACKS").unwrap()).unwrap());
 
     // receiver task
     let mut ts = vec![];
-    let mut total_time = Duration::new(0, 0);
-    let clis = Arc::clone(&clis);
-    let t = tokio::spawn(async move {
-        let mut c = 0;
-        while let Some(st) = rx.recv().await {
-            let start_time = SystemTime::now();
 
-            if let Some(ref output_tx) = output_tx {
-                output_tx.send(st).await.unwrap();
-            }
-
-            let cli = Arc::clone(&clis.lock().await[st.idx]);
-            let st = ResolvedBpfSample::resolve(st, &kernel_stacks, &ksyms);
-            if let Some(st) = st {
-                let cli2 = Arc::clone(&cli);
-                tokio::spawn(async move {
-                    if let Err(e) = cli2.lock().await.post_stack(st).await {
-                        tracing::error!("sending stack failed: {}", e.to_string());
-                    }
-                });
-            }
-
-            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
-            total_time += elapsed;
-            c += 1;
-        }
-
-        // let _ = cli.lock().await.flush().await;
-
-        let avg_t = total_time / c;
-        tracing::info!("Processed: {c} stacks. {avg_t:?}/st");
-    });
-    ts.push(t);
+    let total_time = Arc::new(AtomicU64::new(0));
+    let c = Arc::new(AtomicU64::new(0));
 
     // open bpf maps
     let mut stacks = AsyncPerfEventArray::try_from(bpf.lock().await.take_map("STACKS").unwrap()).unwrap();
@@ -106,8 +74,12 @@ pub(crate) async fn run_bpf(
     for cpu_id in online_cpus().unwrap() {
         let mut buf = stacks.open(cpu_id, Some(1024)).unwrap();
 
-        let tx = tx.clone();
         let mut stop_rx2 = stop_rx.clone();
+        let kernel_stacks = Arc::clone(&kernel_stacks);
+        let clis = Arc::clone(&clis);
+        let output_tx = output_tx.clone();
+        let c = c.clone();
+        let total_time = total_time.clone();
         let t = tokio::spawn(async move {
             let mut buffers = (0..1)
                 .map(|_| BytesMut::with_capacity(size_of::<BpfSample>()))
@@ -119,16 +91,38 @@ pub(crate) async fn run_bpf(
                     evts = buf.read_events(&mut buffers) => {
                         let events = evts.unwrap();
                         for buf in buffers.iter_mut().take(events.read) {
-                            let st: BpfSample = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
+                            let mut st: BpfSample = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
                             // dbg!(&st.native_stack.unwind_success);
+                            st.ts_ms = SystemTime::now()
+                                .duration_since(SystemTime::UNIX_EPOCH)
+                                .unwrap()
+                                .as_millis() as u64;
+                            let start_time = SystemTime::now();
 
-                            if tx.try_send(st).is_err() {
-                                tracing::error!("slow");
+                            if let Some(ref output_tx) = output_tx {
+                                output_tx.send(st).await.unwrap();
                             }
+
+                            let cli = Arc::clone(&clis.lock().await[st.idx]);
+                            let st = ResolvedBpfSample::resolve(st, &kernel_stacks);
+                            if let Some(st) = st {
+                                let cli2 = Arc::clone(&cli);
+                                tokio::spawn(async move {
+                                    if let Err(e) = cli2.lock().await.post_stack(st).await {
+                                        tracing::error!("sending stack failed: {}", e.to_string());
+                                    }
+                                });
+                            }
+
+                            let elapsed = SystemTime::now().duration_since(start_time).unwrap();
+                            total_time.fetch_add(elapsed.as_micros() as u64, Ordering::Relaxed);
+                            c.fetch_add(1, Ordering::Relaxed);
                         }
                     },
                     _ = stop_rx2.changed() => {
                         tracing::warn!("stopping for cpu: {cpu_id}");
+                        tracing::warn!("processed: {}, avg: {:?}", c.load(Ordering::Relaxed), total_time.load(Ordering::Relaxed) / c.load(Ordering::Relaxed));
+
                         break;
                     },
                 };
@@ -136,7 +130,6 @@ pub(crate) async fn run_bpf(
         });
         ts.push(t);
     }
-
     Ok(ts)
 }
 
@@ -162,19 +155,26 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
+// Get the PID of the child process to trace
+// If the user did not provide a PID, then we will launch the child process
+// with the command provided by the user
 pub fn get_pid_child(
     pid: Option<u32>,
     command: Option<String>,
 ) -> (Option<u32>, Option<Child>) {
+    // If no PID or command was provided, return None for both
     match (pid, command) {
         (None, None) => (None, None),
+        // If no PID was provided, but a command was provided, launch the child process
         (None, Some(cmd)) => {
+            // Log the command that we are launching
             tracing::info!("Launching child process: `{:?}`", cmd);
+            // Split the command into a path and arguments
             let mut cmd_split = shlex::split(&cmd).unwrap().into_iter();
             let path = PathBuf::from(cmd_split.next().unwrap());
             let mut cmd = Command::new(path);
             let cmd = cmd.args(cmd_split);
-
+            // Use ptrace to trace the child process
             unsafe {
                 cmd.pre_exec(|| {
                     ptrace::traceme().or(Err(std::io::Error::new(
@@ -183,15 +183,20 @@ pub fn get_pid_child(
                     )))
                 });
             }
+            // Launch the child process
             match cmd.spawn() {
                 Ok(child) => {
+                    // Get the PID of the child process
                     let pid = child.id();
+                    // Return the PID and the child process
                     (Some(pid), Some(child))
                 }
                 Err(e) => panic!("{}", e.to_string()),
             }
         }
+        // If a PID was provided, but no command was provided, return the PID and None for the child process
         (Some(pid), None) => (Some(pid), None),
+        // If both a PID and a command were provided, panic
         (Some(_), Some(_)) => panic!("supply one of --pid, --command"),
     }
 }
@@ -304,7 +309,7 @@ pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiv
 
             // sleep for 10 sec
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(10)) => (),
+                _ = tokio::time::sleep(Duration::from_secs(60)) => (),
                 _ = stop_rx.changed() => break,
             }
         }
