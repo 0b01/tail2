@@ -287,6 +287,7 @@ impl Tail2DB {
     /// Get the [`DbResponse`] object associated with the given range
     pub fn range_query(&self, range @ (t0, t1): (i64, i64)) -> Result<DbResponse> {
         let tiles = tile::tile(range, self.scales.as_slice());
+        // dbg!(&tiles);
 
         let mut trees = vec![];
 
@@ -297,6 +298,8 @@ impl Tail2DB {
                 trees.push(self.get_tile_rec(scale, start)?);
             }
         }
+
+        // dbg!(&trees);
 
         let merged = trees.into_iter().reduce(|mut a, b| {
             a.merge(&b);
@@ -380,11 +383,13 @@ impl Tail2DB {
         }
 
         // Finally, we'll merge the results of each tile
-        let merged = next_results.into_iter()
+        let mut merged = next_results.into_iter()
             .reduce(|mut a, b| {
                 a.merge(&b);
                 a
             }).unwrap_or_default();
+
+        merged.t1 = start + scale;
 
         // Then, we'll insert our new sample into the database
         let mut stmt = self
@@ -438,34 +443,34 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_db_1() -> Result<()> {
-    //     let db = init_db();
-    //     let ret = db.range_query((0, 1000)).unwrap();
-    //     assert_eq!(ret.t0, 0);
-    //     assert_eq!(ret.t1, 1_000);
-    //     assert_eq!(ret.n, 3);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_db_1() -> Result<()> {
+        let db = init_db();
+        let ret = db.range_query((0, 1000)).unwrap();
+        assert_eq!(ret.t0, 0);
+        assert_eq!(ret.t1, 1_000);
+        assert_eq!(ret.n, 3);
+        Ok(())
+    }
 
-    // #[test]
-    // fn test_db_2() -> Result<()> {
-    //     let db = init_db();
-    //     let ret = db.range_query((0, 300)).unwrap();
-    //     assert_eq!(ret.t0, 0);
-    //     assert_eq!(ret.t1, 300);
-    //     assert_eq!(ret.n, 2);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_db_2() -> Result<()> {
+        let db = init_db();
+        let ret = db.range_query((0, 300)).unwrap();
+        assert_eq!(ret.t0, 0);
+        assert_eq!(ret.t1, 300);
+        assert_eq!(ret.n, 2);
+        Ok(())
+    }
 
-    // #[test]
-    // fn test_db_3() -> Result<()> {
-    //     let db = init_db();
-    //     let ret = db.range_query((1000, 2000)).unwrap();
-    //     assert_eq!(ret.t0, 1000);
-    //     assert_eq!(ret.t1, 2000);
-    //     assert_eq!(ret.n, 3);
+    #[test]
+    fn test_db_3() -> Result<()> {
+        let db = init_db();
+        let ret = db.range_query((1000, 2000)).unwrap();
+        assert_eq!(ret.t0, 1000);
+        assert_eq!(ret.t1, 2000);
+        assert_eq!(ret.n, 3);
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }
