@@ -17,3 +17,6 @@ serde = { version = "^1.0", features = ["derive", "rc"] }
 fnv = "1.0.7"
 parking_lot = "0.12.1"
 serde_json = "1.0.91"
+tracing = "0.1.37"
+toml = "0.7.1"
+tempfile = "3.3.0"

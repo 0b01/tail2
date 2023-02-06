@@ -15,6 +15,7 @@ use tail2::symbolication::module::Module;
 use std::path::PathBuf;
 use tokio::sync::Mutex;
 
+use crate::metadata::Metadata;
 use crate::tile;
 use crate::tile::Tile;
 
@@ -86,8 +87,6 @@ impl tail2::Mergeable for DbResponse {
 }
 
 pub(crate) mod module_table {
-    use duckdb::Error;
-
     use super::*;
 
     pub(crate) struct ModuleCache {
@@ -196,9 +195,17 @@ pub struct Tail2DB {
     modules: Arc<Mutex<DbBackedModuleMap>>,
 }
 
+impl Drop for Tail2DB {
+    fn drop(&mut self) {
+        self.conn.execute("CHECKPOINT;", params![]).unwrap();
+    }
+}
+
 impl Tail2DB {
     /// Create a file based new database with name
-    pub fn new(path: PathBuf) -> Self {
+    pub fn open(path: &PathBuf) -> Self {
+        let is_existing_db = path.exists();
+
         let config = Config::default()
             .access_mode(duckdb::AccessMode::ReadWrite)
             .unwrap();
@@ -212,14 +219,16 @@ impl Tail2DB {
         let modules = Arc::new(Mutex::new(DbBackedModuleMap::new(conn.try_clone().unwrap())));
 
         // create tables
-        conn
-            .execute_batch(&format!(include_str!("./sql/create_table.sql"), 1))
-            .unwrap();
-
-        for i in &scales {
+        if !is_existing_db {
             conn
-                .execute_batch(&format!(include_str!("./sql/create_table.sql"), i))
+                .execute_batch(&format!(include_str!("./sql/create_table.sql"), 1))
                 .unwrap();
+
+            for i in &scales {
+                conn
+                    .execute_batch(&format!(include_str!("./sql/create_table.sql"), i))
+                    .unwrap();
+            }
         }
 
         // update latest timestamp
@@ -232,7 +241,7 @@ impl Tail2DB {
             .map(|i: i64| i / 1000).unwrap_or_default();
 
         Self {
-            path,
+            path: path.clone(),
             conn,
             latest_ts,
             last_refresh_ts: 0,
@@ -411,6 +420,11 @@ impl Tail2DB {
         // Finally, we'll return the merged result
         Ok(merged)
     }
+
+    pub(crate) fn metadata(&self) -> Result<Metadata> {
+        let toml_path = self.path.with_extension("toml");
+        Metadata::open(&toml_path)
+    }
 }
 
 #[cfg(test)]
@@ -424,7 +438,7 @@ mod tests {
         let parent = path.parent().unwrap();
         std::fs::create_dir_all(parent).unwrap();
 
-        let mut db = Tail2DB::new(path);
+        let mut db = Tail2DB::open(&path);
         let _ = db.insert(
             [100, 150, 950, 1000, 1050, 1900, 2150, 3001]
                 .into_iter()
