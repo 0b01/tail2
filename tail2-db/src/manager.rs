@@ -7,7 +7,7 @@ use anyhow::{Result, Context};
 
 use fnv::FnvHashMap;
 use tokio::sync::Mutex;
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{db::Tail2DB, metadata::Metadata};
 
@@ -54,6 +54,9 @@ impl Manager {
     /// Create a new database manager given a path to a folder
     pub fn new<P: AsRef<Path>>(folder: P) -> Self {
         let folder = PathBuf::from(&folder.as_ref());
+        // recursively make dir so folder exists
+        fs::create_dir_all(&folder).unwrap();
+
         // populate dbs
         let mut dbs = FnvHashMap::default();
         for entry in fs::read_dir(&folder).unwrap() {
@@ -84,6 +87,10 @@ impl Manager {
         self.dbs.insert(name, Arc::clone(&ret));
         Ok(ret)
     }
+
+    pub fn clear(&mut self) {
+        self.dbs.clear();
+    }
 }
 
 #[cfg(test)]
@@ -102,7 +109,7 @@ mod tests {
         
         let metadata = Metadata {
             name: "test".to_string(),
-            tags: FnvHashMap::new(),
+            tags: FnvHashMap::default(),
         };
         manager.create_db(metadata).unwrap();
         assert_eq!(manager.dbs.len(), 1);

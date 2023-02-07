@@ -43,7 +43,7 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
 
     let db_row = DbRow {
         ts_ms: ts,
-        ct,
+        ct: Some(ct),
         n
     };
 

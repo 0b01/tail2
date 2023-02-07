@@ -38,7 +38,7 @@ impl<T> CallTreeFrame<T>
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CallTreeInner<T: Clone + Default + Eq + Serialize + Debug> {
     pub arena: Arena<CallTreeFrame<T>>,
     pub root: NodeId,

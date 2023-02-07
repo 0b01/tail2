@@ -27,7 +27,7 @@ pub struct DbRow {
     /// timestamp
     pub ts_ms: i64,
     /// call tree
-    pub ct: UnsymbolizedCallTree,
+    pub ct: Option<UnsymbolizedCallTree>,
     /// count
     pub n: i32,
 }
@@ -60,7 +60,7 @@ pub struct DbResponse {
     /// end
     pub t1: i64,
     /// call tree
-    pub calltree: UnsymbolizedCallTree,
+    pub calltree: Option<UnsymbolizedCallTree>,
     /// count
     pub n: i32,
 }
@@ -80,7 +80,11 @@ impl tail2::Mergeable for DbResponse {
     fn merge(&mut self, other: &Self) -> &Self {
         self.t0 = self.t0.min(other.t0);
         self.t1 = self.t1.max(other.t1);
-        self.calltree.merge(&other.calltree);
+        match (&mut self.calltree, &other.calltree) {
+            (Some(a), Some(b)) => { a.merge(b); },
+            (None, Some(b)) => self.calltree = Some(b.clone()),
+            _ => {}
+        }
         self.n += other.n;
         self
     }
@@ -444,7 +448,7 @@ mod tests {
                 .into_iter()
                 .map(|ts| DbRow {
                     ts_ms: ts,
-                    ct: UnsymbolizedCallTree::new(),
+                    ct: Some(UnsymbolizedCallTree::new()),
                     n: 1,
                 })
                 .collect(),

@@ -29,7 +29,7 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
     drop(agents);
 
     let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
-    let calltree = db.lock().await.tail2_db.range_query((now - 60 * 1000, now)).unwrap().calltree;
+    let calltree = db.lock().await.tail2_db.range_query((now - 60 * 1000, now)).unwrap().calltree.unwrap_or_default();
 
     let symbols = &mut *state.symbols.lock().await;
     let modules = db.lock().await.tail2_db.modules();
