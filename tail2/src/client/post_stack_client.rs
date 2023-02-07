@@ -55,8 +55,8 @@ impl PostStackClient {
             return Ok(StatusCode::ACCEPTED);
         }
 
-        let module_cache = &mut *MOD_CACHE.lock();
-        let dto = StackBatchDto::from_stacks(self.probe.clone(), stacks, module_cache)?;
+        let mut module_cache = MOD_CACHE.lock().await;
+        let dto = StackBatchDto::from_stacks(self.probe.clone(), stacks, &mut module_cache)?;
         let body = bincode::serialize(&dto).unwrap();
         self.post(&self.url, body).await
     }

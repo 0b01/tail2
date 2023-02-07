@@ -2,9 +2,10 @@
 //! A database manager that can be used to create and manage multiple tail2 databases.
 //! Each tail2 database file(duckdb file) is accompanied with a metadata file that contains tags.
 
-use std::{path::{PathBuf, Path}, fs, collections::HashMap, sync::Arc};
+use std::{path::{PathBuf, Path}, fs, sync::Arc};
 use anyhow::{Result, Context};
 
+use fnv::FnvHashMap;
 use tokio::sync::Mutex;
 use tracing::error;
 
@@ -13,7 +14,7 @@ use crate::{db::Tail2DB, metadata::Metadata};
 /// A database manager that can be used to create and manage multiple tail2 databases.
 pub struct Manager {
     folder: PathBuf,
-    dbs: HashMap<String, Arc<Mutex<Db>>>,
+    dbs: FnvHashMap<String, Arc<Mutex<Db>>>,
 }
 
 /// A database instance consisting of a db file and a metadata file.
@@ -54,7 +55,7 @@ impl Manager {
     pub fn new<P: AsRef<Path>>(folder: P) -> Self {
         let folder = PathBuf::from(&folder.as_ref());
         // populate dbs
-        let mut dbs = HashMap::new();
+        let mut dbs = FnvHashMap::default();
         for entry in fs::read_dir(&folder).unwrap() {
             let path = entry.unwrap().path();
             match Db::open(&path) {
@@ -87,6 +88,8 @@ impl Manager {
 
 #[cfg(test)]
 mod tests {
+    use fnv::FnvHashMap;
+
     use super::*;
 
     #[test]
@@ -99,7 +102,7 @@ mod tests {
         
         let metadata = Metadata {
             name: "test".to_string(),
-            tags: HashMap::new(),
+            tags: FnvHashMap::new(),
         };
         manager.create_db(metadata).unwrap();
         assert_eq!(manager.dbs.len(), 1);

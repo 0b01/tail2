@@ -8,7 +8,7 @@ use tail2::{
 };
 
 #[cfg(feature = "aarch64")]
-const MALLOC_PATH: &'static str = "../tests/fixtures/aarch64/malloc";
+const MALLOC_PATH: &str = "../tests/fixtures/aarch64/malloc";
 #[cfg(feature = "x86_64")]
 const MALLOC_PATH: &'static str = "../tests/fixtures/x86_64/malloc";
 

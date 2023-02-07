@@ -209,7 +209,7 @@ impl Tail2DB {
         let config = Config::default()
             .access_mode(duckdb::AccessMode::ReadWrite)
             .unwrap();
-        let conn = Connection::open_with_flags(&path, config).unwrap();
+        let conn = Connection::open_with_flags(path, config).unwrap();
 
         // 10^3 millis to 10^10
         let scales: Vec<_> = (3..10).rev().map(|i| 10_i64.pow(i)).collect();
@@ -262,7 +262,7 @@ impl Tail2DB {
 
         let mut stmt = self
             .conn
-            .prepare(&format!("INSERT INTO samples_1 VALUES (?, ?, ?)"))?;
+            .prepare("INSERT INTO samples_1 VALUES (?, ?, ?)")?;
 
         for row in data {
             let ct_bytes = bincode::serialize(&row.ct).unwrap();
@@ -423,7 +423,7 @@ impl Tail2DB {
 
     pub(crate) fn metadata(&self) -> Result<Metadata> {
         let toml_path = self.path.with_extension("toml");
-        Metadata::open(&toml_path)
+        Metadata::open(toml_path)
     }
 }
 

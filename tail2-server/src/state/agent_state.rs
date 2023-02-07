@@ -4,7 +4,7 @@ use anyhow::Result;
 use fnv::FnvHashMap;
 use serde::{Serialize};
 use tail2::{client::ws_client::messages::AgentMessage, probes::Probe};
-use tail2_db::{db, manager::Db};
+use tail2_db::{manager::Db};
 use tail2_db::manager::Manager;
 use tail2_db::metadata::Metadata;
 use tokio::sync::{mpsc::UnboundedSender, Mutex};

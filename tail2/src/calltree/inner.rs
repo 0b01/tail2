@@ -92,9 +92,9 @@ impl<T: Clone + Default + Eq + Serialize + Debug> CallTreeInner<T> {
     pub fn filter(&self, f: impl Fn(&T) -> bool) -> Self {
         let mut new_tree = Self::new();
         let mut new_parent_stack = vec![(self.root, new_tree.root)];
-        let mut traverse = self.root.traverse(&self.arena).skip(1); // skip root
+        let traverse = self.root.traverse(&self.arena).skip(1); // skip root
 
-        while let Some(edge) = traverse.next() {
+        for edge in traverse {
             match edge {
                 NodeEdge::Start(node_id) => {
                     let node = self.arena.get(node_id).unwrap();
@@ -222,20 +222,20 @@ mod tests {
         assert_eq!(ct1.root.children(&ct1.arena).count(), 2);
 
         assert_eq!(ct1.arena.get(
-            ct1.root.children(&ct1.arena).nth(0).unwrap()
+            ct1.root.children(&ct1.arena).next().unwrap()
         ).unwrap().get(), &CallTreeFrame::new(0, 1, 0));
 
         assert_eq!(ct1.arena.get(
             ct1.root
-                .children(&ct1.arena).nth(0).unwrap()
-                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
         ).unwrap().get(), &CallTreeFrame::new(1, 1, 0));
 
         assert_eq!(ct1.arena.get(
             ct1.root
-                .children(&ct1.arena).nth(0).unwrap()
-                .children(&ct1.arena).nth(0).unwrap()
-                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
         ).unwrap().get(), &CallTreeFrame::new(2, 1, 1));
 
         assert_eq!(ct1.arena.get(
@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(ct1.arena.get(
             ct1.root
                 .children(&ct1.arena).nth(1).unwrap()
-                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).next().unwrap()
         ).unwrap().get(), &CallTreeFrame::new(6, 1, 1));
     }
 
@@ -255,13 +255,13 @@ mod tests {
         let filtered = ct1.filter(|&n| n % 2 == 0);
 
         assert_eq!(filtered.arena.get(
-            ct1.root.children(&ct1.arena).nth(0).unwrap()
+            ct1.root.children(&ct1.arena).next().unwrap()
         ).unwrap().get(), &CallTreeFrame::new(2, 1, 0));
 
         assert_eq!(filtered.arena.get(
             ct1.root
-                .children(&ct1.arena).nth(0).unwrap()
-                .children(&ct1.arena).nth(0).unwrap()
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
         ).unwrap().get(), &CallTreeFrame::new(4, 1, 1));
     }
 }

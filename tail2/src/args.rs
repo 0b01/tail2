@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use tracing::info;
 
 use crate::{
     client::{run::{get_pid_child, run_until_exit, RunUntil}},
@@ -54,8 +55,8 @@ impl Commands {
     pub async fn run(self, t2: Tail2) -> Result<()> {
         match self {
             Commands::Table { pid } => {
-                let _ret = Processes::detect_pid(pid, &mut *MOD_CACHE.lock());
-                // dbg!(ret);
+                let ret = Processes::detect_pid(pid, &mut *MOD_CACHE.lock().await);
+                info!("{:#?}", ret);
             }
             Commands::Processes {} => {
                 let mut p = Processes::new();
