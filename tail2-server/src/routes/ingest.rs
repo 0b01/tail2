@@ -21,14 +21,14 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
     let batch: StackBatchDto = bincode::deserialize(&var).context("cant deserialize")?;
     let probe: Probe = serde_json::from_str(&batch.probe).unwrap();
 
-    let agents = &mut *state.agents.as_ref().lock().await;
+    let agents = &mut *state.agents.lock().await;
     let db = agents
         .get(&batch.hostname).unwrap()
         .probes
         .get(&probe).unwrap()
         .db.clone();
 
-    let modules = db.as_ref().lock().await.modules();
+    let modules = db.lock().await.tail2_db.modules();
     let mut modules = modules.lock().await;
 
     let mut ts = 0;
@@ -47,7 +47,7 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
         n
     };
 
-    db.as_ref().lock().await.insert(vec![db_row]).unwrap();
+    db.lock().await.tail2_db.insert(vec![db_row]).unwrap();
 
     db.notify().notify_one();
 

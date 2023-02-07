@@ -4,7 +4,7 @@ use futures::{StreamExt, SinkExt};
 
 use reqwest::header;
 use tokio::{sync::mpsc::{self, UnboundedReceiver}};
-use std::{convert::Infallible};
+use std::{convert::Infallible, sync::Arc};
 
 use axum::{extract::State};
 use tail2::{client::ws_client::messages::{AgentMessage, NewConnection, StartAgent, HaltAgent}};
@@ -13,7 +13,7 @@ use tail2::{client::ws_client::messages::{AgentMessage, NewConnection, StartAgen
 use crate::{state::{ServerState, Tail2Agent}};
 
 pub(crate) async fn agents(State(st): State<ServerState>) -> Result<String> {
-    let agents = &*st.agents.as_ref().lock().await;
+    let agents = &*st.agents.lock().await;
     let map = serde_json::to_string(agents).unwrap();
     Ok(map)
 }
@@ -22,7 +22,7 @@ pub(crate) async fn on_connect(ws: WebSocketUpgrade, State(state): State<ServerS
     let (tx, rx) = mpsc::unbounded_channel::<AgentMessage>();
     let config = Tail2Agent::new(tx);
     tracing::info!("new agent: {}", new_conn.hostname);
-    let mut agents = state.agents.as_ref().lock().await;
+    let mut agents = state.agents.lock().await;
     let name = new_conn.hostname.to_owned();
     let _i = agents.insert(name.clone(), config);
     drop(agents);
@@ -38,9 +38,10 @@ async fn connect_ws(stream: WebSocket, state: ServerState, name: String, mut rx:
     tokio::spawn(async move {
         while let Some(Ok(Message::Text(msg))) = receiver.next().await {
             let diff = serde_json::from_str(&msg).unwrap();
-            let mut agents = state.agents.as_ref().lock().await;
+            let mut agents = state.agents.lock().await;
             let agt = agents.get_mut(&name).unwrap();
-            agt.process(&diff).unwrap();
+            let manager = Arc::clone(&state.manager);
+            agt.process(&diff, manager).await.unwrap();
             state.agents.notify_one();
         }});
 
@@ -56,7 +57,7 @@ async fn connect_ws(stream: WebSocket, state: ServerState, name: String, mut rx:
 }
 
 pub(crate) async fn start_probe(State(st): State<ServerState>, start_agent: Query<StartAgent>) -> Result<String> {
-    let agents = st.agents.as_ref().lock().await;
+    let agents = st.agents.lock().await;
     let agt = agents.get(&start_agent.name).unwrap();
     let tx = agt.tx.as_ref().unwrap().clone();
     let probe = serde_json::from_str(&start_agent.probe).unwrap();
@@ -67,7 +68,7 @@ pub(crate) async fn start_probe(State(st): State<ServerState>, start_agent: Quer
 }
 
 pub(crate) async fn stop_probe(State(st): State<ServerState>, stop_agent: Query<StartAgent>) -> Result<String> {
-    let agents = st.agents.as_ref().lock().await;
+    let agents = st.agents.lock().await;
     let agt = agents.get(&stop_agent.name).unwrap();
     let tx = agt.tx.as_ref().unwrap().clone();
     let probe = serde_json::from_str(&stop_agent.probe).unwrap();
@@ -78,7 +79,7 @@ pub(crate) async fn stop_probe(State(st): State<ServerState>, stop_agent: Query<
 }
 
 pub(crate) async fn halt(State(st): State<ServerState>, start_agent: Query<HaltAgent>) -> Result<String> {
-    let agents = st.agents.as_ref().lock().await;
+    let agents = st.agents.lock().await;
     let agt = agents.get(&start_agent.name).unwrap();
     let tx = agt.tx.as_ref().unwrap().clone();
 

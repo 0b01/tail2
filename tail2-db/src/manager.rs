@@ -2,9 +2,10 @@
 //! A database manager that can be used to create and manage multiple tail2 databases.
 //! Each tail2 database file(duckdb file) is accompanied with a metadata file that contains tags.
 
-use std::{path::PathBuf, fs, collections::HashMap, sync::Arc};
+use std::{path::{PathBuf, Path}, fs, collections::HashMap, sync::Arc};
 use anyhow::{Result, Context};
 
+use tokio::sync::Mutex;
 use tracing::error;
 
 use crate::{db::Tail2DB, metadata::Metadata};
@@ -12,12 +13,13 @@ use crate::{db::Tail2DB, metadata::Metadata};
 /// A database manager that can be used to create and manage multiple tail2 databases.
 pub struct Manager {
     folder: PathBuf,
-    dbs: HashMap<String, Arc<Db>>,
+    dbs: HashMap<String, Arc<Mutex<Db>>>,
 }
 
 /// A database instance consisting of a db file and a metadata file.
 pub struct Db {
     metadata: Metadata,
+    /// The Tail2DB t2db file
     pub tail2_db: Tail2DB,
 }
 
@@ -49,15 +51,15 @@ impl Db {
 
 impl Manager {
     /// Create a new database manager given a path to a folder
-    pub fn new(folder: &PathBuf) -> Self {
-        let folder = folder.clone();
+    pub fn new<P: AsRef<Path>>(folder: P) -> Self {
+        let folder = PathBuf::from(&folder.as_ref());
         // populate dbs
         let mut dbs = HashMap::new();
         for entry in fs::read_dir(&folder).unwrap() {
             let path = entry.unwrap().path();
             match Db::open(&path) {
                 Ok(db) => {
-                    dbs.insert(db.metadata.name.clone(), Arc::new(db));
+                    dbs.insert(db.metadata.name.clone(), Arc::new(Mutex::new(db)));
                 }
                 Err(e) => {
                     error!("error opening db: {:?}", e);
@@ -72,12 +74,14 @@ impl Manager {
     }
 
     /// Create a new database given metadata
-    pub fn create_db(&mut self, metadata: Metadata) -> Result<()> {
+    pub fn create_db(&mut self, metadata: Metadata) -> Result<Arc<Mutex<Db>>> {
         metadata.save(&self.folder)?;
         let db_path = self.folder.join(&metadata.name).with_extension("t2db");
         let db = Db::create(&db_path, metadata)?;
-        self.dbs.insert(db.metadata.name.clone(), Arc::new(db));
-        Ok(())
+        let name = db.metadata.name.clone();
+        let ret = Arc::new(Mutex::new(db));
+        self.dbs.insert(name, Arc::clone(&ret));
+        Ok(ret)
     }
 }
 

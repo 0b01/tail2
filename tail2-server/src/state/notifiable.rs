@@ -1,36 +1,43 @@
 use std::{sync::Arc};
 
-use tokio::sync::Notify;
-use serde::{Serialize, Deserialize};
+use tokio::sync::{Notify, Mutex, MutexGuard};
+use serde::Deserialize;
 
-#[derive(Clone)]
 pub struct Notifiable<T> {
-    inner: Arc<T>,
+    inner: Arc<Mutex<T>>,
     notify: Arc<Notify>,
+}
+
+impl<T> Clone for Notifiable<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            notify: Arc::clone(&self.notify),
+        }
+    }
 }
 
 impl<T: Default> Default for Notifiable<T> {
     fn default() -> Self {
         Self {
-            inner: Arc::new(Default::default()),
+            inner: Arc::new(Mutex::new(Default::default())),
             notify: Arc::new(Notify::new())
         }
     }
 }
 
-impl<T> AsRef<T> for Notifiable<T> {
-    fn as_ref(&self) -> &T {
-        &self.inner
-    }
-}
-
 impl<T> Notifiable<T> {
     pub fn new(inner: T) -> Self {
-        let changed = Arc::new(Notify::new());
-
         Self {
-            notify: changed,
-            inner: Arc::new(inner),
+            notify: Arc::new(Notify::new()),
+            inner: Arc::new(Mutex::new(inner)),
+        }
+    }
+
+    pub fn new_wrapped(t: Arc<Mutex<T>>) -> Notifiable<T> {
+        Self {
+            notify: Arc::new(Notify::new()),
+            inner: t,
         }
     }
 
@@ -45,13 +52,9 @@ impl<T> Notifiable<T> {
     pub fn notify(&self) -> Arc<Notify> {
         Arc::clone(&self.notify)
     }
-}
 
-impl<T: Serialize> Serialize for Notifiable<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer {
-        self.inner.serialize(serializer)
+    pub async fn lock<'a>(&'a self) -> MutexGuard<'a, T> {
+        self.inner.lock().await
     }
 }
 
@@ -61,7 +64,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Notifiable<T> {
         D: serde::Deserializer<'de> {
         Ok(Self {
             notify: Arc::new(Notify::new()),
-            inner: Arc::<T>::deserialize(deserializer)?,
+            inner: Arc::new(Mutex::new(T::deserialize(deserializer)?)),
         })
     }
 }

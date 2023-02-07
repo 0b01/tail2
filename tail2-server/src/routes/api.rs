@@ -18,7 +18,7 @@ pub struct CallTreeParams {
 pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
     let t = SystemTime::now();
 
-    let agents = state.agents.as_ref().lock().await;
+    let agents = state.agents.lock().await;
     let probe = serde_json::from_str(&params.probe).unwrap();
     let db = agents
         .get(&params.host_name).unwrap()
@@ -29,10 +29,10 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
     drop(agents);
 
     let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
-    let calltree = db.as_ref().lock().await.range_query((now - 60 * 1000, now)).unwrap().calltree;
+    let calltree = db.lock().await.tail2_db.range_query((now - 60 * 1000, now)).unwrap().calltree;
 
     let symbols = &mut *state.symbols.lock().await;
-    let modules = db.as_ref().lock().await.modules();
+    let modules = db.lock().await.tail2_db.modules();
     let mut calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
     if let Some(filter) = &params.filter {
         dbg!(&filter);
@@ -46,7 +46,7 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
 }
 
 pub(crate) async fn events(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> impl IntoResponse {
-    let agents = state.agents.as_ref().lock().await;
+    let agents = state.agents.lock().await;
     let probe = serde_json::from_str(&params.probe).unwrap();
     let notify = agents
         .get(&params.host_name).unwrap()

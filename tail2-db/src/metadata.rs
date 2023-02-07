@@ -18,8 +18,17 @@ pub struct Metadata {
 }
 
 impl Metadata {
+    /// create an empty metadata file
+    pub fn empty(name: &str) -> Self {
+        let name = name.to_string();
+        Self {
+            name,
+            tags: HashMap::new(),
+        }
+    }
+
     /// given a path, open file
-    pub fn open<P: AsRef<Path>>(path: &P) -> Result<Self> {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
         let toml = std::fs::read_to_string(path)?;
         let metadata: Self = toml::from_str(&toml)?;
