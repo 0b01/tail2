@@ -20,7 +20,7 @@ pub struct Metadata {
 
 impl Metadata {
     /// create an empty metadata file
-    pub fn empty(name: &str) -> Self {
+    pub fn empty(name: impl ToString) -> Self {
         let name = name.to_string();
         Self {
             name,

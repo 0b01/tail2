@@ -27,6 +27,7 @@ pub struct Db {
 impl Db {
     /// Open a database from a tail2 db path
     pub fn open(path_to_t2db: &PathBuf) -> Result<Self> {
+        info!("opening {:?}", path_to_t2db);
         if path_to_t2db.extension().context("no ext")? == "t2db" {
             let tail2_db = Tail2DB::open(path_to_t2db);
             let metadata = tail2_db.metadata().context("missing metadata")?;
@@ -88,6 +89,7 @@ impl Manager {
         Ok(ret)
     }
 
+    /// Clear dbs in manager
     pub fn clear(&mut self) {
         self.dbs.clear();
     }

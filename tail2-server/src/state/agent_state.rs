@@ -62,14 +62,14 @@ impl Tail2Agent {
                 let manager = &mut *manager.lock().await;
                 let info = self.probes
                     .entry(probe.clone())
-                    .or_insert(ProbeState::new(manager, Metadata::empty("test")));
+                    .or_insert(ProbeState::new(manager, Metadata::empty(probe)));
                 info.is_running = true;
             }
             AgentMessage::StopProbe { probe } => {
                 let manager = &mut *manager.lock().await;
                 let info = self.probes
                     .entry(probe.clone())
-                    .or_insert(ProbeState::new(manager, Metadata::empty("test")));
+                    .or_insert(ProbeState::new(manager, Metadata::empty(probe)));
                 info.is_running = false;
             }
             AgentMessage::AgentError { message } => {

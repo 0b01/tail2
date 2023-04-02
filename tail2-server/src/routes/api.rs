@@ -6,7 +6,7 @@ use axum::response::sse::{Event, Sse};
 use tracing::info;
 use std::{convert::Infallible, time::SystemTime};
 use crate::state::ServerState;
-use async_stream::{try_stream, AsyncStream};
+use async_stream::{try_stream, __private::AsyncStream};
 
 #[derive(Serialize, Deserialize)]
 pub struct CallTreeParams {

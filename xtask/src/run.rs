@@ -42,13 +42,13 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
     ];
     let features = features.join(" ");
     let mut args = vec![
-        // "+nightly",
+        "+nightly",
         "build",
         "-p",
         "tail2",
         "-p",
         "tail2-server",
-        "--verbose",
+        // "--verbose",
         "--features",
         &features,
     ];

@@ -1,4 +1,4 @@
-use async_stream::{try_stream, AsyncStream};
+use async_stream::{try_stream, __private::AsyncStream};
 use axum::{response::{Result, IntoResponse, sse::Event, Sse}, extract::{WebSocketUpgrade, ws::{WebSocket, Message}, Query}, http::HeaderMap};
 use futures::{StreamExt, SinkExt};
 

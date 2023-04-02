@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use procfs::process::{MemoryMap, Process};
+use procfs::process::{MemoryMap, Process, MemoryMaps};
 use serde::{Deserialize, Serialize};
 use tail2_common::{NativeStack, pidtgid::PidTgid};
 
@@ -111,7 +111,7 @@ pub struct StackBatchDto {
 }
 
 // TODO: remove
-pub fn proc_map(pid: u32) -> Result<Vec<MemoryMap>> {
+pub fn proc_map(pid: u32) -> Result<MemoryMaps> {
     Process::new(pid as i32)?
         .maps()
         .context("unable to get maps")
@@ -174,10 +174,10 @@ fn from_native_stack(
     module_cache: &mut ModuleCache,
 ) -> Result<Vec<FrameDto>> {
     let len = native_stack.unwind_success.unwrap_or(0);
-    let proc_map = proc_map(pid)?;
+    let proc_maps = proc_map(pid)?;
     let mut native_frames = vec![];
     for address in native_stack.native_stack[..len].iter().rev() {
-        let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
+        let (offset, entry) = lookup(&proc_maps, *address).context("address not found")?;
         let path = entry
             .pathname
             .path()
@@ -198,7 +198,7 @@ fn from_native_stack(
     Ok(native_frames)
 }
 
-fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)> {
+fn lookup(proc_map: &MemoryMaps, address: usize) -> Option<(usize, &MemoryMap)> {
     for entry in proc_map.iter() {
         if address >= entry.address.0 as usize && address < entry.address.1 as usize {
             let translated = address - entry.address.0 as usize + entry.offset as usize;

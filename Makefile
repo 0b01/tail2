@@ -2,6 +2,8 @@ default:
 	cargo xtask run --release
 check:
 	cargo xtask check --release
+build:
+	cargo xtask run --build --release
 builddebug:
 	cargo xtask run --build
 deploy:

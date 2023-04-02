@@ -52,7 +52,7 @@ pub fn build_ebpf(opts: Options, is_check: bool) -> Result<(), anyhow::Error> {
     })
     .to_string();
     let mut args = vec![
-        // "+nightly",
+        "+nightly",
         if is_check { "check" } else { "build" },
         "--features",
         target.as_str(),

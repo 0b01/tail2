@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{symbolication::module_cache::ModuleCache, tail2::MOD_CACHE};
 use anyhow::Result;
 use fnv::FnvHashMap;
-use procfs::process::Process;
+use procfs::process::{Process, MMPermissions};
 use tail2_common::procinfo::{user::ProcMapRow, ProcInfo};
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl Processes {
             .maps()?
             .into_iter()
             .filter_map(|e| {
-                if e.perms.contains('x') {
+                if e.perms.contains(MMPermissions::EXECUTE) {
                     if let procfs::process::MMapPath::Path(p) = e.pathname {
                         let path = p.to_string_lossy().to_string();
 
