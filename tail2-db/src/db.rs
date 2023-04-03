@@ -75,7 +75,7 @@ impl std::fmt::Debug for DbResponse {
     }
 }
 
-impl tail2::Mergeable for DbResponse {
+impl Mergeable for DbResponse {
     /// Merge two db response
     fn merge(&mut self, other: &Self) -> &Self {
         self.t0 = self.t0.min(other.t0);

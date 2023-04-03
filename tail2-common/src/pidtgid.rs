@@ -8,6 +8,13 @@ impl Default for PidTgid {
     }
 }
 
+#[cfg(feature = "user")]
+impl ToString for PidTgid {
+    fn to_string(&self) -> String {
+        format!("{}:{}", self.pid(), self.tgid())
+    }
+}
+
 impl PidTgid {
     pub fn new() -> Self {
         Self(0)
@@ -24,7 +31,7 @@ impl PidTgid {
 
     #[inline(always)]
     pub fn tgid(&self) -> u32 {
-        (self.0 & 0xf) as _
+        (self.0 & 0xffffffff) as _
     }
 }
 

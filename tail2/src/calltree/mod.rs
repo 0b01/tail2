@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{dto::{UnsymbolizedFrame, ModuleMapping}, symbolication::elf::SymbolCache};
@@ -21,7 +23,7 @@ impl UnsymbolizedCallTree {
 }
 
 #[repr(u8)]
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Debug, Hash)]
 pub enum CodeType {
     Unknown = 0,
     Native = 1,
@@ -46,6 +48,14 @@ pub struct SymbolizedFrame {
 
 impl PartialEq for SymbolizedFrame {
     fn eq(&self, other: &Self) -> bool {
-        self.module_idx == other.module_idx && self.name == other.name
+        self.module_idx == other.module_idx && self.name == other.name && self.code_type == other.code_type
+    }
+}
+
+impl Hash for SymbolizedFrame {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.module_idx.hash(state);
+        self.name.hash(state);
+        self.code_type.hash(state);
     }
 }

@@ -1,5 +1,5 @@
 use aya_bpf::{maps::{PerCpuArray, PerfEventArray, HashMap}, macros::map, helpers::{bpf_get_current_comm, bpf_probe_read_user, bpf_get_current_task}, BpfContext};
-use aya_log_ebpf::{info};
+use aya_log_ebpf::info;
 use tail2_common::{python::{state::{PythonSymbol, PythonStack, StackStatus}}, metrics::Metrics};
 use crate::{vmlinux::task_struct};
 use crate::maps::PIDS;
@@ -46,8 +46,8 @@ static EVENTS: PerfEventArray<PythonStack> = PerfEventArray::new(0);
 #[inline(always)]
 pub(crate) fn sample_python<C: BpfContext>(ctx: &C, stack: &mut PythonStack) -> Result<(), Metrics> {
     let task: *const task_struct = unsafe { bpf_get_current_task() as *const _ };
-    let ns = get_pid_tgid();
-    let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&ns.pid).ok_or(Metrics::ErrPy_NO_PID)? };
+    let pid_tgid = get_pid_tgid();
+    let proc_info = unsafe { &mut *PIDS.get_ptr_mut(&pid_tgid.pid()).ok_or(Metrics::ErrPy_NO_PID)? };
 
     if !proc_info.runtime_type.is_python() {
         return Ok(());

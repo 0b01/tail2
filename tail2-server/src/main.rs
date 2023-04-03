@@ -8,10 +8,9 @@ use axum::{
     Router, extract::Path};
 use reqwest::header;
 use tail2_db::manager::Manager;
-use tokio::sync::Mutex;
 use tracing::info;
 
-use std::{net::SocketAddr, time::Duration, sync::Arc};
+use std::{net::SocketAddr, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::{
     trace::{TraceLayer, DefaultOnResponse, DefaultMakeSpan}, ServiceBuilderExt, timeout::TimeoutLayer, LatencyUnit,

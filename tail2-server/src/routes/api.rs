@@ -15,6 +15,7 @@ pub struct CallTreeParams {
     filter: Option<String>,
 }
 
+// return a calltree for the last 60 seconds
 pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
     let t = SystemTime::now();
 

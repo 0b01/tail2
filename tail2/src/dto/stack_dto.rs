@@ -61,7 +61,7 @@ impl StackDto {
         let mut ret = vec![];
         let mut python_frames = self.python_frames.into_iter();
 
-        ret.push(UnsymbolizedFrame::ProcessRoot { pid: self.pid_tgid.pid() });
+        ret.push(UnsymbolizedFrame::ProcessRoot { pid_tgid: self.pid_tgid });
 
         for f in self.native_frames {
             match f {
@@ -209,14 +209,14 @@ fn lookup(pid: u32, proc_map_cache: &mut ProcMapCache, address: usize) -> Option
         return t;
     }
 
-    let proc_maps = proc_map_cache.refresh(pid).ok()?;
+    proc_map_cache.refresh(pid).ok()?;
     translated()
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum UnsymbolizedFrame {
     None,
-    ProcessRoot { pid: u32 },
+    ProcessRoot { pid_tgid: PidTgid },
     Native { module_idx: i32, offset: u32 },
     Python { name: String },
     Kernel { name: String },
@@ -242,7 +242,12 @@ impl UnsymbolizedFrame {
     pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut impl ModuleMapping) -> SymbolizedFrame {
         match self {
             UnsymbolizedFrame::None => Default::default(), // TODO: rethink this
-            UnsymbolizedFrame::ProcessRoot { pid } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(pid.to_string()), code_type: crate::calltree::CodeType::ProcessRoot },
+            UnsymbolizedFrame::ProcessRoot { pid_tgid } => SymbolizedFrame {
+                module_idx: 0,
+                offset: 0,
+                name: Some(pid_tgid.tgid().to_string()),
+                code_type: crate::calltree::CodeType::ProcessRoot
+            },
             UnsymbolizedFrame::Native { module_idx, offset } => {
                 let module = Arc::clone(&modules.get(module_idx as usize));
                 let name = 

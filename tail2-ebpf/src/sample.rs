@@ -3,6 +3,7 @@ use aya_bpf::{
     programs::{ProbeContext, PerfEventContext},
     bindings::bpf_pidns_info, BpfContext
 };
+use aya_log_ebpf::info;
 use tail2_common::{NativeStack, python::state::PythonStack, pidtgid::PidTgid, metrics::Metrics};
 use crate::{pyperf::pyperf::sample_python, user::sample_user, helpers::get_pid_tgid, kernel::sample_kernel, tracemgmt::{pid_info_exists, report_new_pid}, maps::{METRICS, STACKS, STACK_BUF}};
 
@@ -26,16 +27,16 @@ fn sample<C: BpfContext>(ctx: &C, idx: usize) {
 
 fn sample_inner<C: BpfContext>(ctx: &C, idx: usize) -> Result<(), Metrics> {
     let sample = unsafe { &mut *(STACK_BUF.get_ptr_mut(0).ok_or(Metrics::ErrSample_CantAlloc)?) };
-    let ns: bpf_pidns_info = get_pid_tgid();
-    if !pid_info_exists(ns.pid) {
-        return report_new_pid(ctx, ns.pid);
+    let pid_tgid: PidTgid = get_pid_tgid();
+    if !pid_info_exists(pid_tgid.pid()) {
+        return report_new_pid(ctx, pid_tgid.pid());
     }
 
-    sample.pidtgid = PidTgid::current(ns.pid, ns.tgid);
+    sample.pidtgid = pid_tgid;
     sample.idx = idx;
 
     sample.native_stack = NativeStack::uninit();
-    sample_user(ctx, &mut sample.native_stack, ns.pid)?;
+    sample_user(ctx, &mut sample.native_stack, pid_tgid.pid())?;
 
     sample.python_stack = Some(PythonStack::uninit());
     let stack = sample.python_stack.as_mut().ok_or(Metrics::ErrPy_NoStack)?;
