@@ -27,7 +27,7 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
         .probes
         .get(&probe).unwrap();
     let db = probe_state.db.clone();
-    let notify = probe_state.notify.clone();
+    let notify = db.notify.clone();
 
     let modules = db.tail2_db.lock().await.modules();
     let mut modules = modules.lock().await;
@@ -47,6 +47,10 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
         ct: Some(ct),
         n
     };
+
+    if ts == 0 {
+        return Ok(());
+    }
 
     db.tail2_db.lock().await.insert(vec![db_row]).unwrap();
 

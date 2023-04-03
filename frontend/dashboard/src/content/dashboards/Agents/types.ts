@@ -2,6 +2,7 @@ export type ProbeTypes = "Perf" | "Uprobe";
 
 interface IProbeState {
   is_running: boolean;
+  db: IDB;
 }
 
 interface IProbeInfo {
@@ -62,8 +63,10 @@ export type IUprobeProbe = {
 }
 
 export type ICallTreeParams = {
-  probe: IProbe;
-  host_name: string;
+  db: string;
+  start?: number;
+  end?: number;
+  filter?: string;
 }
 
 export type IProbe = IPerfProbe | IUprobeProbe;

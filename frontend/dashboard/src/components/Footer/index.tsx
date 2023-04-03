@@ -7,7 +7,6 @@ const FooterWrapper = styled(Container)(
 );
 
 function Footer() {
-  return <> </>;
   return (
     <FooterWrapper className="footer-wrapper">
       <Box
@@ -22,7 +21,7 @@ function Footer() {
             &copy; 2022 - tail2 profiler
           </Typography>
         </Box>
-        <Typography
+        {/* <Typography
           sx={{
             pt: { xs: 2, md: 0 }
           }}
@@ -36,7 +35,7 @@ function Footer() {
           >
             tail2.com
           </Link>
-        </Typography>
+        </Typography> */}
       </Box>
     </FooterWrapper>
   );

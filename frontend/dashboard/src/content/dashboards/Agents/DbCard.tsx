@@ -26,11 +26,15 @@ function DbCard(props: {db: IDB}) {
     const flamegraph_url = new URL("/flamegraph/app.html", baseURL);
     flamegraph_url.searchParams.append("profileURL", data_url.toString());
 
+    // format the tags into "key: value, key: value, ..."
+    let tags_str = Object.entries(db.metadata.tags).map((tag) => `${tag[0]}: ${tag[1]}`).join(", ");
+    let title = `${db.metadata.name} (${tags_str})`;
+
     return (
       <Grid item xs={12}>
         <LocalizationProvider dateAdapter={AdapterDayjs}>
         <Card>
-          <CardHeader title={db.metadata.name} />
+          <CardHeader title={title} />
           <CardContent>
             <DateTimePicker value={start} onChange={(newVal) => setStartDate(newVal)} />
             <DateTimePicker value={end} onChange={(newVal) => setEndDate(newVal)} />
@@ -38,7 +42,7 @@ function DbCard(props: {db: IDB}) {
                 value={value}
                 startDate={start?.toDate() || new Date()}
                 width={600} /> */}
-            <iframe src={flamegraph_url} width="100%" height="500px"></iframe>
+            <iframe src={flamegraph_url.toString()} width="100%" height="500px"></iframe>
           </CardContent>
         </Card>
         </LocalizationProvider>

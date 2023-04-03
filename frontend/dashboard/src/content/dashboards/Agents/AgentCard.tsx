@@ -30,7 +30,7 @@ import EmailTwoToneIcon from '@mui/icons-material/EmailTwoTone';
 import Text from 'src/components/Text';
 import { AddTwoTone, CheckTwoTone, PauseTwoTone, PlayArrow, PlayArrowTwoTone, SmartToyTwoTone, StopTwoTone } from '@mui/icons-material';
 import { Box } from '@mui/system';
-import { IAgentProps, INewProbeModalProps, start_probe, stop_probe } from './types';
+import { IAgentProps, ICallTreeParams, INewProbeModalProps, start_probe, stop_probe } from './types';
 import { NewProbeModal } from './NewProbeModal';
 
 const AvatarWrapperError = styled(Avatar)(
@@ -102,7 +102,10 @@ function AgentCard(props: IAgentProps) {
 
     var baseURL = window.document.URL;
     const data_url = new URL("/api/calltree", baseURL);
-    data_url.search = new URLSearchParams({host_name: props.host_name, probe: JSON.stringify(nfo[0])}).toString();
+    const calltree_params: ICallTreeParams = {
+      db: nfo[1].db.metadata.name,
+    }
+    data_url.search = new URLSearchParams(calltree_params as any).toString();
     const flamegraph_url = new URL("/flamegraph/app.html", baseURL);
     flamegraph_url.searchParams.append("profileURL", data_url.toString());
 

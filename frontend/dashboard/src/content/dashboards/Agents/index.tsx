@@ -26,7 +26,7 @@ function AgentGrid(agents: IAgents) {
 }
 
 function DbGrid(dbs: IDBs) {
-  let cards = Object.entries(dbs).map(([k, v]) => <DbCard db={v}/>);
+  let cards = Object.entries(dbs).map(([k, v]) => <DbCard key={k} db={v}/>);
   return (
     <>
       <Grid item lg={12} xs={12}>

@@ -20,11 +20,17 @@ pub struct Metadata {
 
 impl Metadata {
     /// create an empty metadata file
-    pub fn empty(name: String) -> Self {
+    pub fn new(name: String) -> Self {
         Self {
             name,
             tags: FnvHashMap::default(),
         }
+    }
+
+    /// add a tag to the metadata file
+    pub fn add_tag(mut self, key: &str, value: &str) -> Self {
+        self.tags.insert(key.to_string(), value.to_string());
+        self
     }
 
     /// given a path, open file

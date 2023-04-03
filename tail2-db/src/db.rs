@@ -23,8 +23,8 @@ use crate::tile::Tile;
 
 use self::module_table::DbBackedModuleMap;
 
-
 /// A row in the database
+#[derive(Debug, Clone)]
 pub struct DbRow {
     /// timestamp
     pub ts_ms: i64,
@@ -193,6 +193,8 @@ pub struct Tail2DB {
     last_refresh_ts: i64,
     /// latest timestamp
     latest_ts: i64,
+    /// earliest timestamp
+    earliest_ts: i64,
     /// order of magnitude augmented tree node for fast call tree merge
     scales: Vec<i64>,
     /// base scale is smallest augmentation scale
@@ -246,10 +248,20 @@ impl Tail2DB {
             )
             .map(|i: i64| i / 1000).unwrap_or_default();
 
+        // update earliest timestamp
+        let earliest_ts: i64 = conn
+            .query_row(
+                "SELECT ts FROM samples_1 ORDER BY ts ASC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .map(|i: i64| i / 1000).unwrap_or_default();
+
         Ok(Self {
             path: path.clone(),
             conn,
             latest_ts,
+            earliest_ts,
             last_refresh_ts: 0,
             scales,
             min_tile,
@@ -302,6 +314,9 @@ impl Tail2DB {
     // TODO: batch tiles into multiple rows per timescale
     /// Get the [`DbResponse`] object associated with the given range
     pub fn range_query(&self, range @ (t0, t1): (i64, i64)) -> Result<DbResponse> {
+        let t0 = self.earliest_ts.max(t0);
+        let t1 = self.latest_ts.min(t1);
+
         let tiles = tile::tile(range, self.scales.as_slice());
         // dbg!(&tiles);
 

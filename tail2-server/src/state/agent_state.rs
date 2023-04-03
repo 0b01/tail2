@@ -14,12 +14,7 @@ use crate::Notifiable;
 #[derive(Serialize)]
 pub struct ProbeState {
     pub is_running: bool,
-
-    #[serde(skip)]
     pub db: Db,
-
-    #[serde(skip)]
-    pub notify: Arc<Notify>,
 }
 
 impl ProbeState {
@@ -27,7 +22,6 @@ impl ProbeState {
         Self {
             db,
             is_running: false,
-            notify: Arc::new(Notify::new()),
         }
     }
 }
@@ -48,6 +42,19 @@ pub struct Tail2Agent {
     is_halted: bool,
 }
 
+fn add_probe_metadata(md: Metadata, probe: &Probe) -> Metadata {
+    match probe {
+        Probe::Perf { scope, period } => {
+            md.add_tag("scope", &scope.to_string())
+                .add_tag("period", &period.to_string())
+        }
+        Probe::Uprobe { scope, uprobe } => {
+            md.add_tag("scope", &scope.to_string())
+                .add_tag("uprobe", &uprobe.to_string())
+        }
+    }
+}
+
 impl Tail2Agent {
     pub fn new(name: String, tx: UnboundedSender<AgentMessage>) -> Self {
         Self {
@@ -63,8 +70,9 @@ impl Tail2Agent {
             AgentMessage::AddProbe { probe } => {
                 self.is_halted = false;
                 let manager = &mut *manager.lock().await;
-                let mut md = Metadata::empty(self.name.clone());
-                md.tags.insert("agent".to_string(), self.name.clone());
+                let md = Metadata::new(self.name.clone())
+                    .add_tag("agent", &self.name);
+                let md = add_probe_metadata(md, probe);
                 let db = manager.create_db(&md).unwrap();
 
                 let info = self.probes
@@ -74,8 +82,9 @@ impl Tail2Agent {
             }
             AgentMessage::StopProbe { probe } => {
                 let manager = &mut *manager.lock().await;
-                let mut md = Metadata::empty(self.name.clone());
-                md.tags.insert("agent".to_string(), self.name.clone());
+                let md = Metadata::new(self.name.clone())
+                    .add_tag("agent", &self.name);
+                let md = add_probe_metadata(md, probe);
                 let db = manager.create_db(&md).unwrap();
 
                 let info = self.probes
@@ -98,6 +107,7 @@ impl Tail2Agent {
     }
 }
 
+/// Serialize a hashmap as a vector of tuples.
 pub mod vectorize {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::iter::FromIterator;

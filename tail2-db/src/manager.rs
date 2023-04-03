@@ -7,7 +7,7 @@ use anyhow::{Result, Context};
 
 use fnv::FnvHashMap;
 use serde::Serialize;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use tracing::{error, info};
 
 use crate::{db::Tail2DB, metadata::Metadata};
@@ -22,6 +22,10 @@ pub struct Manager {
 #[derive(Clone, Serialize)]
 pub struct Db {
     metadata: Metadata,
+
+    #[serde(skip)]
+    pub notify: Arc<Notify>,
+
     /// The Tail2DB t2db file
     #[serde(skip)]
     pub tail2_db: Arc<Mutex<Tail2DB>>,
@@ -36,6 +40,7 @@ impl Db {
             let metadata = tail2_db.metadata().context("missing metadata")?;
             Ok(Self {
                 metadata,
+                notify: Arc::new(Notify::new()),
                 tail2_db: Arc::new(Mutex::new(tail2_db)),
             })
         } else {
@@ -50,6 +55,7 @@ impl Db {
         Ok(Self {
             metadata: metadata.clone(),
             tail2_db: Arc::new(Mutex::new(tail2_db)),
+            notify: Arc::new(Notify::new()),
         })
     }
 }
