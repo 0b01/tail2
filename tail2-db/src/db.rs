@@ -1,4 +1,6 @@
 #![warn(missing_docs)]
+use std::fs::File;
+use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -207,16 +209,16 @@ impl Drop for Tail2DB {
 
 impl Tail2DB {
     /// Create a file based new database with name
-    pub fn open(path: &PathBuf) -> Self {
+    pub fn open(path: &PathBuf) -> Result<Self> {
         let is_existing_db = path.exists();
 
         let config = Config::default()
             .access_mode(duckdb::AccessMode::ReadWrite)
             .unwrap();
-        let conn = Connection::open_with_flags(path, config).unwrap();
+        let conn = Connection::open_with_flags(path, config)?;
 
-        // 10^3 millis to 10^10
-        let scales: Vec<_> = (3..10).rev().map(|i| 10_i64.pow(i)).collect();
+        // 10^5 millis to 10^10
+        let scales: Vec<_> = (5..10).rev().map(|i| 10_i64.pow(i)).collect();
         let min_tile = *scales.last().unwrap();
 
         // modules table
@@ -244,7 +246,7 @@ impl Tail2DB {
             )
             .map(|i: i64| i / 1000).unwrap_or_default();
 
-        Self {
+        Ok(Self {
             path: path.clone(),
             conn,
             latest_ts,
@@ -252,7 +254,7 @@ impl Tail2DB {
             scales,
             min_tile,
             modules,
-        }
+        })
     }
 
     /// Get the modules table
@@ -308,17 +310,24 @@ impl Tail2DB {
         if tiles.is_empty() {
             trees.extend(self.query_1(t0, t1)?);
         } else {
-            for Tile{scale, start} in tiles {
-                trees.push(self.get_tile_rec(scale, start)?);
+            for Tile{scale, start} in &tiles {
+                trees.push(self.get_tile_rec(*scale, *start)?);
             }
         }
 
-        // dbg!(&trees);
+        // dbg!(&tiles.len());
+        // dbg!(&trees.len());
 
         let merged = trees.into_iter().reduce(|mut a, b| {
             a.merge(&b);
             a
         }).unwrap_or_default();
+
+        // let ct = merged.calltree.clone().unwrap();
+        // let txt = format!("{:?}", ct.root.debug_pretty_print(&ct.arena));
+        // // write to file
+        // let mut f = File::create("calltree.txt").unwrap();
+        // f.write_all(txt.as_bytes()).unwrap();
 
         Ok(merged)
     }
@@ -442,7 +451,7 @@ mod tests {
         let parent = path.parent().unwrap();
         std::fs::create_dir_all(parent).unwrap();
 
-        let mut db = Tail2DB::open(&path);
+        let mut db = Tail2DB::open(&path).unwrap();
         let _ = db.insert(
             [100, 150, 950, 1000, 1050, 1900, 2150, 3001]
                 .into_iter()
@@ -501,6 +510,6 @@ mod tests {
     #[test]
     fn test_bincode() {
         let bytes = bincode::serialize(&UnsymbolizedCallTree::new()).unwrap();
-        dbg!(&bytes.len());
+        // dbg!(&bytes.len());
     }
 }

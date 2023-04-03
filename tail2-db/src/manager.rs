@@ -32,7 +32,7 @@ impl Db {
     pub fn open(path_to_t2db: &PathBuf) -> Result<Self> {
         info!("opening {:?}", path_to_t2db);
         if path_to_t2db.extension().context("no ext")? == "t2db" {
-            let tail2_db = Tail2DB::open(path_to_t2db);
+            let tail2_db = Tail2DB::open(path_to_t2db)?;
             let metadata = tail2_db.metadata().context("missing metadata")?;
             Ok(Self {
                 metadata,
@@ -45,7 +45,7 @@ impl Db {
 
     /// Create a new database given a path to t2db
     pub fn create(path_to_t2db: &PathBuf, metadata: &Metadata) -> Result<Self> {
-        let tail2_db = Tail2DB::open(path_to_t2db);
+        let tail2_db = Tail2DB::open(path_to_t2db)?;
         metadata.save(path_to_t2db.parent().context("no parent")?)?;
         Ok(Self {
             metadata: metadata.clone(),
@@ -115,7 +115,7 @@ mod tests {
             name: "test".to_string(),
             tags: FnvHashMap::default(),
         };
-        manager.create_db(metadata).unwrap();
+        manager.create_db(&metadata).unwrap();
         assert_eq!(manager.dbs.len(), 1);
         drop(manager);
 

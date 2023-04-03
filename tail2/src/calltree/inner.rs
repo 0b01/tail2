@@ -126,28 +126,31 @@ impl<T: Clone + Default + Eq + Serialize + Debug + Hash> CallTreeInner<T> {
 
 impl<T: Clone + Default + Eq + Serialize + Debug + Hash> Mergeable for CallTreeInner<T> {
     fn merge(&mut self, other: &CallTreeInner<T>) -> &Self {
-        let mut stack = Vec::new();
-        stack.push((self.root, other.root));
-        while !stack.is_empty() {
-            let Some((my_curr, other_curr)) = stack.pop() else { continue };
-            let my_children = my_curr.children(&self.arena).collect::<Vec<_>>();
-            let other_children = other_curr.children(&other.arena).collect::<Vec<_>>();
+        let mut stack = vec![(self.root, other.root)];
+        let mut seen_frames = HashSet::new();
+        while let Some((my_curr, other_curr)) = stack.pop() {
+            let my_children = my_curr.children(&self.arena);
+            let other_children = other_curr.children(&other.arena);
+            let my_children_by_item = my_children
+                .into_iter()
+                .map(|child| {
+                    let frame = self.arena.get(child).unwrap().get();
+                    (frame.item.clone(), child)
+                })
+                .collect::<HashMap<_, _>>();
             for other_child in other_children {
                 let other_frame = other.arena.get(other_child).unwrap().get().clone();
-                let mut found = false;
-                for my_child in &my_children {
-                    let my_frame = self.arena.get_mut(*my_child).unwrap().get_mut();
-                    if my_frame.item == other_frame.item {
-                        found = true;
-                        my_frame.total_samples += other_frame.total_samples;
-                        my_frame.self_samples += other_frame.self_samples;
-                        stack.push((*my_child, other_child));
-                        continue;
-                    }
+                if seen_frames.contains(&other_frame) {
+                    continue;
                 }
-
-                if !found {
-                    let new_node = self.arena.new_node(other_frame);
+                seen_frames.insert(other_frame.clone());
+                if let Some(&my_child) = my_children_by_item.get(&other_frame.item) {
+                    let my_frame = self.arena.get_mut(my_child).unwrap().get_mut();
+                    my_frame.total_samples += other_frame.total_samples;
+                    my_frame.self_samples += other_frame.self_samples;
+                    stack.push((my_child, other_child));
+                } else {
+                    let new_node = self.arena.new_node(other_frame.clone());
                     my_curr.append(new_node, &mut self.arena);
                     stack.push((new_node, other_child));
                 }
@@ -249,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_same_root() {
+    fn test_merge_same() {
         let mut ct1 = CallTreeInner::from_frames(&[0, 1, 2]);
         let ct2 = CallTreeInner::from_frames(&[0, 1, 2]);
         ct1.merge(&ct2);
@@ -269,6 +272,36 @@ mod tests {
                 .children(&ct1.arena).next().unwrap()
                 .children(&ct1.arena).next().unwrap()
         ).unwrap().get(), &CallTreeFrame::new(2, 2, 2));
+    }
+
+    #[test]
+    fn test_merge_same_root() {
+        let mut ct1 = CallTreeInner::from_frames(&[0, 1, 2]);
+        let ct2 = CallTreeInner::from_frames(&[0, 1, 3]);
+        ct1.merge(&ct2);
+
+        assert_eq!(ct1.root.children(&ct1.arena).count(), 1);
+        assert_eq!(ct1.arena.get(
+            ct1.root.children(&ct1.arena).next().unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(0, 2, 0));
+        assert_eq!(ct1.arena.get(
+            ct1.root
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(1, 2, 0));
+        assert_eq!(ct1.arena.get(
+            ct1.root
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(2, 1, 1));
+
+        assert_eq!(ct1.arena.get(
+            ct1.root
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).next().unwrap()
+                .children(&ct1.arena).nth(1).unwrap()
+        ).unwrap().get(), &CallTreeFrame::new(3, 1, 1));
     }
 
     #[test]

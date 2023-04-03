@@ -101,7 +101,7 @@ function AgentCard(props: IAgentProps) {
     };
 
     var baseURL = window.document.URL;
-    const data_url = new URL("/api/current", baseURL);
+    const data_url = new URL("/api/calltree", baseURL);
     data_url.search = new URLSearchParams({host_name: props.host_name, probe: JSON.stringify(nfo[0])}).toString();
     const flamegraph_url = new URL("/flamegraph/app.html", baseURL);
     flamegraph_url.searchParams.append("profileURL", data_url.toString());

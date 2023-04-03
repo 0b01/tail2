@@ -38,26 +38,10 @@ impl Default for CodeType {
     }
 }
 
-#[derive(Default, Clone, Eq, Serialize, Deserialize, Debug)]
+#[derive(Default, Clone, Eq, Serialize, Deserialize, Debug, Hash, PartialEq)]
 pub struct SymbolizedFrame {
     pub module_idx: i32,
     pub offset: u32,
     pub name: Option<String>,
     pub code_type: CodeType,
-}
-
-impl PartialEq for SymbolizedFrame {
-    fn eq(&self, other: &Self) -> bool {
-        self.module_idx == other.module_idx
-        && self.name == other.name
-        && self.code_type == other.code_type
-    }
-}
-
-impl Hash for SymbolizedFrame {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.module_idx.hash(state);
-        self.name.hash(state);
-        self.code_type.hash(state);
-    }
 }

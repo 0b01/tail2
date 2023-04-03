@@ -10,33 +10,52 @@ use async_stream::{try_stream, __private::AsyncStream};
 
 #[derive(Serialize, Deserialize)]
 pub struct CallTreeParams {
-    probe: String,
-    host_name: String,
+    start: Option<i64>,
+    end: Option<i64>,
+    probe: Option<String>,
+    host_name: Option<String>,
+    db: Option<String>,
     filter: Option<String>,
 }
 
-// return a calltree for the last 60 seconds
-pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
+// TODO: refactor so we only need db instead of probe + host_name
+pub(crate) async fn calltree<'a>(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> String {
     let t = SystemTime::now();
 
-    let agents = state.agents.lock().await;
-    let probe = serde_json::from_str(&params.probe).unwrap();
-    let db = agents
-        .get(&params.host_name).unwrap()
-        .probes
-        .get(&probe).unwrap()
-        .db
-        .clone();
-    drop(agents);
+    let db = match params.db {
+        Some(db) => {
+            let manager = state.manager.lock().await;
+            manager.dbs.get(&db).unwrap().clone()
+        }
+        None => {
+            let agents = state.agents.lock().await;
+            let probe = serde_json::from_str(&params.probe.unwrap()).unwrap();
+            let db = agents
+                .get(&params.host_name.unwrap()).unwrap()
+                .probes
+                .get(&probe).unwrap()
+                .db
+                .clone();
+                drop(agents);
+            db
+        }
+    };
 
-    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
-    let calltree = db.tail2_db.lock().await.range_query((now - 60 * 1000, now)).unwrap().calltree.unwrap_or_default();
+    let range = match (params.start, params.end) {
+        (Some(start), Some(end)) => (start, end),
+        _ => {
+            let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
+            let range = (now - 60 * 1000, now);
+            range
+        }
+    };
+    dbg!(range);
+    let calltree = db.tail2_db.lock().await.range_query(range).unwrap().calltree.unwrap_or_default();
 
     let symbols = &mut *state.symbols.lock().await;
     let modules = db.tail2_db.lock().await.modules();
     let mut calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
     if let Some(filter) = &params.filter {
-        dbg!(&filter);
         calltree = calltree.filter(|i|i.code_type == CodeType::Python);
     }
 
@@ -48,9 +67,9 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
 
 pub(crate) async fn events(State(state): State<ServerState>, Query(params): Query<CallTreeParams>) -> impl IntoResponse {
     let agents = state.agents.lock().await;
-    let probe = serde_json::from_str(&params.probe).unwrap();
+    let probe = serde_json::from_str(&params.probe.unwrap()).unwrap();
     let notify = agents
-        .get(&params.host_name).unwrap()
+        .get(&params.host_name.unwrap()).unwrap()
         .probes
         .get(&probe).unwrap()
         .notify.clone();
