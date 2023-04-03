@@ -64,6 +64,7 @@ async fn main() {
         .route("/api/agent/stop_probe", get(routes::agents::stop_probe))
         .route("/api/agent/halt", get(routes::agents::halt))
         .route("/api/agents", get(routes::agents::agents))
+        .route("/api/dbs", get(routes::dbs::dbs))
         .route("/api/current", get(routes::api::current))
         .route("/api/stack", post(routes::ingest::stack))
         .route("/api/events", get(routes::api::events))

@@ -172,65 +172,6 @@ function AgentCard(props: IAgentProps) {
           {probes}
           <Divider />
           {add_probe}
-          {/* <ListItem
-            sx={{
-              py: 2
-            }}
-          >
-            <ListItemAvatar>
-              <AvatarWrapperSuccess>
-                <PhoneLockedTwoToneIcon />
-              </AvatarWrapperSuccess>
-            </ListItemAvatar>
-            <ListItemText
-              primary={<Text color="black">Phone Verification</Text>}
-              primaryTypographyProps={{
-                variant: 'body1',
-                fontWeight: 'bold',
-                color: 'textPrimary',
-                gutterBottom: true,
-                noWrap: true
-              }}
-              secondary={<Text color="success">Active</Text>}
-              secondaryTypographyProps={{ variant: 'body2', noWrap: true }}
-            />
-            <Switch
-              edge="end"
-              color="primary"
-              onChange={handleToggle('phone_verification')}
-              checked={checked.indexOf('phone_verification') !== -1}
-            />
-          </ListItem>
-          <Divider />
-          <ListItem
-            sx={{
-              py: 2
-            }}
-          >
-            <ListItemAvatar>
-              <AvatarWrapperWarning>
-                <EmailTwoToneIcon />
-              </AvatarWrapperWarning>
-            </ListItemAvatar>
-            <ListItemText
-              primary={<Text color="black">Recovery Email</Text>}
-              primaryTypographyProps={{
-                variant: 'body1',
-                fontWeight: 'bold',
-                color: 'textPrimary',
-                gutterBottom: true,
-                noWrap: true
-              }}
-              secondary={<Text color="warning">Not completed</Text>}
-              secondaryTypographyProps={{ variant: 'body2', noWrap: true }}
-            />
-            <Switch
-              edge="end"
-              color="primary"
-              onChange={handleToggle('recovery_email')}
-              checked={checked.indexOf('recovery_email') !== -1}
-            />
-          </ListItem> */}
         </List>
       </Card>
     </Grid>

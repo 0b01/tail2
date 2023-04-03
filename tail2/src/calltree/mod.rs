@@ -48,7 +48,9 @@ pub struct SymbolizedFrame {
 
 impl PartialEq for SymbolizedFrame {
     fn eq(&self, other: &Self) -> bool {
-        self.module_idx == other.module_idx && self.name == other.name && self.code_type == other.code_type
+        self.module_idx == other.module_idx
+        && self.name == other.name
+        && self.code_type == other.code_type
     }
 }
 

@@ -30,10 +30,10 @@ pub(crate) async fn current<'a>(State(state): State<ServerState>, Query(params):
     drop(agents);
 
     let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as i64;
-    let calltree = db.lock().await.tail2_db.range_query((now - 60 * 1000, now)).unwrap().calltree.unwrap_or_default();
+    let calltree = db.tail2_db.lock().await.range_query((now - 60 * 1000, now)).unwrap().calltree.unwrap_or_default();
 
     let symbols = &mut *state.symbols.lock().await;
-    let modules = db.lock().await.tail2_db.modules();
+    let modules = db.tail2_db.lock().await.modules();
     let mut calltree = calltree.symbolize(symbols, &mut *modules.lock().await);
     if let Some(filter) = &params.filter {
         dbg!(&filter);
@@ -53,8 +53,7 @@ pub(crate) async fn events(State(state): State<ServerState>, Query(params): Quer
         .get(&params.host_name).unwrap()
         .probes
         .get(&probe).unwrap()
-        .db
-        .notify();
+        .notify.clone();
     drop(agents);
     notify.notify_one();
 

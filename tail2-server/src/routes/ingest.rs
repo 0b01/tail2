@@ -22,13 +22,14 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
     let probe: Probe = serde_json::from_str(&batch.probe).unwrap();
 
     let agents = &mut *state.agents.lock().await;
-    let db = agents
+    let probe_state = agents
         .get(&batch.hostname).unwrap()
         .probes
-        .get(&probe).unwrap()
-        .db.clone();
+        .get(&probe).unwrap();
+    let db = probe_state.db.clone();
+    let notify = probe_state.notify.clone();
 
-    let modules = db.lock().await.tail2_db.modules();
+    let modules = db.tail2_db.lock().await.modules();
     let mut modules = modules.lock().await;
 
     let mut ts = 0;
@@ -47,9 +48,9 @@ pub(crate) async fn stack(State(state): State<ServerState>, var: Bytes) -> Resul
         n
     };
 
-    db.lock().await.tail2_db.insert(vec![db_row]).unwrap();
+    db.tail2_db.lock().await.insert(vec![db_row]).unwrap();
 
-    db.notify().notify_one();
+    notify.notify_one();
 
     info!("ingested {} stacks in {:?}", n, now.elapsed().unwrap());
 

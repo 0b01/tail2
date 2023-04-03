@@ -7,6 +7,7 @@ const FooterWrapper = styled(Container)(
 );
 
 function Footer() {
+  return <> </>;
   return (
     <FooterWrapper className="footer-wrapper">
       <Box

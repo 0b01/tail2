@@ -12,6 +12,8 @@ interface SidebarLayoutProps {
 const SidebarLayout: FC<SidebarLayoutProps> = () => {
   const theme = useTheme();
 
+  return <Outlet />;
+
   return (
     <>
       <Box

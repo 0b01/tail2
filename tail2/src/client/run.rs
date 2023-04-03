@@ -293,7 +293,7 @@ pub async fn pid_refresh(bpf: Arc<Mutex<Bpf>>, pid: u32) {
 pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
     let bpf_mut = &mut *bpf.lock().await;
 
-    let mut pid_event = AsyncPerfEventArray::try_from(bpf_mut.map_mut("PID_EVENT").unwrap())?;
+    let pid_event = AsyncPerfEventArray::try_from(bpf_mut.map_mut("PID_EVENT").unwrap())?;
     // HACK: extend lifetime to 'static
     let mut pid_event = unsafe {
         std::mem::transmute::<

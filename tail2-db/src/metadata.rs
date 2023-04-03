@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 // tag2 = "value2"
 
 /// Metadata file for a database with same name
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Metadata {
     /// Name of the database
     pub name: String,
@@ -20,8 +20,7 @@ pub struct Metadata {
 
 impl Metadata {
     /// create an empty metadata file
-    pub fn empty(name: impl ToString) -> Self {
-        let name = name.to_string();
+    pub fn empty(name: String) -> Self {
         Self {
             name,
             tags: FnvHashMap::default(),
