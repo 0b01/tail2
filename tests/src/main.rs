@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use anyhow::Result;
 use tail2::{
-    client::{run::{get_pid_child, run_until_exit, RunUntil}},
+    client::{run::{get_pid_child, run_until_exit, RunUntil, pid_refresh}},
     Tail2, probes::{Probe, Scope},
 };
 
@@ -33,7 +33,8 @@ async fn main() -> Result<()> {
             let _attachment = probe.attach(&mut *t2.bpf.lock().await, &*t2.probes.lock().await).await.unwrap();
 
             let clis = Arc::clone(&t2.probes.lock().await.clients);
-            run_until_exit(t2.bpf, clis, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
+            pid_refresh(t2.bpf.clone(), pid.unwrap()).await;
+            run_until_exit(t2.bpf.clone(), clis, RunUntil::ChildProcessExits(child.unwrap()), Some(tx)).await?;
             while let Some(e) = rx.recv().await {
                 println!("{:?}", e.native_stack);
             }

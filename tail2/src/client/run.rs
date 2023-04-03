@@ -11,6 +11,7 @@ use nix::unistd::{getuid, Pid};
 
 use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
 
+use std::convert::Infallible;
 use std::os::unix::prelude::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -155,16 +156,14 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-// Get the PID of the child process to trace
-// If the user did not provide a PID, then we will launch the child process
-// with the command provided by the user
+/// Get the PID of the child process to trace
+/// If the user did not provide a PID, then we will launch the child process
+/// with the command provided by the user
 pub fn get_pid_child(
     pid: Option<u32>,
     command: Option<String>,
 ) -> (Option<u32>, Option<Child>) {
-    // If no PID or command was provided, return None for both
     match (pid, command) {
-        (None, None) => (None, None),
         // If no PID was provided, but a command was provided, launch the child process
         (None, Some(cmd)) => {
             // Log the command that we are launching
@@ -197,7 +196,7 @@ pub fn get_pid_child(
         // If a PID was provided, but no command was provided, return the PID and None for the child process
         (Some(pid), None) => (Some(pid), None),
         // If both a PID and a command were provided, panic
-        (Some(_), Some(_)) => panic!("supply one of --pid, --command"),
+        _ => panic!("supply one of --pid, --command"),
     }
 }
 
@@ -273,7 +272,19 @@ pub async fn run_until_exit(
     Ok(())
 }
 
-async fn pid_refresh<'r, 'map>(pid_info: &'r mut HashMap<&'map mut MapData, u32, ProcInfo>, pid: u32) {
+pub async fn pid_refresh(bpf: Arc<Mutex<Bpf>>, pid: u32) {
+    let bpf = &mut bpf.lock().await;
+    let pid_info: HashMap<_, u32, ProcInfo> =
+        HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+    // HACK: extend lifetime to 'static
+    let mut pid_info = unsafe {
+        std::mem::transmute::<
+            HashMap<&mut MapData, u32, ProcInfo>,
+            HashMap<&'static mut MapData, u32, ProcInfo>,
+        >(pid_info)
+    };
+
+    let pid_info: &mut HashMap<&mut MapData, u32, ProcInfo> = &mut pid_info;
     if let Ok(nfo) = Processes::detect_pid(pid as i32).await {
         let nfo = nfo.as_ref();
         let _ = pid_info.insert(pid as u32, nfo, 0);
@@ -281,9 +292,9 @@ async fn pid_refresh<'r, 'map>(pid_info: &'r mut HashMap<&'map mut MapData, u32,
 }
 
 pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiver<()>) -> Result<()> {
-    let bpf = &mut *bpf.lock().await;
+    let bpf_mut = &mut *bpf.lock().await;
 
-    let mut pid_event = AsyncPerfEventArray::try_from(bpf.map_mut("PID_EVENT").unwrap())?;
+    let mut pid_event = AsyncPerfEventArray::try_from(bpf_mut.map_mut("PID_EVENT").unwrap())?;
     // HACK: extend lifetime to 'static
     let mut pid_event = unsafe {
         std::mem::transmute::<
@@ -295,17 +306,7 @@ pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiv
     for cpu_id in online_cpus()? {
         // open a separate perf buffer for each cpu
         let mut buf = pid_event.open(cpu_id, None)?;
-
-        let pid_info: HashMap<_, u32, ProcInfo> =
-            HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
-        // HACK: extend lifetime to 'static
-        let mut pid_info = unsafe {
-            std::mem::transmute::<
-                HashMap<&mut MapData, u32, ProcInfo>,
-                HashMap<&'static mut MapData, u32, ProcInfo>,
-            >(pid_info)
-        };
-
+        let bpf_ = bpf.clone();
 
         tokio::spawn(async move {
             let mut buffers = (0..10)
@@ -314,17 +315,15 @@ pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiv
 
             loop {
                 // wait for events
-                let events = buf.read_events(&mut buffers).await?;
+                let events = buf.read_events(&mut buffers).await.unwrap();
 
                 for buf in buffers.iter_mut().take(events.read) {
                     let evt: PidEvent = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
                     if evt.event_type == Metrics::TraceMgmt_NewPid {
-                        pid_refresh(&mut pid_info, evt.pid).await;
+                        pid_refresh(bpf_.clone(), evt.pid).await;
                     }
                 }
             }
-
-            Ok::<(), anyhow::Error>(())
         });
     }
 
