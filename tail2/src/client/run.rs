@@ -3,6 +3,7 @@ use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
 use tail2_common::metrics::Metrics;
+use tail2_common::tracemgmt::PidEvent;
 use tracing::Level;
 use nix::sys::ptrace;
 
@@ -43,7 +44,7 @@ pub(crate) async fn run_bpf(
     stop_rx: watch::Receiver<()>,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<Vec<JoinHandle<()>>> {
-    tracing::info!("run_bpf");
+    // tracing::info!("run_bpf");
     // send device info
     {
         let bpf_ = &mut *bpf.lock().await;
@@ -242,7 +243,7 @@ pub async fn run_until_exit(
             (Some(tx), rx)
         };
 
-    spawn_proc_refresh(Arc::clone(&bpf), stop_rx.clone()).await;
+    spawn_proc_refresh(Arc::clone(&bpf), stop_rx.clone()).await.unwrap();
 
     let tasks = run_bpf(Arc::clone(&bpf), clis, stop_rx, output_tx).await?;
 
@@ -274,47 +275,62 @@ pub async fn run_until_exit(
     Ok(())
 }
 
-async fn proc_refresh_inner(
-    pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>,
-) {
-    let mut processes = Processes::new();
-    if let Ok(()) = processes.refresh().await {
-        tracing::warn!("# processes: {}", processes.processes.keys().len());
-        // copy to maps
-        for (pid, nfo) in &processes.processes {
-            let nfo = nfo.as_ref();
-            let _ = pid_info.insert(*pid as u32, nfo, 0);
-        }
+async fn pid_refresh<'r, 'map>(pid_info: &'r mut HashMap<&'map mut MapData, u32, ProcInfo>, pid: u32) {
+    if let Ok(nfo) = Processes::detect_pid(pid as i32).await {
+        let nfo = nfo.as_ref();
+        let _ = pid_info.insert(pid as u32, nfo, 0);
     }
 }
 
-// TODO: don't refresh, listen to mmap and execve calls
-pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiver<()>) {
+pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiver<()>) -> Result<()> {
     let bpf = &mut *bpf.lock().await;
-    let pid_info: HashMap<_, u32, ProcInfo> =
-        HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+
+    let mut pid_event = AsyncPerfEventArray::try_from(bpf.map_mut("PID_EVENT").unwrap())?;
     // HACK: extend lifetime to 'static
-    let mut pid_info = unsafe {
+    let mut pid_event = unsafe {
         std::mem::transmute::<
-            HashMap<&mut MapData, u32, ProcInfo>,
-            HashMap<&'static mut MapData, u32, ProcInfo>,
-        >(pid_info)
+            AsyncPerfEventArray<&mut MapData>,
+            AsyncPerfEventArray<&'static mut MapData>,
+        >(pid_event)
     };
 
-    proc_refresh_inner(&mut pid_info).await;
+    for cpu_id in online_cpus()? {
+        // open a separate perf buffer for each cpu
+        let mut buf = pid_event.open(cpu_id, None)?;
 
-    // refresh pid info table
-    tokio::spawn(async move {
-        loop {
-            proc_refresh_inner(&mut pid_info).await;
+        let pid_info: HashMap<_, u32, ProcInfo> =
+            HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
+        // HACK: extend lifetime to 'static
+        let mut pid_info = unsafe {
+            std::mem::transmute::<
+                HashMap<&mut MapData, u32, ProcInfo>,
+                HashMap<&'static mut MapData, u32, ProcInfo>,
+            >(pid_info)
+        };
 
-            // sleep for 10 sec
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(60)) => (),
-                _ = stop_rx.changed() => break,
+
+        tokio::spawn(async move {
+            let mut buffers = (0..10)
+                .map(|_| BytesMut::with_capacity(1024))
+                .collect::<Vec<_>>();
+
+            loop {
+                // wait for events
+                let events = buf.read_events(&mut buffers).await?;
+
+                for buf in buffers.iter_mut().take(events.read) {
+                    let evt: PidEvent = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
+                    if evt.event_type == Metrics::TraceMgmt_NewPid {
+                        pid_refresh(&mut pid_info, evt.pid).await;
+                    }
+                }
             }
-        }
-    });
+
+            Ok::<(), anyhow::Error>(())
+        });
+    }
+
+    Ok(())
 }
 
 pub(crate) fn load_bpf() -> Result<Bpf> {
@@ -335,8 +351,6 @@ pub(crate) async fn print_stats(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
     let info: HashMap<_, u32, u64> =
         HashMap::try_from(bpf.map("METRICS").context("no such map")?)?;
     
-    tracing::info!("Sent: {} stacks", info.get(&(Metrics::SentStackCount as u32), 0).unwrap_or(0));
-
     for k in Metrics::iter().split_last().unwrap().1 {
         tracing::info!("{k:?} = {}", info.get(&(*k as u32), 0).unwrap_or(0));
     }

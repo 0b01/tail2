@@ -23,7 +23,7 @@ macro_rules! iterable_enum {
 
 
 iterable_enum! {
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     #[repr(u32)]
     vis pub enum Metrics {
         SentStackCount,
@@ -38,6 +38,11 @@ iterable_enum! {
         ErrUnw_DidNotAdvance,
         ErrUnw_IntegerOverflow,
         ErrUnw_ReturnAddressIsNull,
+
+        /// New pid seen in the tracee
+        TraceMgmt_NewPid,
+        TraceMgmt_NewPidAlreadyNotified,
+        TraceMgmt_PidErr,
 
         ErrPy_NoStack,
         /// No error
@@ -81,8 +86,6 @@ iterable_enum! {
         ErrPy_READ_FRAME,
         ErrPy_GET_FIRST_ARG,
         ErrPy_FIRST_ARG_NOT_FOUND,
-        /// not a python process
-        ErrPy_NOT_PYTHON,
 
         /// Enum Max
         Max

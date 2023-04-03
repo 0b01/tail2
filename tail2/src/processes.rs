@@ -37,11 +37,14 @@ impl Processes {
         }
     }
 
-    pub fn detect_pid(pid: i32, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
+    pub async fn detect_pid(pid: i32) -> Result<Box<ProcInfo>> {
+        let cache = &mut *MOD_CACHE.lock().await;
         let process = Process::new(pid)?;
         Processes::detect(&process, cache)
     }
 
+    /// Detects the process information from the process maps.
+    /// Find executable maps and resolve them
     fn detect(process: &Process, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
         let paths = process
             .maps()?

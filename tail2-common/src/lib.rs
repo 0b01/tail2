@@ -10,6 +10,7 @@ pub mod metrics;
 pub mod bpf_sample;
 pub mod native;
 pub mod python;
+pub mod tracemgmt;
 
 pub use native::native_stack::NativeStack;
 

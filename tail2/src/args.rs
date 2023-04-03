@@ -34,7 +34,7 @@ pub enum Commands {
         #[clap(short, long)]
         command: Option<String>,
         /// sample period
-        #[clap(default_value = "400000", long)]
+        #[clap(default_value = "4000000", long)]
         period: u64,
     },
     /// Attach to a userspace function, e.g. "libc:malloc"
@@ -55,7 +55,7 @@ impl Commands {
     pub async fn run(self, t2: Tail2) -> Result<()> {
         match self {
             Commands::Table { pid } => {
-                let ret = Processes::detect_pid(pid, &mut *MOD_CACHE.lock().await);
+                let ret = Processes::detect_pid(pid).await;
                 info!("{:#?}", ret);
             }
             Commands::Processes {} => {

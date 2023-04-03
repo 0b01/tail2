@@ -1,6 +1,6 @@
 use aya_bpf::{BpfContext, bindings::BPF_F_REUSE_STACKID};
 
-use crate::sample::KERNEL_STACKS;
+use crate::maps::KERNEL_STACKS;
 
 #[inline(always)]
 pub fn sample_kernel<C: BpfContext>(ctx: &C) -> i64 {

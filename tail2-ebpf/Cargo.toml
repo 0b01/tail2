@@ -10,6 +10,7 @@ aya-log-ebpf = { git = "https://github.com/aya-rs/aya", branch = "main" }
 # aya-log-ebpf = { path = "../../aya/bpf/aya-log-ebpf" }
 tail2-common = { path = "../tail2-common" }
 gimli = { version = "0.26.1", features = ["read-core"], default-features = false }
+libc = "0.2.140"
 
 [features]
 x86_64 = [ "tail2-common/x86_64" ]

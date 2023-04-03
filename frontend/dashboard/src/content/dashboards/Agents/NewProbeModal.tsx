@@ -6,7 +6,7 @@ import { INewProbeModalProps, IScope, make_perf_probe, make_uprobe_probe, ProbeT
 export function NewProbeModal(props: INewProbeModalProps) {
   let [mode, setMode] = useState<ProbeTypes>("Perf");
   let [uprobe, setUprobe] = useState("libc:malloc");
-  let [period, setPeriod] = useState(400000);
+  let [period, setPeriod] = useState(4000000);
   let [scope, setScope] = useState<IScope>({type: "SystemWide", pid: 0} as any);
 
   let args;
