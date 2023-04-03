@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{symbolication::module_cache::ModuleCache, tail2::MOD_CACHE};
+use crate::{symbolication::module_cache::ModuleCache, tail2::CACHE};
 use anyhow::Result;
 use fnv::FnvHashMap;
 use procfs::process::{Process, MMPermissions};
@@ -21,7 +21,7 @@ impl Default for Processes {
 impl Processes {
     pub async fn refresh(&mut self) -> Result<()> {
         for prc in procfs::process::all_processes()?.flatten() {
-            let module_cache = &mut *MOD_CACHE.lock().await;
+            let module_cache = &mut *CACHE.module.lock().await;
             if let Ok(info) = Self::detect(&prc, module_cache) {
                 self.processes.insert(prc.pid, info);
             }
@@ -38,7 +38,7 @@ impl Processes {
     }
 
     pub async fn detect_pid(pid: i32) -> Result<Box<ProcInfo>> {
-        let cache = &mut *MOD_CACHE.lock().await;
+        let cache = &mut *CACHE.module.lock().await;
         let process = Process::new(pid)?;
         Processes::detect(&process, cache)
     }

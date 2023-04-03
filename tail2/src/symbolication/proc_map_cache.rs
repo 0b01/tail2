@@ -5,7 +5,7 @@ use procfs::process::{MemoryMaps, Process};
 use anyhow::{Context, Result};
 
 pub struct ProcMapCache {
-    pub cache: LruCache<u32, MemoryMaps>,
+    cache: LruCache<u32, MemoryMaps>,
 }
 
 impl ProcMapCache {

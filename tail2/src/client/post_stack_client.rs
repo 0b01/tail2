@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto}, tail2::{MOD_CACHE, PROC_MAP_CACHE}, config::CONFIG, probes::Probe,
+    dto::{resolved_bpf_sample::ResolvedBpfSample, stack_dto::StackBatchDto}, tail2::CACHE, config::CONFIG, probes::Probe,
 };
 use anyhow::Result;
 use reqwest::{Client, StatusCode};
@@ -55,9 +55,15 @@ impl PostStackClient {
             return Ok(StatusCode::ACCEPTED);
         }
 
-        let mut module_cache = MOD_CACHE.lock().await;
-        let mut proc_map_cache = PROC_MAP_CACHE.lock().await;
-        let dto = StackBatchDto::from_stacks(self.probe.clone(), stacks, &mut proc_map_cache, &mut module_cache)?;
+        let mut module_cache = CACHE.module.lock().await;
+        let mut proc_map_cache = CACHE.proc_map.lock().await;
+        let mut process_info_cache = CACHE.process_info.lock().await;
+        let dto = StackBatchDto::from_stacks(
+            self.probe.clone(),
+            stacks,
+            &mut process_info_cache,
+            &mut proc_map_cache, 
+            &mut module_cache)?;
         let body = bincode::serialize(&dto).unwrap();
         self.post(&self.url, body).await
     }

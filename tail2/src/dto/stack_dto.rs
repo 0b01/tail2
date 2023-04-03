@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tail2_common::{NativeStack, pidtgid::PidTgid};
 
 use crate::{
-    symbolication::{module::Module, module_cache::ModuleCache, elf::SymbolCache, proc_map_cache::ProcMapCache},
+    symbolication::{module::Module, module_cache::ModuleCache, elf::SymbolCache, proc_map_cache::ProcMapCache, process_info_cache::ProcessInfoCache},
     utils::MMapPathExt, probes::Probe, tail2::HOSTNAME, calltree::SymbolizedFrame,
 };
 
@@ -37,6 +37,7 @@ impl FrameDto {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StackDto {
     pub pid_tgid: PidTgid,
+    pub ident: String,
     pub ts_ms: u64,
     pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
@@ -45,9 +46,10 @@ pub struct StackDto {
 }
 
 impl StackDto {
-    pub fn new(pid_tgid: PidTgid, ts_ms: u64) -> Self {
+    pub fn new(pid_tgid: PidTgid, ident: String, ts_ms: u64) -> Self {
         Self {
             pid_tgid,
+            ident,
             ts_ms,
             kernel_frames: vec![],
             native_frames: vec![],
@@ -61,7 +63,7 @@ impl StackDto {
         let mut ret = vec![];
         let mut python_frames = self.python_frames.into_iter();
 
-        ret.push(UnsymbolizedFrame::ProcessRoot { pid_tgid: self.pid_tgid });
+        ret.push(UnsymbolizedFrame::ProcessRoot { pid_tgid: self.pid_tgid, ident: self.ident });
 
         for f in self.native_frames {
             match f {
@@ -124,12 +126,14 @@ impl StackBatchDto {
     pub fn from_stacks(
         probe: Arc<Probe>,
         samples: Vec<ResolvedBpfSample>,
+        process_info_cache: &mut ProcessInfoCache,
         proc_map_cache: &mut ProcMapCache,
         module_cache: &mut ModuleCache,
     ) -> Result<StackBatchDto> {
         let mut batch = StackBatchDto::new(probe);
         for bpf_sample in samples {
-            let mut dto = StackDto::new(bpf_sample.pid_tgid, bpf_sample.ts_ms);
+            let ident = process_info_cache.get(bpf_sample.pid_tgid.pid()).map(|i|i.ident).unwrap_or_default();
+            let mut dto = StackDto::new(bpf_sample.pid_tgid, ident, bpf_sample.ts_ms);
             if let Some(s) = bpf_sample.python_stack {
                 dto.python_frames = s
                     .frames
@@ -216,7 +220,7 @@ fn lookup(pid: u32, proc_map_cache: &mut ProcMapCache, address: usize) -> Option
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum UnsymbolizedFrame {
     None,
-    ProcessRoot { pid_tgid: PidTgid },
+    ProcessRoot { pid_tgid: PidTgid, ident: String },
     Native { module_idx: i32, offset: u32 },
     Python { name: String },
     Kernel { name: String },
@@ -242,10 +246,10 @@ impl UnsymbolizedFrame {
     pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut impl ModuleMapping) -> SymbolizedFrame {
         match self {
             UnsymbolizedFrame::None => Default::default(), // TODO: rethink this
-            UnsymbolizedFrame::ProcessRoot { pid_tgid } => SymbolizedFrame {
+            UnsymbolizedFrame::ProcessRoot { pid_tgid, ident } => SymbolizedFrame {
                 module_idx: 0,
                 offset: 0,
-                name: Some(pid_tgid.tgid().to_string()),
+                name: Some(format!("{}:{}", pid_tgid.tgid(), ident)),
                 code_type: crate::calltree::CodeType::ProcessRoot
             },
             UnsymbolizedFrame::Native { module_idx, offset } => {

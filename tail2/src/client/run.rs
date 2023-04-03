@@ -11,7 +11,6 @@ use nix::unistd::{getuid, Pid};
 
 use crate::dto::resolved_bpf_sample::ResolvedBpfSample;
 
-use std::convert::Infallible;
 use std::os::unix::prelude::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -240,7 +239,7 @@ pub async fn run_until_exit(
             (Some(tx), rx)
         };
 
-    spawn_proc_refresh(Arc::clone(&bpf), stop_rx.clone()).await.unwrap();
+    spawn_proc_refresh(Arc::clone(&bpf)).await.unwrap();
 
     let tasks = run_bpf(Arc::clone(&bpf), clis, stop_rx, output_tx).await?;
 
@@ -291,7 +290,7 @@ pub async fn pid_refresh(bpf: Arc<Mutex<Bpf>>, pid: u32) {
     }
 }
 
-pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiver<()>) -> Result<()> {
+pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
     let bpf_mut = &mut *bpf.lock().await;
 
     let mut pid_event = AsyncPerfEventArray::try_from(bpf_mut.map_mut("PID_EVENT").unwrap())?;

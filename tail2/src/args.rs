@@ -6,7 +6,7 @@ use tracing::info;
 use crate::{
     client::{run::{get_pid_child, run_until_exit, RunUntil}},
     processes::Processes,
-    Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE, symbolication::{module::Module, elf::SymbolCache},
+    Tail2, probes::{Scope, Probe}, symbolication::{module::Module, elf::SymbolCache},
 };
 use clap::{Parser, Subcommand};
 

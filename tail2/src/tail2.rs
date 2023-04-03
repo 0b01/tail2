@@ -15,28 +15,20 @@ use tokio::task::JoinHandle;
 
 
 use crate::client::PostStackClient;
-use crate::client::run::{run_until_exit, RunUntil};
+use crate::client::run::{run_until_exit, RunUntil, init_bpf};
 use crate::client::ws_client::messages::{AgentMessage, NewConnection};
 
 
 use crate::probes::Probe;
 use crate::probes::probe::{ProbePool, Attachment};
-use crate::symbolication::proc_map_cache::ProcMapCache;
-use crate::{client::run::init_bpf, symbolication::module_cache::ModuleCache};
-
+use crate::symbolication::caches::Cache;
 use crate::{config::Tail2Config};
 
 use futures_util::{StreamExt, SinkExt};
 
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
-pub static MOD_CACHE: Lazy<Arc<Mutex<ModuleCache>>> = Lazy::new(|| 
-    Arc::new(Mutex::new(ModuleCache::new()))
-);
-
-pub static PROC_MAP_CACHE: Lazy<Arc<Mutex<ProcMapCache>>> = Lazy::new(|| 
-    Arc::new(Mutex::new(ProcMapCache::new()))
-);
+pub static CACHE: Lazy<Cache> = Lazy::new(|| Cache::new());
 
 pub static HOSTNAME: Lazy<String> = Lazy::new(||
     gethostname::gethostname().to_string_lossy().to_string()

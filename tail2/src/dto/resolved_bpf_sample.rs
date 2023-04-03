@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use aya::maps::{MapData, StackTraceMap};
 use once_cell::sync::Lazy;
