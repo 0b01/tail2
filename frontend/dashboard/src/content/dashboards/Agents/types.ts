@@ -23,6 +23,19 @@ export interface IAgents {
   [id: string]: IAgent;
 }
 
+export interface IDB {
+  metadata: {
+    name: string;
+    tags: {
+      [id: string]: string;
+    }
+  }
+}
+
+export interface IDBs {
+  [id: string]: IDB;
+}
+
 export interface INewProbeModalProps {
   name: string;
   open: boolean;

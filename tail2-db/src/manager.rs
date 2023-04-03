@@ -2,36 +2,41 @@
 //! A database manager that can be used to create and manage multiple tail2 databases.
 //! Each tail2 database file(duckdb file) is accompanied with a metadata file that contains tags.
 
-use std::{path::{PathBuf, Path}, fs, collections::HashMap, sync::Arc};
+use std::{path::{PathBuf, Path}, fs, sync::Arc};
 use anyhow::{Result, Context};
 
+use fnv::FnvHashMap;
+use serde::Serialize;
 use tokio::sync::Mutex;
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{db::Tail2DB, metadata::Metadata};
 
 /// A database manager that can be used to create and manage multiple tail2 databases.
 pub struct Manager {
     folder: PathBuf,
-    dbs: HashMap<String, Arc<Mutex<Db>>>,
+    pub dbs: FnvHashMap<String, Db>,
 }
 
 /// A database instance consisting of a db file and a metadata file.
+#[derive(Clone, Serialize)]
 pub struct Db {
     metadata: Metadata,
     /// The Tail2DB t2db file
-    pub tail2_db: Tail2DB,
+    #[serde(skip)]
+    pub tail2_db: Arc<Mutex<Tail2DB>>,
 }
 
 impl Db {
     /// Open a database from a tail2 db path
     pub fn open(path_to_t2db: &PathBuf) -> Result<Self> {
+        info!("opening {:?}", path_to_t2db);
         if path_to_t2db.extension().context("no ext")? == "t2db" {
-            let tail2_db = Tail2DB::open(path_to_t2db);
+            let tail2_db = Tail2DB::open(path_to_t2db)?;
             let metadata = tail2_db.metadata().context("missing metadata")?;
             Ok(Self {
                 metadata,
-                tail2_db,
+                tail2_db: Arc::new(Mutex::new(tail2_db)),
             })
         } else {
             Err(anyhow::anyhow!("invalid database file"))
@@ -39,12 +44,12 @@ impl Db {
     }
 
     /// Create a new database given a path to t2db
-    pub fn create(path_to_t2db: &PathBuf, metadata: Metadata) -> Result<Self> {
-        let tail2_db = Tail2DB::open(path_to_t2db);
+    pub fn create(path_to_t2db: &PathBuf, metadata: &Metadata) -> Result<Self> {
+        let tail2_db = Tail2DB::open(path_to_t2db)?;
         metadata.save(path_to_t2db.parent().context("no parent")?)?;
         Ok(Self {
-            metadata,
-            tail2_db,
+            metadata: metadata.clone(),
+            tail2_db: Arc::new(Mutex::new(tail2_db)),
         })
     }
 }
@@ -53,13 +58,16 @@ impl Manager {
     /// Create a new database manager given a path to a folder
     pub fn new<P: AsRef<Path>>(folder: P) -> Self {
         let folder = PathBuf::from(&folder.as_ref());
+        // recursively make dir so folder exists
+        fs::create_dir_all(&folder).unwrap();
+
         // populate dbs
-        let mut dbs = HashMap::new();
+        let mut dbs = FnvHashMap::default();
         for entry in fs::read_dir(&folder).unwrap() {
             let path = entry.unwrap().path();
             match Db::open(&path) {
                 Ok(db) => {
-                    dbs.insert(db.metadata.name.clone(), Arc::new(Mutex::new(db)));
+                    dbs.insert(db.metadata.name.clone(), db);
                 }
                 Err(e) => {
                     error!("error opening db: {:?}", e);
@@ -74,19 +82,25 @@ impl Manager {
     }
 
     /// Create a new database given metadata
-    pub fn create_db(&mut self, metadata: Metadata) -> Result<Arc<Mutex<Db>>> {
+    pub fn create_db(&mut self, metadata: &Metadata) -> Result<Db> {
         metadata.save(&self.folder)?;
         let db_path = self.folder.join(&metadata.name).with_extension("t2db");
         let db = Db::create(&db_path, metadata)?;
         let name = db.metadata.name.clone();
-        let ret = Arc::new(Mutex::new(db));
-        self.dbs.insert(name, Arc::clone(&ret));
-        Ok(ret)
+        self.dbs.insert(name, db.clone());
+        Ok(db)
+    }
+
+    /// Clear dbs in manager
+    pub fn clear(&mut self) {
+        self.dbs.clear();
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use fnv::FnvHashMap;
+
     use super::*;
 
     #[test]
@@ -99,9 +113,9 @@ mod tests {
         
         let metadata = Metadata {
             name: "test".to_string(),
-            tags: HashMap::new(),
+            tags: FnvHashMap::default(),
         };
-        manager.create_db(metadata).unwrap();
+        manager.create_db(&metadata).unwrap();
         assert_eq!(manager.dbs.len(), 1);
         drop(manager);
 

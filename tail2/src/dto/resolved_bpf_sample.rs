@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use aya::maps::{MapData, StackTraceMap};
 use once_cell::sync::Lazy;
@@ -54,7 +54,7 @@ impl ResolvedBpfSample {
         let mut kernel_frames = None;
         let stack_id = sample.kernel_stack_id;
         if stack_id > 0 {
-            if let Some(mut kernel_stack) = kernel_stacks.get(&(stack_id as u32), 0).ok() {
+            if let Ok(mut kernel_stack) = kernel_stacks.get(&(stack_id as u32), 0) {
                 let kfs: Vec<_> = kernel_stack
                     .resolve(&KSYMS)
                     .frames()

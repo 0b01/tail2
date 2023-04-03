@@ -21,8 +21,13 @@ impl ServerState {
         Self {
             agents: Notifiable::new(FnvHashMap::default()),
             symbols: Arc::new(Mutex::new(SymbolCache::new())),
-            manager: Arc::new(Mutex::new(Manager::new("./"))),
+            manager: Arc::new(Mutex::new(Manager::new("./db"))),
         }
+    }
+
+    pub async fn shutdown(&self) {
+        self.manager.lock().await.clear();
+        self.agents.lock().await.clear();
     }
 }
 

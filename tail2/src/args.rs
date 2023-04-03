@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use tracing::info;
 
 use crate::{
     client::{run::{get_pid_child, run_until_exit, RunUntil}},
     processes::Processes,
-    Tail2, probes::{Scope, Probe}, tail2::MOD_CACHE, symbolication::{module::Module, elf::SymbolCache},
+    Tail2, probes::{Scope, Probe}, symbolication::{module::Module, elf::SymbolCache},
 };
 use clap::{Parser, Subcommand};
 
@@ -33,7 +34,7 @@ pub enum Commands {
         #[clap(short, long)]
         command: Option<String>,
         /// sample period
-        #[clap(default_value = "400000", long)]
+        #[clap(default_value = "4000000", long)]
         period: u64,
     },
     /// Attach to a userspace function, e.g. "libc:malloc"
@@ -54,8 +55,8 @@ impl Commands {
     pub async fn run(self, t2: Tail2) -> Result<()> {
         match self {
             Commands::Table { pid } => {
-                let _ret = Processes::detect_pid(pid, &mut *MOD_CACHE.lock());
-                // dbg!(ret);
+                let ret = Processes::detect_pid(pid).await;
+                info!("{:#?}", ret);
             }
             Commands::Processes {} => {
                 let mut p = Processes::new();

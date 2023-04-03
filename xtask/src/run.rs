@@ -48,7 +48,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
         "tail2",
         "-p",
         "tail2-server",
-        "--verbose",
+        // "--verbose",
         "--features",
         &features,
     ];
@@ -66,7 +66,7 @@ pub fn build(opts: &Options) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Build and run the project
+/// Check the project
 pub fn check(opts: Options) -> Result<(), anyhow::Error> {
     build_ebpf(BuildOptions {
         target: opts.bpf_target,
@@ -91,7 +91,7 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
 
     // profile we are building (release or debug)
     let profile = if opts.release { "release" } else { "debug" };
-    let bin_path = format!("target/{profile}/tail2");
+    let client_path = format!("target/{profile}/tail2");
     let server_path = format!("target/{profile}/tail2-server");
 
     // arguments to pass to the application
@@ -99,12 +99,12 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
 
     // configure args
     let mut args: Vec<_> = opts.runner.trim().split_terminator(' ').collect();
-    args.push(bin_path.as_str());
+    args.push(client_path.as_str());
     args.append(&mut run_args);
 
-    let mut a = Command::new(server_path).spawn()?;
+    let mut server_bin = Command::new(server_path).spawn()?;
 
-    let mut b = Command::new(args.first().expect("No first argument"))
+    let mut client_bin = Command::new(args.first().expect("No first argument"))
         .args(args.iter().skip(1))
         .spawn()?;
 
@@ -119,8 +119,8 @@ pub fn run(opts: Options) -> Result<(), anyhow::Error> {
         thread::sleep(Duration::from_millis(100));
     }
 
-    let _ = a.kill();
-    let _ = b.kill();
+    server_bin.kill().expect("Failed to kill server");
+    client_bin.kill().expect("Failed to kill client");
 
     Ok(())
 }

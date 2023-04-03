@@ -9,3 +9,5 @@ members = [
     "testapp/parade",
     "tests",
 ]
+[profile.release]
+debug = true

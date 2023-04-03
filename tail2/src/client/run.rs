@@ -3,6 +3,7 @@ use aya::maps::{AsyncPerfEventArray, HashMap, StackTraceMap};
 use aya::util::online_cpus;
 use bytes::BytesMut;
 use tail2_common::metrics::Metrics;
+use tail2_common::tracemgmt::PidEvent;
 use tracing::Level;
 use nix::sys::ptrace;
 
@@ -24,8 +25,6 @@ use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-use std::time::Duration;
-
 use aya::maps::MapData;
 use aya::{include_bytes_aligned, Bpf};
 use aya_log::BpfLogger;
@@ -43,7 +42,7 @@ pub(crate) async fn run_bpf(
     stop_rx: watch::Receiver<()>,
     output_tx: Option<mpsc::Sender<BpfSample>>,
 ) -> Result<Vec<JoinHandle<()>>> {
-    tracing::info!("run_bpf");
+    // tracing::info!("run_bpf");
     // send device info
     {
         let bpf_ = &mut *bpf.lock().await;
@@ -156,16 +155,14 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-// Get the PID of the child process to trace
-// If the user did not provide a PID, then we will launch the child process
-// with the command provided by the user
+/// Get the PID of the child process to trace
+/// If the user did not provide a PID, then we will launch the child process
+/// with the command provided by the user
 pub fn get_pid_child(
     pid: Option<u32>,
     command: Option<String>,
 ) -> (Option<u32>, Option<Child>) {
-    // If no PID or command was provided, return None for both
     match (pid, command) {
-        (None, None) => (None, None),
         // If no PID was provided, but a command was provided, launch the child process
         (None, Some(cmd)) => {
             // Log the command that we are launching
@@ -198,7 +195,7 @@ pub fn get_pid_child(
         // If a PID was provided, but no command was provided, return the PID and None for the child process
         (Some(pid), None) => (Some(pid), None),
         // If both a PID and a command were provided, panic
-        (Some(_), Some(_)) => panic!("supply one of --pid, --command"),
+        _ => panic!("supply one of --pid, --command"),
     }
 }
 
@@ -242,7 +239,7 @@ pub async fn run_until_exit(
             (Some(tx), rx)
         };
 
-    spawn_proc_refresh(Arc::clone(&bpf), stop_rx.clone()).await;
+    spawn_proc_refresh(Arc::clone(&bpf)).await.unwrap();
 
     let tasks = run_bpf(Arc::clone(&bpf), clis, stop_rx, output_tx).await?;
 
@@ -274,23 +271,8 @@ pub async fn run_until_exit(
     Ok(())
 }
 
-async fn proc_refresh_inner(
-    pid_info: &mut HashMap<&mut MapData, u32, ProcInfo>,
-) {
-    let mut processes = Processes::new();
-    if let Ok(()) = processes.refresh().await {
-        tracing::warn!("# processes: {}", processes.processes.keys().len());
-        // copy to maps
-        for (pid, nfo) in &processes.processes {
-            let nfo = nfo.as_ref();
-            let _ = pid_info.insert(*pid as u32, nfo, 0);
-        }
-    }
-}
-
-// TODO: don't refresh, listen to mmap and execve calls
-pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiver<()>) {
-    let bpf = &mut *bpf.lock().await;
+pub async fn pid_refresh(bpf: Arc<Mutex<Bpf>>, pid: u32) {
+    let bpf = &mut bpf.lock().await;
     let pid_info: HashMap<_, u32, ProcInfo> =
         HashMap::try_from(bpf.map_mut("PIDS").unwrap()).unwrap();
     // HACK: extend lifetime to 'static
@@ -301,20 +283,50 @@ pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>, mut stop_rx: Receiv
         >(pid_info)
     };
 
-    proc_refresh_inner(&mut pid_info).await;
+    let pid_info: &mut HashMap<&mut MapData, u32, ProcInfo> = &mut pid_info;
+    if let Ok(nfo) = Processes::detect_pid(pid as i32).await {
+        let nfo = nfo.as_ref();
+        let _ = pid_info.insert(pid as u32, nfo, 0);
+    }
+}
 
-    // refresh pid info table
-    tokio::spawn(async move {
-        loop {
-            proc_refresh_inner(&mut pid_info).await;
+pub(crate) async fn spawn_proc_refresh(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
+    let bpf_mut = &mut *bpf.lock().await;
 
-            // sleep for 10 sec
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(60)) => (),
-                _ = stop_rx.changed() => break,
+    let pid_event = AsyncPerfEventArray::try_from(bpf_mut.map_mut("PID_EVENT").unwrap())?;
+    // HACK: extend lifetime to 'static
+    let mut pid_event = unsafe {
+        std::mem::transmute::<
+            AsyncPerfEventArray<&mut MapData>,
+            AsyncPerfEventArray<&'static mut MapData>,
+        >(pid_event)
+    };
+
+    for cpu_id in online_cpus()? {
+        // open a separate perf buffer for each cpu
+        let mut buf = pid_event.open(cpu_id, None)?;
+        let bpf_ = bpf.clone();
+
+        tokio::spawn(async move {
+            let mut buffers = (0..10)
+                .map(|_| BytesMut::with_capacity(1024))
+                .collect::<Vec<_>>();
+
+            loop {
+                // wait for events
+                let events = buf.read_events(&mut buffers).await.unwrap();
+
+                for buf in buffers.iter_mut().take(events.read) {
+                    let evt: PidEvent = unsafe { *std::mem::transmute::<_, *const _>(buf.as_ptr()) };
+                    if evt.event_type == Metrics::TraceMgmt_NewPid {
+                        pid_refresh(bpf_.clone(), evt.pid).await;
+                    }
+                }
             }
-        }
-    });
+        });
+    }
+
+    Ok(())
 }
 
 pub(crate) fn load_bpf() -> Result<Bpf> {
@@ -335,8 +347,6 @@ pub(crate) async fn print_stats(bpf: Arc<Mutex<Bpf>>) -> Result<()> {
     let info: HashMap<_, u32, u64> =
         HashMap::try_from(bpf.map("METRICS").context("no such map")?)?;
     
-    tracing::info!("Sent: {} stacks", info.get(&(Metrics::SentStackCount as u32), 0).unwrap_or(0));
-
     for k in Metrics::iter().split_last().unwrap().1 {
         tracing::info!("{k:?} = {}", info.get(&(*k as u32), 0).unwrap_or(0));
     }

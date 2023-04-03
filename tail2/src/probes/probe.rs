@@ -1,7 +1,9 @@
-use std::sync::{atomic::AtomicBool, Arc};
+use std::{sync::{atomic::AtomicBool, Arc}, fmt::{Display, Formatter}};
 
 use anyhow::{Result, Context};
-use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, perf_attach::PerfLink, Program, Link}, util::online_cpus, Bpf};
+use aya::{programs::{UProbe, PerfEvent, SamplePolicy, perf_event, PerfEventScope, PerfTypeId, Program, Link}, util::online_cpus, Bpf};
+use aya::programs::uprobe::UProbeLink;
+use aya::programs::perf_event::PerfEventLink;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -45,8 +47,43 @@ pub enum Probe {
     },
 }
 
+impl Display for Probe {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Probe::Perf { scope, period } => write!(f, "perf_{}{}", scope, period),
+            Probe::Uprobe { scope, uprobe } => write!(f, "uprobe_{}_{}", scope, uprobe),
+        }
+    }
+}
+
+pub enum MyPerfLink {
+    UProbe(UProbeLink),
+    PerfEvent(PerfEventLink),
+}
+
+impl From<UProbeLink> for MyPerfLink {
+    fn from(l: UProbeLink) -> Self {
+        Self::UProbe(l)
+    }
+}
+
+impl From<PerfEventLink> for MyPerfLink {
+    fn from(l: PerfEventLink) -> Self {
+        Self::PerfEvent(l)
+    }
+}
+
+impl MyPerfLink {
+    pub fn detach(self) -> Result<()> {
+        Ok(match self {
+            MyPerfLink::UProbe(l) => l.detach()?,
+            MyPerfLink::PerfEvent(l) => l.detach()?,
+        })
+    }
+}
+
 pub struct Attachment {
-    pub links: Vec<PerfLink>,
+    pub links: Vec<MyPerfLink>,
     pub idx: usize,
     pub avail: Arc<AtomicBool>,
     pub cli: Arc<Mutex<PostStackClient>>,
@@ -105,7 +142,7 @@ impl Probe {
                         SamplePolicy::Period(*period),
                     )?;
                     let link = program.take_link(link_id)?;
-                    links.push(link);
+                    links.push(link.into());
                 }
                 Ok(Attachment{links, idx, cli, avail})
             }
@@ -129,8 +166,8 @@ impl Probe {
                 let uprobe_linkid = program
                     .attach(Some(func), 0, src, pid)
                     .unwrap();
-                let link = program.take_link(uprobe_linkid)?.into();
-                Ok(Attachment{links: vec![link], idx, avail, cli})
+                let link = program.take_link(uprobe_linkid)?;
+                Ok(Attachment{links: vec![link.into()], idx, avail, cli})
             }
         }
     }

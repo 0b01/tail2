@@ -53,7 +53,7 @@ impl<T> Notifiable<T> {
         Arc::clone(&self.notify)
     }
 
-    pub async fn lock<'a>(&'a self) -> MutexGuard<'a, T> {
+    pub async fn lock(&self) -> MutexGuard<'_, T> {
         self.inner.lock().await
     }
 }

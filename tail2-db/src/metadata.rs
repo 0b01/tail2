@@ -1,6 +1,7 @@
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 use anyhow::Result;
 
+use fnv::FnvHashMap;
 use serde::{Deserialize, Serialize};
 
 // name = "mydb"
@@ -9,21 +10,20 @@ use serde::{Deserialize, Serialize};
 // tag2 = "value2"
 
 /// Metadata file for a database with same name
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Metadata {
     /// Name of the database
     pub name: String,
     /// Tags associated with the database
-    pub tags: HashMap<String, String>, 
+    pub tags: FnvHashMap<String, String>, 
 }
 
 impl Metadata {
     /// create an empty metadata file
-    pub fn empty(name: &str) -> Self {
-        let name = name.to_string();
+    pub fn empty(name: String) -> Self {
         Self {
             name,
-            tags: HashMap::new(),
+            tags: FnvHashMap::default(),
         }
     }
 

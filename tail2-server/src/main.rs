@@ -7,6 +7,8 @@ use axum::{
     routing::{get, post},
     Router, extract::Path};
 use reqwest::header;
+use tail2_db::manager::Manager;
+use tracing::info;
 
 use std::{net::SocketAddr, time::Duration};
 use tower::ServiceBuilder;
@@ -55,13 +57,15 @@ async fn main() {
         // Compress responses
         .compression();
 
+    let state = ServerState::new();
     let app = Router::new()
         .route("/api/agent/events", get(routes::agents::agent_events))
         .route("/api/agent/start_probe", get(routes::agents::start_probe))
         .route("/api/agent/stop_probe", get(routes::agents::stop_probe))
         .route("/api/agent/halt", get(routes::agents::halt))
         .route("/api/agents", get(routes::agents::agents))
-        .route("/api/current", get(routes::api::current))
+        .route("/api/dbs", get(routes::dbs::dbs))
+        .route("/api/calltree", get(routes::api::calltree))
         .route("/api/stack", post(routes::ingest::stack))
         .route("/api/events", get(routes::api::events))
         .route("/api/connect", get(routes::agents::on_connect))
@@ -77,22 +81,24 @@ async fn main() {
         .route("/*path", get(|p|static_path(".", p)))
 
         .layer(middleware)
-        .with_state(ServerState::new());
+        .with_state(state.clone());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     tracing::warn!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal(state))
         .await
         .unwrap();
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(state: ServerState) {
     tokio::signal::ctrl_c()
         .await
         .expect("expect tokio signal ctrl-c");
-    println!("signal shutdown");
+
+    info!("shutting down");
+    state.shutdown().await;
 }
 
 async fn static_path(prefix: &str, Path(path): Path<String>) -> impl IntoResponse {
@@ -103,18 +109,24 @@ async fn static_path(prefix: &str, Path(path): Path<String>) -> impl IntoRespons
     {
         use std::{path::PathBuf, fs::File, io::Read};
         // dbg!(path);
-        let path = PathBuf::from(format!("./tail2-server/static/{prefix}/{path}")).canonicalize().unwrap();
-        if path.exists() {
-            let mut buf = vec![];
-            File::open(path).unwrap().read_to_end(&mut buf).unwrap();
-            Response::builder()
-                .status(StatusCode::OK)
-                .header(
-                    header::CONTENT_TYPE,
-                    HeaderValue::from_str(mime_type.as_ref()).unwrap(),
-                )
-                .body(body::boxed(Full::from(buf)))
-                .unwrap()
+        if let Ok(path) = PathBuf::from(format!("./tail2-server/static/{prefix}/{path}")).canonicalize() {
+            if path.exists() {
+                let mut buf = vec![];
+                File::open(path).unwrap().read_to_end(&mut buf).unwrap();
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_str(mime_type.as_ref()).unwrap(),
+                    )
+                    .body(body::boxed(Full::from(buf)))
+                    .unwrap()
+            } else {
+                Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(body::boxed(Empty::new()))
+                    .unwrap()
+            }
         } else {
             Response::builder()
                 .status(StatusCode::NOT_FOUND)

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::{symbolication::module_cache::ModuleCache, tail2::MOD_CACHE};
+use crate::{symbolication::module_cache::ModuleCache, tail2::CACHE};
 use anyhow::Result;
 use fnv::FnvHashMap;
-use procfs::process::Process;
+use procfs::process::{Process, MMPermissions};
 use tail2_common::procinfo::{user::ProcMapRow, ProcInfo};
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl Default for Processes {
 impl Processes {
     pub async fn refresh(&mut self) -> Result<()> {
         for prc in procfs::process::all_processes()?.flatten() {
-            let module_cache = &mut *MOD_CACHE.lock();
+            let module_cache = &mut *CACHE.module.lock().await;
             if let Ok(info) = Self::detect(&prc, module_cache) {
                 self.processes.insert(prc.pid, info);
             }
@@ -37,17 +37,20 @@ impl Processes {
         }
     }
 
-    pub fn detect_pid(pid: i32, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
+    pub async fn detect_pid(pid: i32) -> Result<Box<ProcInfo>> {
+        let cache = &mut *CACHE.module.lock().await;
         let process = Process::new(pid)?;
         Processes::detect(&process, cache)
     }
 
+    /// Detects the process information from the process maps.
+    /// Find executable maps and resolve them
     fn detect(process: &Process, cache: &mut ModuleCache) -> Result<Box<ProcInfo>> {
         let paths = process
             .maps()?
             .into_iter()
             .filter_map(|e| {
-                if e.perms.contains('x') {
+                if e.perms.contains(MMPermissions::EXECUTE) {
                     if let procfs::process::MMapPath::Path(p) = e.pathname {
                         let path = p.to_string_lossy().to_string();
 

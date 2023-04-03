@@ -28,6 +28,12 @@ cargo build
 npm run watch
 ```
 
+## Flamegraph
+
+```bash
+flamegraph --root -- target/release/tail2
+```
+
 ## Troubleshooting
 
 Error: `"failed to create map"`
@@ -37,3 +43,7 @@ print type sizes:
 ```bash
 cargo rustc --features aarch64 -- -Zprint-type-sizes
 ```
+
+## License
+
+TODO:

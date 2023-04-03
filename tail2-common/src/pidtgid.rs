@@ -1,10 +1,31 @@
+use core::hash::{Hash, Hasher};
+
 #[cfg_attr(feature="user", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq)]
 pub struct PidTgid(u64);
+
+impl PartialEq for PidTgid {
+    fn eq(&self, other: &Self) -> bool {
+        self.tgid() == other.tgid()
+    }
+}
+
+impl Hash for PidTgid {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.tgid().hash(state);
+    }
+}
 
 impl Default for PidTgid {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(feature = "user")]
+impl ToString for PidTgid {
+    fn to_string(&self) -> String {
+        format!("{}:{}", self.pid(), self.tgid())
     }
 }
 
@@ -24,7 +45,7 @@ impl PidTgid {
 
     #[inline(always)]
     pub fn tgid(&self) -> u32 {
-        (self.0 & 0xf) as _
+        (self.0 & 0xffffffff) as _
     }
 }
 

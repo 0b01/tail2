@@ -7,9 +7,9 @@ name = "xtask"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.68"
-clap = { version = "4.0", features = ["derive"] }
-ctrlc = "3.2.4"
+anyhow = "1.0.70"
+clap = { version = "4.2", features = ["derive"] }
+ctrlc = "3.2.5"
 
 [features]
 deploy = []

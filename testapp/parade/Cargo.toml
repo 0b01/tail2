@@ -11,7 +11,7 @@ path = "src/main.rs"
 rand = "0.8.5"
 getrandom = { version = "0.2", features = ["js"] }
 rand_chacha = "*"
-rayon = "1.6.1"
-clap = { version = "4.0.32", features = ["derive"] }
+rayon = "1.7.0"
+clap = { version = "4.2.1", features = ["derive"] }
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"]}
 serde = { version = "1.0", features = ["derive"] }

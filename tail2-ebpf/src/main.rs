@@ -8,3 +8,5 @@ mod helpers;
 mod vmlinux;
 mod sample;
 mod kernel;
+mod tracemgmt;
+mod maps;

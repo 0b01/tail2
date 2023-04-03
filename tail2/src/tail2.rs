@@ -11,28 +11,24 @@ use reqwest::Url;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, watch};
 use tokio::sync::Mutex;
-use parking_lot::Mutex as PMutex;
 use tokio::task::JoinHandle;
 
 
 use crate::client::PostStackClient;
-use crate::client::run::{run_until_exit, RunUntil};
+use crate::client::run::{run_until_exit, RunUntil, init_bpf};
 use crate::client::ws_client::messages::{AgentMessage, NewConnection};
 
 
 use crate::probes::Probe;
 use crate::probes::probe::{ProbePool, Attachment};
-use crate::{client::run::init_bpf, symbolication::module_cache::ModuleCache};
-
+use crate::symbolication::caches::Cache;
 use crate::{config::Tail2Config};
 
 use futures_util::{StreamExt, SinkExt};
 
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
-pub static MOD_CACHE: Lazy<Arc<PMutex<ModuleCache>>> = Lazy::new(|| 
-    Arc::new(PMutex::new(ModuleCache::new()))
-);
+pub static CACHE: Lazy<Cache> = Lazy::new(|| Cache::new());
 
 pub static HOSTNAME: Lazy<String> = Lazy::new(||
     gethostname::gethostname().to_string_lossy().to_string()

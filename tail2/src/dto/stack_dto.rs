@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use procfs::process::{MemoryMap, Process};
+use procfs::process::MemoryMap;
 use serde::{Deserialize, Serialize};
 use tail2_common::{NativeStack, pidtgid::PidTgid};
 
 use crate::{
-    symbolication::{module::Module, module_cache::ModuleCache, elf::SymbolCache},
+    symbolication::{module::Module, module_cache::ModuleCache, elf::SymbolCache, proc_map_cache::ProcMapCache, process_info_cache::ProcessInfoCache},
     utils::MMapPathExt, probes::Probe, tail2::HOSTNAME, calltree::SymbolizedFrame,
 };
 
@@ -37,6 +37,7 @@ impl FrameDto {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StackDto {
     pub pid_tgid: PidTgid,
+    pub ident: String,
     pub ts_ms: u64,
     pub kernel_frames: Vec<FrameDto>,
     pub native_frames: Vec<FrameDto>,
@@ -45,9 +46,10 @@ pub struct StackDto {
 }
 
 impl StackDto {
-    pub fn new(pid_tgid: PidTgid, ts_ms: u64) -> Self {
+    pub fn new(pid_tgid: PidTgid, ident: String, ts_ms: u64) -> Self {
         Self {
             pid_tgid,
+            ident,
             ts_ms,
             kernel_frames: vec![],
             native_frames: vec![],
@@ -61,7 +63,7 @@ impl StackDto {
         let mut ret = vec![];
         let mut python_frames = self.python_frames.into_iter();
 
-        ret.push(UnsymbolizedFrame::ProcessRoot { pid: self.pid_tgid.pid() });
+        ret.push(UnsymbolizedFrame::ProcessRoot { pid_tgid: self.pid_tgid, ident: self.ident });
 
         for f in self.native_frames {
             match f {
@@ -110,13 +112,6 @@ pub struct StackBatchDto {
     pub modules: Vec<Arc<Module>>,
 }
 
-// TODO: remove
-pub fn proc_map(pid: u32) -> Result<Vec<MemoryMap>> {
-    Process::new(pid as i32)?
-        .maps()
-        .context("unable to get maps")
-}
-
 impl StackBatchDto {
     pub fn new(probe: Arc<Probe>) -> Self {
         let probe = serde_json::to_string(&probe).unwrap();
@@ -131,11 +126,14 @@ impl StackBatchDto {
     pub fn from_stacks(
         probe: Arc<Probe>,
         samples: Vec<ResolvedBpfSample>,
+        process_info_cache: &mut ProcessInfoCache,
+        proc_map_cache: &mut ProcMapCache,
         module_cache: &mut ModuleCache,
     ) -> Result<StackBatchDto> {
         let mut batch = StackBatchDto::new(probe);
         for bpf_sample in samples {
-            let mut dto = StackDto::new(bpf_sample.pid_tgid, bpf_sample.ts_ms);
+            let ident = process_info_cache.get(bpf_sample.pid_tgid.pid()).map(|i|i.ident).unwrap_or_default();
+            let mut dto = StackDto::new(bpf_sample.pid_tgid, ident, bpf_sample.ts_ms);
             if let Some(s) = bpf_sample.python_stack {
                 dto.python_frames = s
                     .frames
@@ -145,7 +143,7 @@ impl StackBatchDto {
                     .collect();
             }
             if let Ok(native_frames) =
-                from_native_stack(&mut batch, bpf_sample.native_stack, bpf_sample.pid_tgid.pid(), module_cache)
+                from_native_stack(&mut batch, bpf_sample.native_stack, bpf_sample.pid_tgid.pid(), proc_map_cache, module_cache)
             {
                 dto.native_frames = native_frames;
             } else {
@@ -171,13 +169,13 @@ fn from_native_stack(
     batch: &mut StackBatchDto,
     native_stack: Box<NativeStack>,
     pid: u32,
+    proc_map_cache: &mut ProcMapCache,
     module_cache: &mut ModuleCache,
 ) -> Result<Vec<FrameDto>> {
     let len = native_stack.unwind_success.unwrap_or(0);
-    let proc_map = proc_map(pid)?;
     let mut native_frames = vec![];
     for address in native_stack.native_stack[..len].iter().rev() {
-        let (offset, entry) = lookup(&proc_map, *address).context("address not found")?;
+        let (offset, entry) = lookup(pid, proc_map_cache, *address).context("address not found")?;
         let path = entry
             .pathname
             .path()
@@ -198,20 +196,31 @@ fn from_native_stack(
     Ok(native_frames)
 }
 
-fn lookup(proc_map: &[MemoryMap], address: usize) -> Option<(usize, &MemoryMap)> {
-    for entry in proc_map.iter() {
-        if address >= entry.address.0 as usize && address < entry.address.1 as usize {
-            let translated = address - entry.address.0 as usize + entry.offset as usize;
-            return Some((translated, entry));
+fn lookup(pid: u32, proc_map_cache: &mut ProcMapCache, address: usize) -> Option<(usize, MemoryMap)> {
+    let proc_maps = proc_map_cache.proc_map(pid).ok()?;
+    let translated = || {
+        for entry in proc_maps.iter() {
+            if address >= entry.address.0 as usize && address < entry.address.1 as usize {
+                let translated = address - entry.address.0 as usize + entry.offset as usize;
+                return Some((translated, entry.clone()));
+            }
         }
+        None
+    };
+
+    let t = translated();
+    if t.is_some() {
+        return t;
     }
-    None
+
+    proc_map_cache.refresh(pid).ok()?;
+    translated()
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum UnsymbolizedFrame {
     None,
-    ProcessRoot { pid: u32 },
+    ProcessRoot { pid_tgid: PidTgid, ident: String },
     Native { module_idx: i32, offset: u32 },
     Python { name: String },
     Kernel { name: String },
@@ -237,16 +246,21 @@ impl UnsymbolizedFrame {
     pub fn symbolize(self, symbols: &mut SymbolCache, modules: &mut impl ModuleMapping) -> SymbolizedFrame {
         match self {
             UnsymbolizedFrame::None => Default::default(), // TODO: rethink this
-            UnsymbolizedFrame::ProcessRoot { pid } => SymbolizedFrame { module_idx: 0, offset: 0, name: Some(pid.to_string()), code_type: crate::calltree::CodeType::ProcessRoot },
+            UnsymbolizedFrame::ProcessRoot { pid_tgid, ident } => SymbolizedFrame {
+                module_idx: 0,
+                offset: 0,
+                name: Some(format!("{}:{}", pid_tgid.tgid(), ident)),
+                code_type: crate::calltree::CodeType::ProcessRoot
+            },
             UnsymbolizedFrame::Native { module_idx, offset } => {
                 let module = Arc::clone(&modules.get(module_idx as usize));
                 let name = 
                     symbols.entry(&module.path)
                         .and_then(|(_idx, sym)|
                             sym.find(offset as usize));
-                if let Some("_PyEval_EvalFrameDefault") = name.as_deref() {
-                    dbg!(offset);
-                }
+                // if let Some("_PyEval_EvalFrameDefault") = name.as_deref() {
+                //     dbg!(offset);
+                // }
                 let name = name.map(|s| format!("{}: {}", module.name, s));
                 SymbolizedFrame { module_idx, offset, name, code_type: crate::calltree::CodeType::Native }
             },

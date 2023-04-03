@@ -5,6 +5,7 @@ use lru::LruCache;
 use super::module::Module;
 
 #[derive(Debug)]
+/// A cache from module path to module
 pub struct ModuleCache(LruCache<String, Arc<Module>>);
 
 impl Default for ModuleCache {

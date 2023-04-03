@@ -1,4 +1,4 @@
-use async_stream::{try_stream, AsyncStream};
+use async_stream::{try_stream, __private::AsyncStream};
 use axum::{response::{Result, IntoResponse, sse::Event, Sse}, extract::{WebSocketUpgrade, ws::{WebSocket, Message}, Query}, http::HeaderMap};
 use futures::{StreamExt, SinkExt};
 
@@ -20,7 +20,7 @@ pub(crate) async fn agents(State(st): State<ServerState>) -> Result<String> {
 
 pub(crate) async fn on_connect(ws: WebSocketUpgrade, State(state): State<ServerState>, new_conn: Query<NewConnection>) -> impl IntoResponse {
     let (tx, rx) = mpsc::unbounded_channel::<AgentMessage>();
-    let config = Tail2Agent::new(tx);
+    let config = Tail2Agent::new(new_conn.hostname.clone(), tx);
     tracing::info!("new agent: {}", new_conn.hostname);
     let mut agents = state.agents.lock().await;
     let name = new_conn.hostname.to_owned();
