@@ -53,7 +53,7 @@ export type IScope = {
 export type IPerfProbe = {
   type: "Perf";
   scope: IScope;
-  period: number;
+  freq: number;
 }
 
 export type IUprobeProbe = {
@@ -71,11 +71,11 @@ export type ICallTreeParams = {
 
 export type IProbe = IPerfProbe | IUprobeProbe;
 
-export function make_perf_probe(scope: IScope, period: number): IPerfProbe {
+export function make_perf_probe(scope: IScope, freq: number): IPerfProbe {
     return {
         type: "Perf",
         scope,
-        period,
+        freq,
     };
 }
 

@@ -40,6 +40,10 @@ impl PostStackClient {
     }
 
     pub async fn post_stack(&mut self, st: ResolvedBpfSample) -> Result<StatusCode> {
+        if st.ts_ms == 0 {
+            return Ok(StatusCode::ACCEPTED);
+        }
+
         self.buf.push(st);
         if self.buf.len() == self.batch_size {
             let stacks = std::mem::replace(&mut self.buf, Vec::with_capacity(self.batch_size));

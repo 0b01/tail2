@@ -39,7 +39,7 @@ impl ProbePool {
 pub enum Probe {
     Perf {
         scope: Scope,
-        period: u64,
+        freq: u64,
     },
     Uprobe {
         scope: Scope,
@@ -50,7 +50,7 @@ pub enum Probe {
 impl Display for Probe {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Probe::Perf { scope, period } => write!(f, "perf_{}{}", scope, period),
+            Probe::Perf { scope, freq } => write!(f, "perf_{}{}", scope, freq),
             Probe::Uprobe { scope, uprobe } => write!(f, "uprobe_{}_{}", scope, uprobe),
         }
     }
@@ -119,7 +119,7 @@ impl Probe {
         probes.clients.lock().await.insert(idx, Arc::clone(&cli));
 
         match self {
-            Probe::Perf{ scope, period } => {
+            Probe::Perf{ scope, freq } => {
                 let program: &mut PerfEvent = program.try_into().unwrap();
                 match program.load() {
                     Ok(_) => {}
@@ -139,7 +139,7 @@ impl Probe {
                         PerfTypeId::Software,
                         perf_event::perf_sw_ids::PERF_COUNT_SW_TASK_CLOCK as u64,
                         scope,
-                        SamplePolicy::Period(*period),
+                        SamplePolicy::Frequency(*freq),
                     )?;
                     let link = program.take_link(link_id)?;
                     links.push(link.into());

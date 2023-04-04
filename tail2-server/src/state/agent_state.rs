@@ -44,9 +44,9 @@ pub struct Tail2Agent {
 
 fn add_probe_metadata(md: Metadata, probe: &Probe) -> Metadata {
     match probe {
-        Probe::Perf { scope, period } => {
+        Probe::Perf { scope, freq } => {
             md.add_tag("scope", &scope.to_string())
-                .add_tag("period", &period.to_string())
+                .add_tag("freq", &freq.to_string())
         }
         Probe::Uprobe { scope, uprobe } => {
             md.add_tag("scope", &scope.to_string())

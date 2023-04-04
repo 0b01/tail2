@@ -93,7 +93,7 @@ function AgentCard(props: IAgentProps) {
     };
     switch (nfo[0].type) {
       case 'Perf':
-        txt = `${nfo[0].type}(${nfo[0].period}) @ ${scope}`;
+        txt = `${nfo[0].type}(${nfo[0].freq}) @ ${scope}`;
         break;
       case 'Uprobe':
         txt = `${nfo[0].type}(${nfo[0].uprobe}) @ ${scope}`;

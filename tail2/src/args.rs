@@ -33,9 +33,9 @@ pub enum Commands {
         /// launch child process with the command and attach to its pid
         #[clap(short, long)]
         command: Option<String>,
-        /// sample period
-        #[clap(default_value = "4000000", long)]
-        period: u64,
+        /// sample frequency
+        #[clap(default_value = "400", long)]
+        freq: u64,
     },
     /// Attach to a userspace function, e.g. "libc:malloc"
     Uprobe {
@@ -78,7 +78,7 @@ impl Commands {
             }
             Commands::Sample {
                 pid,
-                period,
+                freq,
                 command,
             } => {
                 let (pid, child) = get_pid_child(pid, command);
@@ -88,7 +88,7 @@ impl Commands {
                         Some(pid) => Scope::Pid {pid},
                         None => Scope::SystemWide,
                     },
-                    period,
+                    freq,
                 });
 
                 let _attachment = probe.attach(&mut*t2.bpf.lock().await, &*t2.probes.lock().await).await?;

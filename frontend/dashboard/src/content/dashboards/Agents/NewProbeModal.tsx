@@ -6,13 +6,13 @@ import { INewProbeModalProps, IScope, make_perf_probe, make_uprobe_probe, ProbeT
 export function NewProbeModal(props: INewProbeModalProps) {
   let [mode, setMode] = useState<ProbeTypes>("Perf");
   let [uprobe, setUprobe] = useState("libc:malloc");
-  let [period, setPeriod] = useState(4000000);
+  let [freq, setFreq] = useState(400);
   let [scope, setScope] = useState<IScope>({type: "SystemWide", pid: 0} as any);
 
   let args;
   if (mode == "Perf")
   {
-    args = <TextField label="Period" inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }} value={period} onChange={(e) => setPeriod(parseInt(e.target.value))} />
+    args = <TextField label="Frequency(default is 400)" inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }} value={freq} onChange={(e) => setFreq(parseInt(e.target.value))} />
   } else if (mode == "Uprobe")
   {
     args = <TextField label="uprobe" inputProps={{ pattern: '.+:.+' }} value={uprobe} onChange={(e) => setUprobe(e.target.value)} />
@@ -75,7 +75,7 @@ export function NewProbeModal(props: INewProbeModalProps) {
             onClick={() => {
                 let probe;
                 if (mode == "Perf") {
-                    probe = make_perf_probe(scope, period);
+                    probe = make_perf_probe(scope, freq);
                 } else if (mode == "Uprobe") {
                     probe = make_uprobe_probe(scope, uprobe);
                 }
